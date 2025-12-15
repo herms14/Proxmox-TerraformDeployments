@@ -12,7 +12,8 @@ This repository contains Terraform configurations for managing a 3-node Proxmox 
 - **Multi-node support**: Deploy VMs across different Proxmox nodes automatically
 - **Production storage architecture**: Dedicated NFS exports for VM disks, ISOs, and application data
 - **Dynamic resource creation**: Terraform `for_each` for scalable infrastructure
-- **Cloud-init provisioning**: Automated VM configuration on first boot
+- **Cloud-init provisioning**: ✅ Fully operational automated VM configuration (UEFI boot support added Dec 2025)
+- **UEFI boot support**: Native UEFI template compatibility for modern cloud-init images
 - **LXC container support**: Lightweight containers with persistent storage via NFS bind mounts
 
 ## Architecture
@@ -292,6 +293,42 @@ Then reload: `ifreload -a` or `reboot`
 
 See [TROUBLESHOOTING.md](./TROUBLESHOOTING.md) for the complete resolution process.
 
+#### Cloud-init VM Boot Failure - UEFI/BIOS Mismatch
+
+**Problem**: VMs create successfully but hang during boot, never reaching login prompt
+
+**Symptoms**:
+- Console stops at: `Btrfs loaded, zoned=yes, fsverity=yes`
+- VM unreachable via SSH/ping
+- Boot process hangs before cloud-init initialization
+
+**Root Cause**: Template uses UEFI boot (`bios: ovmf`) but Terraform configured VM with legacy BIOS mode
+
+**Solution**: Verify template boot mode and match in Terraform module:
+
+```bash
+# Check template configuration
+ssh root@<node-ip> "qm config <template-vmid> | grep -E 'bios:|efidisk'"
+```
+
+If template uses UEFI (`bios: ovmf`), ensure `modules/linux-vm/main.tf` includes:
+```hcl
+bios    = "ovmf"
+machine = "q35"
+
+efidisk {
+  storage           = var.storage
+  efitype           = "4m"
+  pre_enrolled_keys = true
+}
+
+scsihw = "virtio-scsi-single"
+```
+
+**Status**: ✅ Fixed December 15, 2025. Cloud-init deployments fully operational with UEFI support.
+
+See [TROUBLESHOOTING.md](./TROUBLESHOOTING.md) for detailed troubleshooting steps.
+
 #### Storage Issues
 
 **Problem**: Storage marked as inactive or showing `?` icons
@@ -330,6 +367,7 @@ df -h | grep 192.168.20.31
   - Terraform usage guide
 
 - **[TROUBLESHOOTING.md](./TROUBLESHOOTING.md)**: Detailed troubleshooting guide covering:
+  - Cloud-init VM UEFI/BIOS boot mismatch resolution
   - Node03 QEMU deployment failure resolution
   - Network bridge VLAN configuration
   - Step-by-step diagnostic process

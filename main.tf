@@ -4,20 +4,20 @@
 # Define your VM groups here
 locals {
   vm_groups = {
-    # Ansible Control Nodes - VLAN 20
-    ansible-control = {
-      count         = 2
-      starting_ip   = "192.168.20.50"
-      starting_node = "node02" # First on node02, second on node03
-      template      = "ubuntu-24.04-cloudinit-template"
-      cores         = 4     # Default: 4 cores
-      sockets       = 1     # Default: 1 socket
-      memory        = 8192  # Default: 8GB
-      disk_size     = "20G" # Default: 20GB
+    # Test VM using new cloud-init template
+    test-cloudinit = {
+      count         = 1
+      starting_ip   = "192.168.20.60"
+      target_node   = "node01"  # Template is on node01
+      template      = "tpl-ubuntuv24.04-v1"
+      cores         = 2
+      sockets       = 1
+      memory        = 4096   # 4GB for testing
+      disk_size     = "20G"
       storage       = "VMDisks"
-      vlan_tag      = null # null for VLAN 20
+      vlan_tag      = null   # VLAN 20 (untagged)
       gateway       = "192.168.20.1"
-      nameserver    = "192.168.91.30"
+      nameserver    = "192.168.20.1"
     }
   }
 
@@ -28,12 +28,14 @@ locals {
         key        = "${vm_prefix}${format("%02d", i)}"
         vm_name    = "${vm_prefix}${format("%02d", i)}"
         ip_address = join(".", concat(slice(split(".", config.starting_ip), 0, 3), [tonumber(split(".", config.starting_ip)[3]) + i - 1]))
-        # Auto-increment target_node if starting_node is specified
-        target_node = can(config.starting_node) ? (
-          can(regex("^node(\\d+)$", config.starting_node)) ?
-          "node${format("%02d", tonumber(regex("\\d+", config.starting_node)) + i - 1)}" :
-          config.starting_node
-        ) : var.default_node
+        # Target node - use fixed node if specified, otherwise use default
+        target_node = can(config.target_node) ? config.target_node : (
+          can(config.starting_node) ? (
+            can(regex("^node(\\d+)$", config.starting_node)) ?
+            "node${format("%02d", tonumber(regex("\\d+", config.starting_node)) + i - 1)}" :
+            config.starting_node
+          ) : var.default_node
+        )
         template   = config.template
         cores      = config.cores
         sockets    = config.sockets

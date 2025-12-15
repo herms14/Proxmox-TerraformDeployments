@@ -3,12 +3,26 @@ resource "proxmox_vm_qemu" "linux_vm" {
   target_node = var.target_node
   clone       = var.template_name
 
+  # UEFI Boot Configuration
+  bios    = "ovmf"
+  machine = "q35"
+
+  # EFI Disk (required for UEFI boot)
+  efidisk {
+    storage  = var.storage
+    efitype  = "4m"
+    pre_enrolled_keys = true
+  }
+
   # VM Settings
   cpu {
     cores   = var.cores
     sockets = var.sockets
   }
   memory = var.memory
+
+  # SCSI Controller (match template)
+  scsihw = "virtio-scsi-single"
 
   # Start VM on boot
   onboot = var.onboot
@@ -21,7 +35,7 @@ resource "proxmox_vm_qemu" "linux_vm" {
     id     = 0
     model  = "virtio"
     bridge = var.network_bridge
-    tag    = var.vlan_tag != null ? var.vlan_tag : 1
+    tag    = var.vlan_tag  # No default - let it be untagged if null
   }
 
   # Disk Configuration
@@ -54,11 +68,4 @@ resource "proxmox_vm_qemu" "linux_vm" {
   ciuser     = var.ci_user
   cipassword = var.ci_password
   sshkeys    = var.ssh_keys != "" ? var.ssh_keys : null
-
-  # Lifecycle
-  lifecycle {
-    ignore_changes = [
-      network,
-    ]
-  }
 }

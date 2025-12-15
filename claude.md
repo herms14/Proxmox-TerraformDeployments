@@ -193,16 +193,17 @@ This is the initial deployment focusing on Ansible control nodes. Additional inf
 #### Virtual Machines - VLAN 20
 
 **Automation & Management:**
-| Hostname | Node | IP Address | Cores | RAM | Disk | Purpose |
-|----------|------|------------|-------|-----|------|---------|
-| ansible-control01 | node02 | 192.168.20.50 | 4 | 8GB | 20GB | Ansible control node |
-| ansible-control02 | node03 | 192.168.20.51 | 4 | 8GB | 20GB | Ansible control node |
+| Hostname | Node | IP Address | Cores | RAM | Disk | Purpose | Deployment Method |
+|----------|------|------------|-------|-----|------|---------|-------------------|
+| ansible-control01 | node03 | 192.168.20.50 | 4 | 8GB | 20GB | Ansible control node | ISO + Ansible |
+| ansible-control02 | node03 | 192.168.20.51 | 4 | 8GB | 20GB | Ansible control node | ISO + Ansible |
 
-**Template Used**: ubuntu-24.04-cloudinit-template
+**Deployment Method**: ISO-based installation (Ubuntu 24.04.3 Server)
 **Storage**: VMDisks (NFS on Synology)
-**Network**: vmbr0 (VLAN 20)
-**DNS**: 192.168.91.30
+**Network**: vmbr0 (VLAN 20, untagged)
+**DNS**: 192.168.20.1
 **Access**: SSH key authentication (user: hermes-admin)
+**Configuration**: Post-installation via Ansible from local machine
 
 ### LXC Containers
 
@@ -244,13 +245,14 @@ LXC container deployments are currently disabled. Will be enabled after VM infra
 
 ```
 tf-proxmox/
-├── main.tf                 # VM group definitions and orchestration
+├── main.tf                 # VM group definitions and orchestration (cloud-init)
+├── iso-vms.tf              # ISO-based VM deployments
 ├── lxc.tf                  # LXC container definitions
 ├── variables.tf            # Global variables and defaults
 ├── outputs.tf              # Output definitions
 ├── terraform.tfvars        # Variable values (gitignored)
 ├── modules/
-│   ├── linux-vm/          # VM deployment module
+│   ├── linux-vm/          # VM deployment module (cloud-init)
 │   │   ├── main.tf
 │   │   ├── variables.tf
 │   │   └── outputs.tf
@@ -260,15 +262,58 @@ tf-proxmox/
 │       └── outputs.tf
 ├── lxc-example.tf         # Example LXC configurations
 ├── LXC_GUIDE.md          # LXC deployment documentation
-└── claude.md             # This file
+├── TROUBLESHOOTING.md    # Troubleshooting guide
+└── CLAUDE.md             # This file
 ```
 
 ### Key Features
 - **Auto-incrementing hostnames**: Automatic sequential naming (e.g., k8s-workernode01, k8s-workernode02)
 - **Auto-incrementing IPs**: Automatic IP assignment from starting_ip
 - **Dynamic resource creation**: Uses Terraform for_each for scalable deployments
-- **Cloud-init provisioning**: Automated VM configuration on first boot
+- **Multiple deployment methods**: Cloud-init for automated provisioning, ISO-based for manual installation
 - **Consistent configuration**: DRY principle through modules
+
+### Deployment Methodologies
+
+#### Cloud-init Deployment (main.tf + modules/linux-vm/)
+**Best for**: Production infrastructure requiring fully automated provisioning
+
+**Workflow**:
+1. Terraform clones from cloud-init template
+2. Cloud-init configures network, users, SSH keys on first boot
+3. VM boots fully configured and accessible
+
+**Requirements**:
+- Cloud-init compatible template on target node
+- UEFI boot mode must match template configuration
+- Working network configuration at boot time
+- VLAN-aware bridge properly configured
+
+**Current Status**: ✅ Cloud-init deployments fully operational. UEFI boot configuration resolved previous boot issues (December 15, 2025). See "Resolved Issues" below for details.
+
+#### ISO-based Deployment (iso-vms.tf)
+**Best for**: VMs requiring manual installation or troubleshooting cloud-init issues
+
+**Workflow**:
+1. Terraform creates VM with empty disk and ISO mounted
+2. VM boots to Ubuntu Server installer
+3. Manual installation through console:
+   - Configure network (IP, gateway, DNS)
+   - Create initial user
+   - Install OpenSSH server
+4. After installation completes, configure with Ansible from local machine:
+   - Install qemu-guest-agent
+   - Add SSH keys
+   - Configure system settings
+   - Install packages
+
+**Advantages**:
+- Full control over installation process
+- Bypasses cloud-init networking issues
+- Easier troubleshooting
+- Ansible provides consistent post-installation configuration
+
+**Current Use**: Ansible control nodes deployed via ISO method
 
 ## VM Configuration Standards
 
@@ -314,20 +359,28 @@ terraform plan
 terraform apply
 ```
 
-### Deploy Only VMs
+### Deploy Cloud-init VMs Only
 ```bash
 terraform apply -target=module.vms
 ```
 
-### Deploy Only LXC Containers
+### Deploy ISO-based VMs Only
+```bash
+terraform apply -target=proxmox_vm_qemu.iso_vm
+```
+
+### Deploy LXC Containers Only
 ```bash
 terraform apply -target=module.lxc
 ```
 
 ### View Deployed Resources
 ```bash
-# View all VMs
+# View all cloud-init VMs
 terraform output vm_summary
+
+# View all ISO-based VMs
+terraform output iso_vm_summary
 
 # View all LXC containers
 terraform output lxc_summary
@@ -335,6 +388,96 @@ terraform output lxc_summary
 # View IP mappings
 terraform output vm_ips
 terraform output lxc_ips
+```
+
+### ISO-based VM Deployment Workflow
+
+**Step 1: Define VMs in iso-vms.tf**
+```hcl
+locals {
+  iso_vms = {
+    my-vm = {
+      count       = 2
+      starting_ip = "192.168.20.50"  # Reference only
+      target_node = "node03"
+      cores       = 4
+      sockets     = 1
+      memory      = 8192
+      disk_size   = "20G"
+      storage     = "VMDisks"
+      iso         = "ISOs:iso/ubuntu-24.04.3-live-server-amd64.iso"
+      network_bridge = "vmbr0"
+      vlan_tag       = null
+    }
+  }
+}
+```
+
+**Step 2: Deploy with Terraform**
+```bash
+terraform apply -target=proxmox_vm_qemu.iso_vm
+```
+
+**Step 3: Manual OS Installation**
+1. Access VM console via Proxmox web UI
+2. Complete Ubuntu Server installation:
+   - Configure network (IP, gateway, DNS)
+   - Create initial user (hermes-admin)
+   - Install OpenSSH server
+3. Reboot after installation
+
+**Step 4: Post-Installation with Ansible**
+```bash
+# Create Ansible inventory
+cat > inventory.ini <<EOF
+[ansible_control]
+ansible-control01 ansible_host=192.168.20.50
+ansible-control02 ansible_host=192.168.20.51
+
+[ansible_control:vars]
+ansible_user=hermes-admin
+EOF
+
+# Run Ansible playbook for configuration
+ansible-playbook -i inventory.ini configure-vms.yml
+```
+
+Example Ansible playbook (`configure-vms.yml`):
+```yaml
+---
+- name: Configure VMs post-installation
+  hosts: all
+  become: yes
+  tasks:
+    - name: Install qemu-guest-agent
+      apt:
+        name: qemu-guest-agent
+        state: present
+        update_cache: yes
+
+    - name: Start qemu-guest-agent
+      service:
+        name: qemu-guest-agent
+        state: started
+        enabled: yes
+
+    - name: Add SSH public key
+      authorized_key:
+        user: hermes-admin
+        key: "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIAby7br+5MzyDus2fi2UFjUBZvGucN40Gxa29bgUTbfz hermes@homelab"
+
+    - name: Disable password authentication
+      lineinfile:
+        path: /etc/ssh/sshd_config
+        regexp: '^PasswordAuthentication'
+        line: 'PasswordAuthentication no'
+      notify: Restart SSH
+
+  handlers:
+    - name: Restart SSH
+      service:
+        name: ssh
+        state: restarted
 ```
 
 ### Add New VM Group
@@ -421,6 +564,73 @@ Templates are stored in: `/var/lib/vz/template/cache/`
 - **Docker in LXC**: 2-4 cores, 2-4GB RAM
 
 ## Troubleshooting
+
+### Resolved Issues
+
+#### Cloud-init VM Boot Failure - UEFI/BIOS Mismatch (RESOLVED - December 15, 2025)
+
+**Original Issue**: Cloud-init based VMs would create successfully but failed to boot properly, causing VMs to be unreachable via SSH/ping.
+
+**Symptoms**:
+- VM creates successfully via Terraform
+- VM starts but console output stops at: `Btrfs loaded, zoned=yes, fsverity=yes`
+- Boot process hangs before cloud-init initialization
+- VM is unreachable via SSH (connection timeout)
+- VM is unreachable via ping, even from Proxmox host node
+- VM shows status "running" but is stuck during boot
+
+**Root Cause**:
+**UEFI/BIOS Boot Mode Mismatch** - The actual issue was a fundamental boot configuration incompatibility:
+
+- **Template Configuration** (tpl-ubuntuv24.04-v1):
+  - BIOS: `ovmf` (UEFI boot mode)
+  - EFI Disk: Present (`efidisk0`)
+  - Machine: `q35`
+  - SCSI: `virtio-scsi-single`
+
+- **Terraform VM Configuration** (before fix):
+  - BIOS: `seabios` (Legacy BIOS mode) ❌
+  - EFI Disk: Cloned from template but incompatible with BIOS mode
+  - Machine: `q35`
+  - SCSI: `lsi` (different from template)
+
+**Why It Failed**:
+The VM inherited a UEFI EFI disk from the template but was configured to boot in legacy BIOS mode. This boot mode mismatch caused the system to hang during boot initialization, before cloud-init or networking could even start. The system was stuck trying to reconcile UEFI firmware with BIOS boot mode.
+
+**Resolution**:
+Updated `modules/linux-vm/main.tf` to match the template's UEFI boot configuration:
+
+```hcl
+# UEFI Boot Configuration
+bios    = "ovmf"
+machine = "q35"
+
+# EFI Disk (required for UEFI boot)
+efidisk {
+  storage           = var.storage
+  efitype           = "4m"
+  pre_enrolled_keys = true
+}
+
+# SCSI Controller (match template)
+scsihw = "virtio-scsi-single"
+```
+
+**Result**:
+- ✅ VMs now boot successfully with UEFI
+- ✅ Cloud-init initializes and completes normally
+- ✅ Network configuration applied correctly
+- ✅ SSH key authentication working
+- ✅ VMs fully accessible and functional
+
+**Files Modified**:
+- `modules/linux-vm/main.tf` - Added UEFI boot support (bios, efidisk, machine, scsihw)
+
+**Current Status**: Cloud-init deployments fully operational. Template `tpl-ubuntuv24.04-v1` on node01 working correctly for production VM deployments.
+
+**Key Lesson**: Always match VM boot mode (UEFI vs BIOS) to the template configuration. Use `qm config <vmid>` on the Proxmox host to verify template settings before deploying VMs.
+
+**Related Documentation**: See TROUBLESHOOTING.md for detailed troubleshooting steps.
 
 ### Common Issues
 
