@@ -329,6 +329,41 @@ scsihw = "virtio-scsi-single"
 
 See [TROUBLESHOOTING.md](./TROUBLESHOOTING.md) for detailed troubleshooting steps.
 
+#### Node Showing Question Mark / Unhealthy Status
+
+**Problem**: Node appears with `?` icon in Proxmox UI and shows "NR" (Not Ready) status
+
+**Symptoms**:
+- Question mark icon in Proxmox web UI cluster view
+- "NR" status in cluster membership (`pvecm status`)
+- Node may be unreachable or shutting down
+
+**Common Causes**:
+- Node in shutdown state (intentional or unexpected)
+- Network connectivity issues
+- Corosync cluster communication failure
+
+**Quick Diagnosis**:
+```bash
+# Check if node is reachable
+ping <node-ip>
+
+# Check cluster status
+ssh root@<node-ip> "pvecm status"
+
+# Check for shutdown messages
+ssh root@<node-ip> "dmesg | tail -50"
+```
+
+**Resolution**:
+1. If node shutdown: Power on via physical access, IPMI, or WOL
+2. If network issue: Verify network configuration and corosync services
+3. If cluster communication issue: Restart cluster services
+
+See [CLAUDE.md](./CLAUDE.md#node-showing-question-mark--unhealthy-status-resolved---december-16-2025) for detailed troubleshooting steps.
+
+**Status**: ✅ Documented December 16, 2025 after successful node03 recovery incident.
+
 #### Storage Issues
 
 **Problem**: Storage marked as inactive or showing `?` icons

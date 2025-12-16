@@ -634,6 +634,82 @@ scsihw = "virtio-scsi-single"
 
 ### Common Issues
 
+#### Node Showing Question Mark / Unhealthy Status (RESOLVED - December 16, 2025)
+
+**Symptom**: Node appears with a question mark icon in Proxmox web UI and shows "NR" (Not Ready) status in cluster membership
+
+**Incident Details**: Node03 showed unhealthy status in cluster on December 16, 2025.
+
+**Root Cause**: Node was in shutdown state ("System is going down" message in system logs). Shutdown cause was unexpected/unintentional.
+
+**Diagnosis Steps**:
+```bash
+# 1. Verify network connectivity
+ping 192.168.20.22
+
+# 2. Check SSH access
+ssh root@192.168.20.22 "uptime"
+
+# 3. Check cluster status from affected node
+ssh root@192.168.20.22 "pvecm status"
+
+# 4. Check cluster status from another node
+ssh root@192.168.20.21 "pvecm status"
+
+# 5. Check cluster resources via API
+ssh root@192.168.20.22 "pvesh get /cluster/resources --type node"
+```
+
+**What to Look For**:
+- "System is going down" message indicates active shutdown
+- "NR" (Not Ready) in membership information vs "A,NV,NMW" for healthy nodes
+- Node status should show "online" in cluster resources
+- Uptime should match expected runtime
+
+**Resolution**:
+1. **If shutdown in progress**: Try to cancel with `shutdown -c` (may fail if too far along)
+2. **If shutdown completed**: Power on the node via physical access, IPMI/BMC, or Wake-on-LAN
+3. **Verify cluster rejoin**:
+   ```bash
+   # Check node is online
+   ssh root@192.168.20.22 "pvecm status"
+
+   # Verify corosync services
+   ssh root@192.168.20.22 "systemctl status corosync pve-cluster"
+
+   # Check cluster resources
+   ssh root@192.168.20.22 "pvesh get /cluster/resources --type node"
+   ```
+4. **If "NR" status persists**: Restart cluster services
+   ```bash
+   ssh root@192.168.20.22 "systemctl restart pve-cluster && systemctl restart corosync"
+   ```
+
+**Verification of Recovery**:
+```bash
+# All nodes should show "online" status
+ssh root@192.168.20.22 "pvesh get /cluster/resources --type node"
+
+# Cluster should show quorate with all nodes
+ssh root@192.168.20.22 "pvecm status"
+
+# Corosync logs should show successful cluster join
+ssh root@192.168.20.22 "journalctl -u corosync -n 50 | grep -E 'Members|quorum'"
+```
+
+**Expected Healthy Output**:
+- Node status: "online" in cluster resources
+- Quorum status: "Quorate: Yes"
+- Corosync logs: "Members[3]: 1 2 3"
+- Message: "This node is within the primary component and will provide service"
+
+**Prevention**:
+- Investigate unexpected shutdown causes (check system logs, UPS status, scheduled tasks)
+- Set up monitoring for node health and unexpected shutdowns
+- Consider IPMI/BMC setup for remote power management
+
+**Result**: Node03 successfully recovered and rejoined cluster after power-on. All services restored to normal operation.
+
 #### Connection Refused Errors
 - **Symptom**: `dial tcp 192.168.20.21:8006: connectex: No connection could be made`
 - **Cause**: Proxmox API temporarily unavailable during heavy operations
