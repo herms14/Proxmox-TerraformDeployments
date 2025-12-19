@@ -1,0 +1,155 @@
+---
+# Synology NAS NFS Permissions Configuration
+# Adds VLAN 20 and VLAN 40 access to specified NFS shares
+#
+# Usage: ansible-playbook synology/configure-nfs-permissions.yml -v
+#
+# What this playbook does:
+# 1. Backs up current /etc/exports
+# 2. Adds subnet-based NFS permissions for VLAN 20 and VLAN 40
+# 3. Reloads NFS exports to apply changes
+#
+# Shares configured:
+# - Proxmox-LXCs
+# - Proxmox-Media
+# - ProxmoxCluster-VMDisks
+# - ProxmoxData
+
+- name: Configure NFS Permissions on Synology NAS
+  hosts: synology_nas
+  become: yes
+
+  vars:
+    # Subnets to add access for
+    allowed_subnets:
+      - "192.168.20.0/24"  # VLAN 20 - Kubernetes/Infrastructure
+      - "192.168.40.0/24"  # VLAN 40 - Services
+
+    # NFS shares to configure (must match exact share names in /etc/exports)
+    nfs_shares:
+      - "/volume2/Proxmox-LXCs"
+      - "/volume2/Proxmox-Media"
+      - "/volume2/ProxmoxCluster-VMDisks"
+      - "/volume2/ProxmoxData"
+
+    # NFS export options (matching existing Synology defaults)
+    # rw: Read-write access
+    # async: Asynchronous writes (better performance)
+    # no_wdelay: Don't delay writes
+    # crossmnt: Allow crossing mount points
+    # insecure: Allow connections from ports > 1024
+    # all_squash: Map all users to anonymous
+    # insecure_locks: Don't require secure locking
+    # sec=sys: Use standard UNIX auth
+    # anonuid/anongid: Anonymous user/group mapping
+    nfs_options: "rw,async,no_wdelay,crossmnt,insecure,all_squash,insecure_locks,sec=sys,anonuid=1024,anongid=100"
+
+  tasks:
+    # ============================================
+    # BACKUP CURRENT CONFIGURATION
+    # ============================================
+
+    - name: Backup current /etc/exports
+      # Why: Always backup before modifying system files
+      # Creates timestamped backup for rollback if needed
+      copy:
+        src: /etc/exports
+        dest: "/etc/exports.backup.{{ ansible_date_time.iso8601_basic_short }}"
+        remote_src: yes
+        mode: '0600'
+
+    - name: Read current exports file
+      # Why: Need to parse current configuration to add new entries
+      slurp:
+        src: /etc/exports
+      register: current_exports
+
+    - name: Display current NFS exports
+      debug:
+        msg: "{{ current_exports.content | b64decode }}"
+
+    # ============================================
+    # UPDATE NFS EXPORTS
+    # ============================================
+
+    - name: Update NFS exports with subnet permissions
+      # Why: Add subnet-based access rules to each share
+      # Uses blockinfile to manage our entries separately from Synology's
+      blockinfile:
+        path: /etc/exports
+        marker: "# {mark} ANSIBLE MANAGED - {{ item }}"
+        block: |
+          {{ item }}	192.168.20.0/24({{ nfs_options }})	192.168.40.0/24({{ nfs_options }})
+        state: present
+      loop: "{{ nfs_shares }}"
+      register: exports_updated
+      # Note: This appends new entries. Synology's original entries remain.
+
+    # ============================================
+    # ALTERNATIVE: REPLACE ENTIRE SHARE ENTRIES
+    # ============================================
+    # If the above doesn't work well, we can use lineinfile to modify existing entries
+
+    - name: Ensure VLAN 20 subnet access for each share
+      # Why: Add 192.168.20.0/24 to each share's export line
+      lineinfile:
+        path: /etc/exports
+        regexp: '^({{ item | regex_escape }}\s+.*?)(\s*)$'
+        line: '\1\t192.168.20.0/24({{ nfs_options }})\2'
+        backrefs: yes
+      loop: "{{ nfs_shares }}"
+      when: false  # Disabled - using blockinfile approach instead
+
+    # ============================================
+    # RELOAD NFS CONFIGURATION
+    # ============================================
+
+    - name: Reload NFS exports
+      # Why: Apply the new export rules without restarting NFS service
+      # exportfs -ra: Re-export all directories (sync /etc/exports with kernel)
+      command: exportfs -ra
+      when: exports_updated.changed
+
+    - name: Verify NFS exports
+      # Why: Confirm the new exports are active
+      command: showmount -e localhost
+      register: showmount_output
+      changed_when: false
+
+    - name: Display active NFS exports
+      debug:
+        msg: "{{ showmount_output.stdout_lines }}"
+
+    # ============================================
+    # VERIFICATION
+    # ============================================
+
+    - name: Read updated exports file
+      slurp:
+        src: /etc/exports
+      register: updated_exports
+
+    - name: Display updated NFS configuration
+      debug:
+        msg: |
+          ============================================
+          NFS PERMISSIONS UPDATED SUCCESSFULLY!
+          ============================================
+
+          Shares configured:
+          {% for share in nfs_shares %}
+            - {{ share }}
+          {% endfor %}
+
+          Subnets with access:
+          {% for subnet in allowed_subnets %}
+            - {{ subnet }}
+          {% endfor %}
+
+          Updated /etc/exports content:
+          {{ updated_exports.content | b64decode }}
+
+          To verify from a client, run:
+            showmount -e 192.168.20.31
+
+          ============================================

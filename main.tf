@@ -28,8 +28,8 @@ locals {
     k8s-controller = {
       count         = 3
       starting_ip   = "192.168.20.32"
-      target_node   = "node03"
-      template      = "tpl-ubuntu-shared-v1"
+      target_node   = "node01"
+      template      = "tpl-ubuntuv24.04-v1"
       cores         = 2
       sockets       = 1
       memory        = 4096   # 4GB
@@ -43,8 +43,8 @@ locals {
     k8s-worker = {
       count         = 6
       starting_ip   = "192.168.20.40"
-      target_node   = "node03"
-      template      = "tpl-ubuntu-shared-v1"
+      target_node   = "node01"
+      template      = "tpl-ubuntuv24.04-v1"
       cores         = 2
       sockets       = 1
       memory        = 4096   # 4GB

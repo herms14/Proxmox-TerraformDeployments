@@ -15,6 +15,8 @@ This repository contains Terraform configurations for managing a 3-node Proxmox 
 - **Cloud-init provisioning**: ✅ Fully operational automated VM configuration (UEFI boot support added Dec 2025)
 - **UEFI boot support**: Native UEFI template compatibility for modern cloud-init images
 - **Ansible automation**: Centralized configuration management with production-grade playbooks
+- **Docker service deployment**: ✅ Arr media stack, Authentik SSO, Immich photo management (Dec 2025)
+- **NAS automation**: Synology NFS permissions management via Ansible
 - **LXC container support**: Lightweight containers with persistent storage via NFS bind mounts
 
 ## Current Infrastructure
@@ -23,6 +25,9 @@ This repository contains Terraform configurations for managing a 3-node Proxmox 
 - ✅ **Kubernetes Cluster**: 9 nodes (3 control plane + 6 workers) - Infrastructure deployed, pending initialization
 - ✅ **Ansible Automation**: 1 controller managing all infrastructure
 - ✅ **Application Services**: 7 VMs (logging, Docker hosts, Traefik, Authentik, Immich, GitLab)
+- ✅ **Arr Media Stack**: 10 containerized services on docker-vm-media01 (Jellyfin, Radarr, Sonarr, etc.)
+- ✅ **Authentik SSO**: Identity provider on authentik-vm01 (SSO, OAuth, SAML)
+- ✅ **Immich Photos**: Self-hosted photo management on immich-vm01 (Dec 2025)
 
 **Resources:**
 - **Total VMs**: 17 across 2 VLANs
@@ -76,7 +81,16 @@ tf-proxmox/
 ├── modules/
 │   ├── linux-vm/          # VM deployment module
 │   └── lxc/               # LXC deployment module
+├── ansible-playbooks/     # Ansible playbooks (synced to controller)
+│   ├── docker/            # Docker installation & arr stack
+│   ├── authentik/         # Authentik SSO deployment
+│   ├── immich/            # Immich photo management
+│   ├── traefik/           # Traefik reverse proxy
+│   ├── gitlab/            # GitLab CE DevOps platform
+│   ├── synology/          # NAS automation
+│   └── k8s/               # Kubernetes deployment
 ├── CLAUDE.md              # Comprehensive infrastructure documentation
+├── ARR_STACK_DEPLOYMENT.md # Arr media stack guide
 └── README.md              # This file
 ```
 
@@ -408,6 +422,96 @@ df -h | grep 192.168.20.31
 - Check API token is valid
 - Confirm firewall allows connections
 
+## Docker Services
+
+### Arr Media Stack (docker-vm-media01)
+
+A complete media automation stack deployed on docker-vm-media01 (192.168.40.11):
+
+| Service | Port | Purpose |
+|---------|------|---------|
+| Jellyfin | 8096 | Media server |
+| Radarr | 7878 | Movie management |
+| Sonarr | 8989 | TV series management |
+| Lidarr | 8686 | Music management |
+| Prowlarr | 9696 | Indexer manager |
+| Bazarr | 6767 | Subtitle management |
+| Overseerr | 5055 | Media requests (Plex) |
+| Jellyseerr | 5056 | Media requests (Jellyfin) |
+| Tdarr | 8265 | Transcoding automation |
+| Autobrr | 7474 | Torrent automation |
+
+**Management**: Ansible automation from ansible-controller01
+**Storage**: NFS mount from Synology NAS (`/mnt/media`)
+
+See [ARR_STACK_DEPLOYMENT.md](./ARR_STACK_DEPLOYMENT.md) for complete deployment guide.
+
+### Authentik Identity Provider (authentik-vm01)
+
+SSO/Identity management deployed on authentik-vm01 (192.168.40.21):
+
+| Service | Port | Purpose |
+|---------|------|---------|
+| Authentik Server | 9000 | Web UI & API |
+| Authentik HTTPS | 9443 | Secure interface |
+
+**Features**: SSO, OAuth2, SAML, LDAP, MFA, User Management
+
+**Initial Setup**: http://192.168.40.21:9000/if/flow/initial-setup/
+
+### Immich Photo Management (immich-vm01)
+
+Self-hosted photo/video backup deployed on immich-vm01 (192.168.40.22):
+
+| Service | Port | Purpose |
+|---------|------|---------|
+| Immich Server | 2283 | Web UI & API |
+
+**Features**: Photo/video backup, face recognition, ML-powered tagging, mobile app sync
+
+**Storage**: NFS mount to Synology NAS (7TB available)
+
+**Initial Setup**: http://192.168.40.22:2283
+
+### Traefik Reverse Proxy (traefik-vm01)
+
+Central reverse proxy deployed on traefik-vm01 (192.168.40.20):
+
+| Service | Port | Purpose |
+|---------|------|---------|
+| Traefik HTTP | 80 | HTTP (redirects to HTTPS) |
+| Traefik HTTPS | 443 | HTTPS reverse proxy |
+| Traefik Dashboard | 8080 | Admin dashboard |
+
+**Features**: Dynamic service discovery, automatic HTTPS, dashboard, file-based routing
+
+**Pre-configured Routes**:
+- `auth.homelab.local` → Authentik (192.168.40.21:9000)
+- `photos.homelab.local` → Immich (192.168.40.22:2283)
+- `gitlab.homelab.local` → GitLab (192.168.40.23:80)
+- `media.homelab.local` → Jellyfin (192.168.40.11:8096)
+
+**Dashboard**: http://192.168.40.20:8080
+
+### GitLab CE (gitlab-vm01)
+
+Self-hosted DevOps platform deployed on gitlab-vm01 (192.168.40.23):
+
+| Service | Port | Purpose |
+|---------|------|---------|
+| GitLab HTTP | 80 | Web interface |
+| GitLab HTTPS | 443 | Secure web interface |
+| GitLab SSH | 2222 | Git SSH operations |
+
+**Features**: Git repositories, CI/CD pipelines, issue tracking, wiki, container registry (disabled)
+
+**Initial Setup**:
+1. Wait 3-5 minutes for GitLab to initialize
+2. Get root password: `docker exec gitlab grep 'Password:' /etc/gitlab/initial_root_password`
+3. Login at http://192.168.40.23 with username `root`
+
+**Note**: Initial password file is deleted after 24 hours!
+
 ## Documentation
 
 - **[CLAUDE.md](./CLAUDE.md)**: Comprehensive infrastructure documentation including:
@@ -415,7 +519,22 @@ df -h | grep 192.168.20.31
   - Network configuration and requirements
   - Node setup requirements (VLAN-aware bridges)
   - Deployed infrastructure inventory (17 VMs across 2 VLANs)
+  - Docker services (Arr stack, Authentik, Immich, Traefik, GitLab)
   - Terraform usage guide
+
+- **[SERVICES_GUIDE.md](./SERVICES_GUIDE.md)**: Complete services documentation and learning guide:
+  - Traefik reverse proxy architecture and configuration
+  - GitLab CE setup and administration
+  - Authentik SSO integration
+  - Immich photo management
+  - Service integration patterns and DNS setup
+
+- **[ARR_STACK_DEPLOYMENT.md](./ARR_STACK_DEPLOYMENT.md)**: Complete Arr media stack documentation:
+  - Service architecture and configuration
+  - Ansible playbook reference with explanations
+  - NFS storage setup and automation
+  - Synology NAS automation guide
+  - Troubleshooting and maintenance
 
 - **[Kubernetes_Setup.md](./Kubernetes_Setup.md)**: Complete Kubernetes deployment guide:
   - Production-grade 9-node HA cluster (3 controllers + 6 workers)

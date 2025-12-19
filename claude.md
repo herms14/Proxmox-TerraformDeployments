@@ -65,11 +65,12 @@ The cluster uses a production-grade NFS storage architecture with dedicated expo
    - Configured in: `/etc/fstab` on all nodes
 
 4. **Media** - Manual NFS mount for media files
-   - Mount point: `/mnt/nfs/media` (on all nodes)
-   - Used for: Radarr, Sonarr, Plex media files
-   - Directory structure: `/Movies/`, `/Series/`
+   - Mount point: `/mnt/nfs/media` (on Proxmox nodes), `/mnt/media` (on Docker hosts)
+   - Used for: Radarr, Sonarr, Lidarr, Jellyfin media files
+   - Directory structure: `/Movies/`, `/Series/`, `/Music/`
    - Why NOT a Proxmox storage: Prevents Proxmox from scanning thousands of media files
-   - Configured in: `/etc/fstab` on all nodes
+   - Configured in: `/etc/fstab` on all nodes and Docker hosts
+   - **Docker Host Mount**: `192.168.20.31:/volume2/Proxmox-Media` → `/mnt/media`
 
 #### Proxmox Storage Configuration
 
@@ -188,22 +189,63 @@ ip -d link show vmbr0 | grep vlan_filtering
 
 ### Current Deployment Status
 
-This is the initial deployment focusing on Ansible control nodes. Additional infrastructure will be added incrementally.
+Full infrastructure deployment including Ansible automation, Kubernetes cluster (9 nodes), and application services across VLANs 20 and 40.
 
 #### Virtual Machines - VLAN 20
 
 **Automation & Management:**
 | Hostname | Node | IP Address | Cores | RAM | Disk | Purpose | Deployment Method |
 |----------|------|------------|-------|-----|------|---------|-------------------|
-| ansible-control01 | node03 | 192.168.20.50 | 4 | 8GB | 20GB | Ansible control node | ISO + Ansible |
-| ansible-control02 | node03 | 192.168.20.51 | 4 | 8GB | 20GB | Ansible control node | ISO + Ansible |
+| ansible-controller01 | node01 | 192.168.20.30 | 2 | 4GB | 20GB | Ansible automation controller | Cloud-init |
 
-**Deployment Method**: ISO-based installation (Ubuntu 24.04.3 Server)
+**Kubernetes Infrastructure (9 nodes):**
+| Hostname | Node | IP Address | Cores | RAM | Disk | Purpose | Deployment Method |
+|----------|------|------------|-------|-----|------|---------|-------------------|
+| k8s-controller01 | node03 | 192.168.20.32 | 2 | 4GB | 20GB | K8s control plane (primary) | Cloud-init |
+| k8s-controller02 | node03 | 192.168.20.33 | 2 | 4GB | 20GB | K8s control plane (HA) | Cloud-init |
+| k8s-controller03 | node03 | 192.168.20.34 | 2 | 4GB | 20GB | K8s control plane (HA) | Cloud-init |
+| k8s-worker01 | node03 | 192.168.20.40 | 2 | 4GB | 20GB | K8s worker node | Cloud-init |
+| k8s-worker02 | node03 | 192.168.20.41 | 2 | 4GB | 20GB | K8s worker node | Cloud-init |
+| k8s-worker03 | node03 | 192.168.20.42 | 2 | 4GB | 20GB | K8s worker node | Cloud-init |
+| k8s-worker04 | node03 | 192.168.20.43 | 2 | 4GB | 20GB | K8s worker node | Cloud-init |
+| k8s-worker05 | node03 | 192.168.20.44 | 2 | 4GB | 20GB | K8s worker node | Cloud-init |
+| k8s-worker06 | node03 | 192.168.20.45 | 2 | 4GB | 20GB | K8s worker node | Cloud-init |
+
+**Kubernetes Cluster Specifications:**
+- **Version**: 1.28.x (latest stable)
+- **HA Control Plane**: 3 controller nodes with stacked etcd
+- **Worker Nodes**: 6 worker nodes for application workloads
+- **Container Runtime**: containerd with systemd cgroup driver
+- **CNI Plugin**: Calico 3.27.0
+- **Pod Network**: 10.244.0.0/16
+- **Deployment**: Production-grade Ansible playbooks (see [Kubernetes_Setup.md](./Kubernetes_Setup.md))
+- **Status**: Infrastructure deployed, cluster initialization pending
+
+#### Virtual Machines - VLAN 40
+
+**Application Services:**
+| Hostname | Node | IP Address | Cores | RAM | Disk | Purpose | Deployment Method |
+|----------|------|------------|-------|-----|------|---------|-------------------|
+| linux-syslog-server01 | node02 | 192.168.40.5 | 8 | 6GB | 50GB | Centralized logging | Cloud-init |
+| docker-vm-utilities01 | node02 | 192.168.40.10 | 2 | 4GB | 20GB | Docker utility services | Cloud-init |
+| docker-vm-media01 | node02 | 192.168.40.11 | 2 | 4GB | 20GB | Docker media services (Arr Stack) | Cloud-init |
+| traefik-vm01 | node02 | 192.168.40.20 | 2 | 4GB | 20GB | Reverse proxy - Deployed | Cloud-init |
+| authentik-vm01 | node02 | 192.168.40.21 | 2 | 4GB | 20GB | Identity management (SSO) - Deployed | Cloud-init |
+| immich-vm01 | node02 | 192.168.40.22 | 2 | 4GB | 20GB | Photo management - Deployed | Cloud-init |
+| gitlab-vm01 | node02 | 192.168.40.23 | 2 | 4GB | 20GB | DevOps platform - Deployed | Cloud-init |
+
+**Total Infrastructure:**
+- **Total VMs**: 17 (1 Ansible + 9 Kubernetes + 7 Services)
+- **Total vCPUs**: 36 cores
+- **Total RAM**: 72GB
+- **Total Storage**: 370GB on VMDisks (NFS)
+
+**Deployment Method**: Cloud-init template (tpl-ubuntu-shared-v1, tpl-ubuntuv24.04-v1)
 **Storage**: VMDisks (NFS on Synology)
-**Network**: vmbr0 (VLAN 20, untagged)
+**Network**: vmbr0 (VLAN 20/40 tagged)
 **DNS**: 192.168.20.1
 **Access**: SSH key authentication (user: hermes-admin)
-**Configuration**: Post-installation via Ansible from local machine
+**Management**: Ansible automation from ansible-controller01
 
 ### LXC Containers
 
@@ -213,15 +255,20 @@ LXC container deployments are currently disabled. Will be enabled after VM infra
 
 ### VLAN 20 (192.168.20.0/24)
 - **20-22**: Proxmox cluster nodes (node01, node02, node03)
-- **50-59**: Ansible automation infrastructure (ansible-control01, ansible-control02)
+- **30**: Ansible automation (ansible-controller01)
+- **32-34**: Kubernetes control plane nodes (k8s-controller01-03)
+- **40-45**: Kubernetes worker nodes (k8s-worker01-06)
+- **46-99**: Reserved for additional Kubernetes nodes
 - **100-199**: Reserved for LXC containers
 - **200-254**: Reserved for future VM deployments
 
 ### VLAN 40 (192.168.40.0/24)
-- **10-19**: Reserved for Docker Media Services
-- **20-29**: Reserved for Docker Utility Services
-- **30-39**: Reserved for Logging & Monitoring
-- **40-49**: Reserved for additional Automation & Management
+- **5**: Logging infrastructure (linux-syslog-server01)
+- **10-11**: Docker hosts (docker-vm-utilities01, docker-vm-media01)
+- **12-19**: Reserved for additional Docker hosts
+- **20-29**: Application services (traefik, authentik, immich, gitlab)
+- **30-39**: Reserved for monitoring & additional services
+- **40-254**: Reserved for future services
 
 ## Authentication & Access
 
@@ -246,7 +293,6 @@ LXC container deployments are currently disabled. Will be enabled after VM infra
 ```
 tf-proxmox/
 ├── main.tf                 # VM group definitions and orchestration (cloud-init)
-├── iso-vms.tf              # ISO-based VM deployments
 ├── lxc.tf                  # LXC container definitions
 ├── variables.tf            # Global variables and defaults
 ├── outputs.tf              # Output definitions
@@ -260,28 +306,48 @@ tf-proxmox/
 │       ├── main.tf
 │       ├── variables.tf
 │       └── outputs.tf
+├── ansible-playbooks/     # Ansible playbooks (synced to ansible-controller01)
+│   ├── docker/            # Docker-related playbooks
+│   │   ├── install-docker.yml      # Docker installation
+│   │   └── deploy-arr-stack.yml    # Arr media stack deployment
+│   ├── authentik/         # Authentik SSO deployment
+│   │   └── deploy-authentik.yml    # Authentik identity provider
+│   ├── immich/            # Immich photo management deployment
+│   │   └── deploy-immich.yml       # Immich photo backup service
+│   ├── traefik/           # Traefik reverse proxy deployment
+│   │   └── deploy-traefik.yml      # Traefik reverse proxy
+│   ├── gitlab/            # GitLab CE deployment
+│   │   └── deploy-gitlab.yml       # GitLab DevOps platform
+│   ├── synology/          # Synology NAS automation
+│   │   └── configure-nfs-permissions.yml
+│   └── k8s/               # Kubernetes deployment playbooks
 ├── lxc-example.tf         # Example LXC configurations
 ├── LXC_GUIDE.md          # LXC deployment documentation
+├── ANSIBLE_SETUP.md      # Ansible configuration documentation
+├── ARR_STACK_DEPLOYMENT.md # Arr media stack documentation
+├── Kubernetes_Setup.md   # Complete Kubernetes deployment guide
 ├── TROUBLESHOOTING.md    # Troubleshooting guide
 └── CLAUDE.md             # This file
 ```
 
 ### Key Features
-- **Auto-incrementing hostnames**: Automatic sequential naming (e.g., k8s-workernode01, k8s-workernode02)
+- **Auto-incrementing hostnames**: Automatic sequential naming (e.g., k8s-controller01, k8s-worker01)
 - **Auto-incrementing IPs**: Automatic IP assignment from starting_ip
 - **Dynamic resource creation**: Uses Terraform for_each for scalable deployments
-- **Multiple deployment methods**: Cloud-init for automated provisioning, ISO-based for manual installation
+- **Cloud-init automation**: Fully automated VM provisioning with cloud-init templates
+- **Ansible integration**: Centralized configuration management from ansible-controller01
 - **Consistent configuration**: DRY principle through modules
 
-### Deployment Methodologies
+### Deployment Methodology
 
 #### Cloud-init Deployment (main.tf + modules/linux-vm/)
-**Best for**: Production infrastructure requiring fully automated provisioning
+**All VMs deployed using cloud-init templates for consistent, automated provisioning**
 
 **Workflow**:
 1. Terraform clones from cloud-init template
 2. Cloud-init configures network, users, SSH keys on first boot
 3. VM boots fully configured and accessible
+4. Ansible manages post-deployment configuration
 
 **Requirements**:
 - Cloud-init compatible template on target node
@@ -291,29 +357,9 @@ tf-proxmox/
 
 **Current Status**: ✅ Cloud-init deployments fully operational. UEFI boot configuration resolved previous boot issues (December 15, 2025). See "Resolved Issues" below for details.
 
-#### ISO-based Deployment (iso-vms.tf)
-**Best for**: VMs requiring manual installation or troubleshooting cloud-init issues
-
-**Workflow**:
-1. Terraform creates VM with empty disk and ISO mounted
-2. VM boots to Ubuntu Server installer
-3. Manual installation through console:
-   - Configure network (IP, gateway, DNS)
-   - Create initial user
-   - Install OpenSSH server
-4. After installation completes, configure with Ansible from local machine:
-   - Install qemu-guest-agent
-   - Add SSH keys
-   - Configure system settings
-   - Install packages
-
-**Advantages**:
-- Full control over installation process
-- Bypasses cloud-init networking issues
-- Easier troubleshooting
-- Ansible provides consistent post-installation configuration
-
-**Current Use**: Ansible control nodes deployed via ISO method
+**Templates Used**:
+- `tpl-ubuntuv24.04-v1`: Ansible controller (Ubuntu 24.04, UEFI)
+- `tpl-ubuntu-shared-v1`: All other VMs (Ubuntu, UEFI)
 
 ## VM Configuration Standards
 
@@ -364,11 +410,6 @@ terraform apply
 terraform apply -target=module.vms
 ```
 
-### Deploy ISO-based VMs Only
-```bash
-terraform apply -target=proxmox_vm_qemu.iso_vm
-```
-
 ### Deploy LXC Containers Only
 ```bash
 terraform apply -target=module.lxc
@@ -376,11 +417,8 @@ terraform apply -target=module.lxc
 
 ### View Deployed Resources
 ```bash
-# View all cloud-init VMs
+# View all VMs
 terraform output vm_summary
-
-# View all ISO-based VMs
-terraform output iso_vm_summary
 
 # View all LXC containers
 terraform output lxc_summary
@@ -390,95 +428,33 @@ terraform output vm_ips
 terraform output lxc_ips
 ```
 
-### ISO-based VM Deployment Workflow
+### Ansible Operations
 
-**Step 1: Define VMs in iso-vms.tf**
-```hcl
-locals {
-  iso_vms = {
-    my-vm = {
-      count       = 2
-      starting_ip = "192.168.20.50"  # Reference only
-      target_node = "node03"
-      cores       = 4
-      sockets     = 1
-      memory      = 8192
-      disk_size   = "20G"
-      storage     = "VMDisks"
-      iso         = "ISOs:iso/ubuntu-24.04.3-live-server-amd64.iso"
-      network_bridge = "vmbr0"
-      vlan_tag       = null
-    }
-  }
-}
-```
-
-**Step 2: Deploy with Terraform**
+**Configure Kubernetes Cluster**:
 ```bash
-terraform apply -target=proxmox_vm_qemu.iso_vm
+# SSH to ansible-controller01
+ssh hermes-admin@192.168.20.30
+
+# Deploy full Kubernetes cluster
+cd ~/ansible
+ansible-playbook k8s/k8s-deploy-all.yml
 ```
 
-**Step 3: Manual OS Installation**
-1. Access VM console via Proxmox web UI
-2. Complete Ubuntu Server installation:
-   - Configure network (IP, gateway, DNS)
-   - Create initial user (hermes-admin)
-   - Install OpenSSH server
-3. Reboot after installation
+See [Kubernetes_Setup.md](./Kubernetes_Setup.md) for complete Kubernetes deployment documentation.
 
-**Step 4: Post-Installation with Ansible**
+**Run Ad-hoc Commands**:
 ```bash
-# Create Ansible inventory
-cat > inventory.ini <<EOF
-[ansible_control]
-ansible-control01 ansible_host=192.168.20.50
-ansible-control02 ansible_host=192.168.20.51
+# Check connectivity
+ansible all -m ping
 
-[ansible_control:vars]
-ansible_user=hermes-admin
-EOF
+# Check uptime
+ansible all -a uptime
 
-# Run Ansible playbook for configuration
-ansible-playbook -i inventory.ini configure-vms.yml
+# Update all systems
+ansible-playbook update-systems.yml
 ```
 
-Example Ansible playbook (`configure-vms.yml`):
-```yaml
----
-- name: Configure VMs post-installation
-  hosts: all
-  become: yes
-  tasks:
-    - name: Install qemu-guest-agent
-      apt:
-        name: qemu-guest-agent
-        state: present
-        update_cache: yes
-
-    - name: Start qemu-guest-agent
-      service:
-        name: qemu-guest-agent
-        state: started
-        enabled: yes
-
-    - name: Add SSH public key
-      authorized_key:
-        user: hermes-admin
-        key: "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIAby7br+5MzyDus2fi2UFjUBZvGucN40Gxa29bgUTbfz hermes@homelab"
-
-    - name: Disable password authentication
-      lineinfile:
-        path: /etc/ssh/sshd_config
-        regexp: '^PasswordAuthentication'
-        line: 'PasswordAuthentication no'
-      notify: Restart SSH
-
-  handlers:
-    - name: Restart SSH
-      service:
-        name: ssh
-        state: restarted
-```
+See [ANSIBLE_SETUP.md](./ANSIBLE_SETUP.md) for complete Ansible configuration documentation.
 
 ### Add New VM Group
 Edit `main.tf` and add to `vm_groups` local:
@@ -754,13 +730,256 @@ terraform fmt
 4. **Network Segmentation**: VLANs separate workloads
 5. **Cloud-init**: Automated security updates possible
 
+## Deployed Docker Services
+
+### Traefik Reverse Proxy (traefik-vm01)
+
+**Status**: ✅ Deployed December 19, 2025
+
+Traefik v3 reverse proxy deployed on traefik-vm01 (192.168.40.20) for centralized routing and load balancing.
+
+| Service | Port | URL | Purpose |
+|---------|------|-----|---------|
+| HTTP Endpoint | 80 | http://192.168.40.20 | HTTP (redirects to HTTPS) |
+| HTTPS Endpoint | 443 | https://192.168.40.20 | HTTPS traffic |
+| Dashboard | 8080 | http://192.168.40.20:8080 | Traefik web dashboard |
+
+**Features**:
+- Automatic HTTP to HTTPS redirect
+- Dynamic service discovery via file configuration
+- Pre-configured routes for all homelab services
+- TLS termination
+
+**Pre-configured Routes** (via dynamic config):
+| Hostname | Backend Service |
+|----------|----------------|
+| auth.homelab.local | Authentik (192.168.40.21:9000) |
+| photos.homelab.local | Immich (192.168.40.22:2283) |
+| gitlab.homelab.local | GitLab (192.168.40.23:80) |
+| media.homelab.local | Jellyfin (192.168.40.11:8096) |
+
+**Storage Configuration**:
+- Config: `/opt/traefik/` (local storage)
+  - Static Config: `/opt/traefik/config/traefik.yml`
+  - Dynamic Config: `/opt/traefik/config/dynamic/services.yml`
+  - Certificates: `/opt/traefik/certs/`
+  - Logs: `/opt/traefik/logs/`
+
+**Adding New Services**:
+Edit `/opt/traefik/config/dynamic/services.yml` - changes auto-reload.
+
+**Management**:
+- Ansible playbook: `~/ansible/traefik/deploy-traefik.yml` on ansible-controller01
+- Docker Compose: `/opt/traefik/docker-compose.yml` on traefik-vm01
+
+**Useful Commands**:
+```bash
+# View logs
+ssh hermes-admin@192.168.40.20 "cd /opt/traefik && sudo docker compose logs -f"
+
+# Restart Traefik
+ssh hermes-admin@192.168.40.20 "cd /opt/traefik && sudo docker compose restart"
+```
+
+### Arr Media Stack (docker-vm-media01)
+
+**Status**: ✅ Deployed December 18, 2025
+
+The complete Arr media stack is deployed on docker-vm-media01 (192.168.40.11) using Docker Compose, managed via Ansible automation.
+
+| Service | Port | URL | Purpose |
+|---------|------|-----|---------|
+| Jellyfin | 8096 | http://192.168.40.11:8096 | Media server |
+| Radarr | 7878 | http://192.168.40.11:7878 | Movie management |
+| Sonarr | 8989 | http://192.168.40.11:8989 | TV series management |
+| Lidarr | 8686 | http://192.168.40.11:8686 | Music management |
+| Prowlarr | 9696 | http://192.168.40.11:9696 | Indexer manager |
+| Bazarr | 6767 | http://192.168.40.11:6767 | Subtitle management |
+| Overseerr | 5055 | http://192.168.40.11:5055 | Media requests (Plex) |
+| Jellyseerr | 5056 | http://192.168.40.11:5056 | Media requests (Jellyfin) |
+| Tdarr | 8265 | http://192.168.40.11:8265 | Transcoding automation |
+| Autobrr | 7474 | http://192.168.40.11:7474 | Torrent automation |
+
+**Storage Configuration**:
+- Config: `/opt/arr-stack/` (local storage)
+- Media: `/mnt/media/` (NFS mount to Synology NAS)
+  - Movies: `/mnt/media/Movies`
+  - Series: `/mnt/media/Series`
+  - Music: `/mnt/media/Music`
+
+**Management**:
+- Ansible playbooks: `~/ansible/docker/` on ansible-controller01
+- Docker Compose: `/opt/arr-stack/docker-compose.yml` on docker-vm-media01
+
+See [ARR_STACK_DEPLOYMENT.md](./ARR_STACK_DEPLOYMENT.md) for complete deployment documentation.
+
+### Authentik Identity Provider (authentik-vm01)
+
+**Status**: ✅ Deployed December 18, 2025
+
+Authentik SSO/Identity Provider deployed on authentik-vm01 (192.168.40.21) using Docker Compose.
+
+| Service | Port | URL | Purpose |
+|---------|------|-----|---------|
+| Authentik Server | 9000 | http://192.168.40.21:9000 | Web interface & API |
+| Authentik HTTPS | 9443 | https://192.168.40.21:9443 | Secure web interface |
+
+**Components**:
+- Authentik Server (main application)
+- Authentik Worker (background tasks)
+- PostgreSQL (database)
+- Redis (cache)
+
+**Storage**: `/opt/authentik/` (local storage)
+- Note: NFS storage not compatible with Authentik due to all_squash permission restrictions
+
+**Initial Setup**:
+1. Navigate to http://192.168.40.21:9000/if/flow/initial-setup/
+2. Create admin account (default username: `akadmin`)
+
+**Management**:
+- Ansible playbook: `~/ansible/authentik/deploy-authentik.yml` on ansible-controller01
+- Docker Compose: `/opt/authentik/docker-compose.yml` on authentik-vm01
+
+### Immich Photo Management (immich-vm01)
+
+**Status**: ✅ Deployed December 19, 2025
+
+Immich self-hosted photo/video backup deployed on immich-vm01 (192.168.40.22) using Docker Compose.
+
+| Service | Port | URL | Purpose |
+|---------|------|-----|---------|
+| Immich Server | 2283 | http://192.168.40.22:2283 | Web interface & API |
+
+**Components**:
+- Immich Server (main application with web UI)
+- Immich Machine Learning (face/object recognition)
+- PostgreSQL with pgvecto-rs (vector database for ML)
+- Redis (cache and job queue)
+
+**Storage Configuration**:
+- Config & Database: `/opt/immich/` (local storage)
+  - Docker Compose: `/opt/immich/docker-compose.yml`
+  - PostgreSQL: `/opt/immich/postgres/`
+  - ML Models: `/opt/immich/model-cache/`
+  - Secrets: `/opt/immich/.secrets`
+- Photos & Videos: `/mnt/appdata/immich/` (NFS mount to Synology NAS - 7TB)
+  - Uploads: `/mnt/appdata/immich/upload/`
+  - Library: `/mnt/appdata/immich/library/`
+  - Profiles: `/mnt/appdata/immich/profile/`
+
+**NFS Mount**: `192.168.20.31:/volume2/ProxmoxData` → `/mnt/appdata`
+
+**Initial Setup**:
+1. Navigate to http://192.168.40.22:2283
+2. Create your admin account
+3. Download Immich mobile app (iOS/Android)
+4. Server URL for mobile: `http://192.168.40.22:2283/api`
+
+**Features**:
+- Automatic photo/video backup from mobile devices
+- Face recognition and person tagging
+- Object and scene detection
+- Timeline and map view
+- Album sharing
+- Duplicate detection
+
+**Management**:
+- Ansible playbook: `~/ansible/immich/deploy-immich.yml` on ansible-controller01
+- Docker Compose: `/opt/immich/docker-compose.yml` on immich-vm01
+
+**Useful Commands**:
+```bash
+# View logs
+ssh hermes-admin@192.168.40.22 "cd /opt/immich && sudo docker compose logs -f"
+
+# Restart services
+ssh hermes-admin@192.168.40.22 "cd /opt/immich && sudo docker compose restart"
+
+# Update Immich
+ssh hermes-admin@192.168.40.22 "cd /opt/immich && sudo docker compose pull && sudo docker compose up -d"
+```
+
+### GitLab CE DevOps Platform (gitlab-vm01)
+
+**Status**: ✅ Deployed December 19, 2025
+
+GitLab CE (Community Edition) self-hosted DevOps platform deployed on gitlab-vm01 (192.168.40.23) using Docker.
+
+| Service | Port | URL | Purpose |
+|---------|------|-----|---------|
+| Web Interface | 80 | http://192.168.40.23 | GitLab web UI |
+| HTTPS | 443 | https://192.168.40.23 | Secure web interface |
+| Git SSH | 2222 | ssh://git@192.168.40.23:2222 | Git over SSH |
+
+**Features**:
+- Git repository hosting (unlimited private repos)
+- CI/CD pipelines with GitLab Runner
+- Issue tracking and project management
+- Wiki and documentation
+- Merge requests with code review
+- Built-in container registry (disabled by default)
+
+**Components** (all-in-one container):
+- Nginx (reverse proxy)
+- Puma (Rails application server)
+- Sidekiq (background jobs)
+- PostgreSQL (database)
+- Redis (cache)
+- Gitaly (Git RPC service)
+
+**Storage Configuration**:
+- All data: `/opt/gitlab/` (local storage)
+  - Config: `/opt/gitlab/config/`
+  - Logs: `/opt/gitlab/logs/`
+  - Data: `/opt/gitlab/data/`
+
+**Initial Setup**:
+1. Wait 3-5 minutes for GitLab to initialize
+2. Get initial root password:
+   ```bash
+   ssh hermes-admin@192.168.40.23 "sudo docker exec gitlab grep 'Password:' /etc/gitlab/initial_root_password"
+   ```
+3. Login with username `root` and the password
+4. Change password immediately!
+
+**Note**: Initial password file is deleted after 24 hours!
+
+**Clone Repositories**:
+```bash
+# HTTPS
+git clone http://192.168.40.23/username/project.git
+
+# SSH (requires SSH key setup in GitLab)
+git clone ssh://git@192.168.40.23:2222/username/project.git
+```
+
+**Management**:
+- Ansible playbook: `~/ansible/gitlab/deploy-gitlab.yml` on ansible-controller01
+- Docker Compose: `/opt/gitlab/docker-compose.yml` on gitlab-vm01
+
+**Useful Commands**:
+```bash
+# View logs
+ssh hermes-admin@192.168.40.23 "cd /opt/gitlab && sudo docker compose logs -f"
+
+# Check GitLab status
+ssh hermes-admin@192.168.40.23 "sudo docker exec gitlab gitlab-ctl status"
+
+# Restart GitLab
+ssh hermes-admin@192.168.40.23 "cd /opt/gitlab && sudo docker compose restart"
+
+# Reconfigure GitLab
+ssh hermes-admin@192.168.40.23 "sudo docker exec gitlab gitlab-ctl reconfigure"
+```
+
+See [SERVICES_GUIDE.md](./SERVICES_GUIDE.md) for comprehensive service documentation and learning resources.
+
 ## Future Expansion
 
 ### Planned Services
-- **Media Stack (arr suite)**: Radarr, Sonarr, Plex with dedicated media storage
 - Additional LXC containers for lightweight services
 - Monitoring stack (Prometheus, Grafana)
-- GitLab or similar CI/CD
 - Database containers (PostgreSQL, Redis)
 
 ### IP Reservation

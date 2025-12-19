@@ -1,0 +1,547 @@
+---
+# Arr Media Stack Deployment Playbook
+# Deploys complete media automation stack using Docker Compose
+#
+# Usage: ansible-playbook docker/deploy-arr-stack.yml -l docker_media
+#
+# Services Deployed:
+# - Jellyfin      (8096)  - Media server
+# - Radarr        (7878)  - Movie management
+# - Sonarr        (8989)  - TV series management
+# - Prowlarr      (9696)  - Indexer manager
+# - Bazarr        (6767)  - Subtitle management
+# - Overseerr     (5055)  - Media request management (Plex)
+# - Jellyseerr    (5056)  - Media request management (Jellyfin)
+# - Lidarr        (8686)  - Music management (assuming "kidarr" meant Lidarr)
+# - Tdarr         (8265)  - Transcoding automation
+# - Autobrr       (7474)  - Torrent automation
+#
+# Prerequisites:
+# - Docker and Docker Compose installed (use install-docker.yml first)
+# - NFS share accessible at 192.168.20.31:/volume2/Proxmox-Media/MediaFiles
+#
+# Network Access:
+# - All services accessible on their respective ports from the host IP
+# - Inter-container communication via Docker bridge network
+
+- name: Deploy Arr Media Stack
+  hosts: docker_media
+  become: yes
+
+  vars:
+    # ============================================
+    # CONFIGURATION VARIABLES
+    # ============================================
+
+    # User/Group IDs for container permissions
+    # These should match the user that needs file access
+    puid: 1001  # User ID (hermes-admin on this system)
+    pgid: 1001  # Group ID (hermes-admin on this system)
+
+    # Timezone for all containers
+    timezone: "America/New_York"
+
+    # Base directory for arr stack configuration
+    arr_base_dir: /opt/arr-stack
+
+    # NFS Configuration
+    # NOTE: Update Synology NAS to allow 192.168.40.11 access to this share
+    nas_ip: "192.168.20.31"
+    nas_media_share: "/volume2/Proxmox-Media"  # MediaFiles is a subdirectory
+    media_mount_point: "/mnt/media"
+
+    # Download directory (local for speed, then moved to NFS)
+    downloads_dir: "{{ arr_base_dir }}/downloads"
+
+  tasks:
+    # ============================================
+    # NFS PREREQUISITES
+    # ============================================
+
+    - name: Install NFS client packages
+      # Why: Required to mount NFS shares from the Synology NAS
+      apt:
+        name:
+          - nfs-common    # NFS client utilities
+          - nfs4-acl-tools  # ACL tools for NFSv4
+        state: present
+        update_cache: yes
+
+    # ============================================
+    # DIRECTORY STRUCTURE
+    # ============================================
+
+    - name: Create arr stack base directory
+      # Why: Central location for all configuration files
+      # Keeps configs organized and easy to backup
+      file:
+        path: "{{ arr_base_dir }}"
+        state: directory
+        owner: "{{ puid }}"
+        group: "{{ pgid }}"
+        mode: "0755"
+
+    - name: Create NFS mount point
+      # Why: Directory where the NAS media share will be mounted
+      file:
+        path: "{{ media_mount_point }}"
+        state: directory
+        owner: "{{ puid }}"
+        group: "{{ pgid }}"
+        mode: "0755"
+
+    - name: Create service configuration directories
+      # Why: Each service needs its own directory for configs, databases, etc.
+      # This keeps configurations separate and manageable
+      file:
+        path: "{{ arr_base_dir }}/{{ item }}"
+        state: directory
+        owner: "{{ puid }}"
+        group: "{{ pgid }}"
+        mode: "0755"
+      loop:
+        - jellyfin/config
+        - jellyfin/cache
+        - radarr
+        - sonarr
+        - prowlarr
+        - bazarr
+        - overseerr
+        - jellyseerr
+        - lidarr
+        - tdarr/server
+        - tdarr/configs
+        - tdarr/logs
+        - tdarr/transcode_cache
+        - autobrr
+        - downloads/complete
+        - downloads/incomplete
+        - downloads/torrents
+
+    # ============================================
+    # NFS MOUNT CONFIGURATION
+    # ============================================
+
+    - name: Add NFS mount to fstab
+      # Why: Ensures the NFS share mounts automatically on boot
+      # Options explained:
+      # - rw: Read-write access
+      # - soft: Return error if server unavailable (vs hard which hangs)
+      # - intr: Allow interruption of NFS operations
+      # - timeo=300: Timeout in deciseconds (30 seconds)
+      # - retrans=3: Number of retries before failing
+      # - _netdev: Wait for network before mounting
+      # - nofail: Don't fail boot if mount fails
+      lineinfile:
+        path: /etc/fstab
+        line: "{{ nas_ip }}:{{ nas_media_share }} {{ media_mount_point }} nfs rw,soft,intr,timeo=300,retrans=3,_netdev,nofail 0 0"
+        state: present
+        create: yes
+
+    - name: Mount NFS share
+      # Why: Actually mount the NFS share now (fstab only configures auto-mount)
+      # NOTE: If this fails, ensure your Synology NAS allows 192.168.40.11 access
+      mount:
+        path: "{{ media_mount_point }}"
+        src: "{{ nas_ip }}:{{ nas_media_share }}"
+        fstype: nfs
+        opts: rw,soft,intr,timeo=300,retrans=3,_netdev,nofail
+        state: mounted
+      register: nfs_mount_result
+      ignore_errors: yes  # Continue even if NFS mount fails
+      tags:
+        - nfs
+
+    - name: NFS mount warning
+      # Why: Inform user if NFS mount failed
+      debug:
+        msg: |
+          WARNING: NFS mount failed!
+          You need to configure your Synology NAS to allow 192.168.40.11 access.
+
+          To fix this:
+          1. Log into Synology DSM
+          2. Go to Control Panel > Shared Folder
+          3. Select "Proxmox-Media" > Edit > NFS Permissions
+          4. Add a rule allowing 192.168.40.11 or 192.168.40.0/24
+
+          After updating NAS permissions, run:
+          sudo mount /mnt/media
+      when: nfs_mount_result.failed | default(false)
+      tags:
+        - nfs
+
+    - name: Verify NFS mount
+      # Why: Confirm the mount worked before proceeding
+      command: df -h {{ media_mount_point }}
+      register: nfs_mount_check
+      changed_when: false
+      when: not (nfs_mount_result.failed | default(false))
+      tags:
+        - nfs
+
+    - name: Display NFS mount status
+      debug:
+        msg: "{{ nfs_mount_check.stdout }}"
+      when: not (nfs_mount_result.failed | default(false))
+      tags:
+        - nfs
+
+    # ============================================
+    # DOCKER COMPOSE FILE
+    # ============================================
+
+    - name: Deploy Docker Compose file
+      # Why: Docker Compose defines all services and their relationships
+      # This is the main configuration file for the entire stack
+      copy:
+        dest: "{{ arr_base_dir }}/docker-compose.yml"
+        owner: "{{ puid }}"
+        group: "{{ pgid }}"
+        mode: "0644"
+        content: |
+          # Arr Media Stack - Docker Compose Configuration
+          # Generated by Ansible on {{ ansible_date_time.iso8601 }}
+          #
+          # All services use the same PUID/PGID for consistent file permissions
+          # Network: arr-network (bridge) for inter-container communication
+
+          version: "3.9"
+
+          services:
+            # ============================================
+            # JELLYFIN - Media Server
+            # ============================================
+            # Web UI: http://host-ip:8096
+            # Purpose: Stream media to devices, manage libraries
+            jellyfin:
+              image: jellyfin/jellyfin:latest
+              container_name: jellyfin
+              restart: unless-stopped
+              environment:
+                - PUID={{ puid }}
+                - PGID={{ pgid }}
+                - TZ={{ timezone }}
+                # Hardware acceleration (optional - Intel QuickSync)
+                # - JELLYFIN_FFmpeg__probesize=50000000
+                # - JELLYFIN_FFmpeg__analyzeduration=50000000
+              volumes:
+                # Configuration and database
+                - {{ arr_base_dir }}/jellyfin/config:/config
+                # Transcoding cache
+                - {{ arr_base_dir }}/jellyfin/cache:/cache
+                # Media libraries (read-only is safer, but needs write for deletions)
+                - {{ media_mount_point }}/Movies:/data/movies:ro
+                - {{ media_mount_point }}/Series:/data/tvshows:ro
+              ports:
+                - 8096:8096      # Web UI
+                - 8920:8920      # HTTPS (optional)
+                - 7359:7359/udp  # Client discovery
+                - 1900:1900/udp  # DLNA discovery
+              networks:
+                - arr-network
+
+            # ============================================
+            # RADARR - Movie Management
+            # ============================================
+            # Web UI: http://host-ip:7878
+            # Purpose: Automatically download and organize movies
+            radarr:
+              image: lscr.io/linuxserver/radarr:latest
+              container_name: radarr
+              restart: unless-stopped
+              environment:
+                - PUID={{ puid }}
+                - PGID={{ pgid }}
+                - TZ={{ timezone }}
+              volumes:
+                # Configuration (settings, database)
+                - {{ arr_base_dir }}/radarr:/config
+                # Media library (needs write access to organize files)
+                - {{ media_mount_point }}/Movies:/movies
+                # Downloads folder (hardlinks work when same filesystem)
+                - {{ downloads_dir }}:/downloads
+              ports:
+                - 7878:7878
+              networks:
+                - arr-network
+
+            # ============================================
+            # SONARR - TV Series Management
+            # ============================================
+            # Web UI: http://host-ip:8989
+            # Purpose: Automatically download and organize TV shows
+            sonarr:
+              image: lscr.io/linuxserver/sonarr:latest
+              container_name: sonarr
+              restart: unless-stopped
+              environment:
+                - PUID={{ puid }}
+                - PGID={{ pgid }}
+                - TZ={{ timezone }}
+              volumes:
+                - {{ arr_base_dir }}/sonarr:/config
+                - {{ media_mount_point }}/Series:/tv
+                - {{ downloads_dir }}:/downloads
+              ports:
+                - 8989:8989
+              networks:
+                - arr-network
+
+            # ============================================
+            # PROWLARR - Indexer Manager
+            # ============================================
+            # Web UI: http://host-ip:9696
+            # Purpose: Central indexer management for all *arr apps
+            # Syncs indexers to Radarr, Sonarr, Lidarr automatically
+            prowlarr:
+              image: lscr.io/linuxserver/prowlarr:latest
+              container_name: prowlarr
+              restart: unless-stopped
+              environment:
+                - PUID={{ puid }}
+                - PGID={{ pgid }}
+                - TZ={{ timezone }}
+              volumes:
+                - {{ arr_base_dir }}/prowlarr:/config
+              ports:
+                - 9696:9696
+              networks:
+                - arr-network
+
+            # ============================================
+            # BAZARR - Subtitle Management
+            # ============================================
+            # Web UI: http://host-ip:6767
+            # Purpose: Automatically download subtitles for movies/TV
+            bazarr:
+              image: lscr.io/linuxserver/bazarr:latest
+              container_name: bazarr
+              restart: unless-stopped
+              environment:
+                - PUID={{ puid }}
+                - PGID={{ pgid }}
+                - TZ={{ timezone }}
+              volumes:
+                - {{ arr_base_dir }}/bazarr:/config
+                # Needs access to media to match subtitles
+                - {{ media_mount_point }}/Movies:/movies
+                - {{ media_mount_point }}/Series:/tv
+              ports:
+                - 6767:6767
+              networks:
+                - arr-network
+
+            # ============================================
+            # OVERSEERR - Media Request Management (Plex)
+            # ============================================
+            # Web UI: http://host-ip:5055
+            # Purpose: User-friendly request interface for Plex
+            overseerr:
+              image: lscr.io/linuxserver/overseerr:latest
+              container_name: overseerr
+              restart: unless-stopped
+              environment:
+                - PUID={{ puid }}
+                - PGID={{ pgid }}
+                - TZ={{ timezone }}
+              volumes:
+                - {{ arr_base_dir }}/overseerr:/config
+              ports:
+                - 5055:5055
+              networks:
+                - arr-network
+
+            # ============================================
+            # JELLYSEERR - Media Request Management (Jellyfin)
+            # ============================================
+            # Web UI: http://host-ip:5056
+            # Purpose: User-friendly request interface for Jellyfin
+            # This is the Jellyfin fork of Overseerr
+            jellyseerr:
+              image: fallenbagel/jellyseerr:latest
+              container_name: jellyseerr
+              restart: unless-stopped
+              environment:
+                - PUID={{ puid }}
+                - PGID={{ pgid }}
+                - TZ={{ timezone }}
+              volumes:
+                - {{ arr_base_dir }}/jellyseerr:/app/config
+              ports:
+                - 5056:5055
+              networks:
+                - arr-network
+
+            # ============================================
+            # LIDARR - Music Management
+            # ============================================
+            # Web UI: http://host-ip:8686
+            # Purpose: Automatically download and organize music
+            lidarr:
+              image: lscr.io/linuxserver/lidarr:latest
+              container_name: lidarr
+              restart: unless-stopped
+              environment:
+                - PUID={{ puid }}
+                - PGID={{ pgid }}
+                - TZ={{ timezone }}
+              volumes:
+                - {{ arr_base_dir }}/lidarr:/config
+                - {{ media_mount_point }}/Music:/music
+                - {{ downloads_dir }}:/downloads
+              ports:
+                - 8686:8686
+              networks:
+                - arr-network
+
+            # ============================================
+            # TDARR - Transcoding Automation
+            # ============================================
+            # Web UI: http://host-ip:8265
+            # Purpose: Automated media transcoding/health checking
+            # Useful for converting to more efficient codecs (H.265)
+            tdarr:
+              image: ghcr.io/haveagitgat/tdarr:latest
+              container_name: tdarr
+              restart: unless-stopped
+              environment:
+                - PUID={{ puid }}
+                - PGID={{ pgid }}
+                - TZ={{ timezone }}
+                - UMASK_SET=002
+                - serverIP=0.0.0.0
+                - serverPort=8266
+                - webUIPort=8265
+                - internalNode=true  # Run a node within the server
+                - inContainer=true
+                - ffmpegVersion=6
+                - nodeName=InternalNode
+              volumes:
+                - {{ arr_base_dir }}/tdarr/server:/app/server
+                - {{ arr_base_dir }}/tdarr/configs:/app/configs
+                - {{ arr_base_dir }}/tdarr/logs:/app/logs
+                # Temporary transcoding space (should be fast storage)
+                - {{ arr_base_dir }}/tdarr/transcode_cache:/temp
+                # Media access for transcoding
+                - {{ media_mount_point }}/Movies:/media/movies
+                - {{ media_mount_point }}/Series:/media/tvshows
+              ports:
+                - 8265:8265  # Web UI
+                - 8266:8266  # Server port
+              networks:
+                - arr-network
+
+            # ============================================
+            # AUTOBRR - Torrent Automation
+            # ============================================
+            # Web UI: http://host-ip:7474
+            # Purpose: IRC announce channel monitoring and filtering
+            # Catches releases instantly from IRC announce channels
+            autobrr:
+              image: ghcr.io/autobrr/autobrr:latest
+              container_name: autobrr
+              restart: unless-stopped
+              environment:
+                - PUID={{ puid }}
+                - PGID={{ pgid }}
+                - TZ={{ timezone }}
+              volumes:
+                - {{ arr_base_dir }}/autobrr:/config
+              ports:
+                - 7474:7474
+              networks:
+                - arr-network
+
+          # ============================================
+          # NETWORKS
+          # ============================================
+          networks:
+            arr-network:
+              driver: bridge
+              # This creates an isolated network for arr services
+              # Services can reach each other by container name
+              # e.g., Radarr can reach Prowlarr at http://prowlarr:9696
+
+    # ============================================
+    # START THE STACK
+    # ============================================
+
+    - name: Start arr stack with Docker Compose
+      # Why: Pulls images and starts all containers
+      # --pull always: Check for newer images
+      # -d: Run in detached mode (background)
+      community.docker.docker_compose_v2:
+        project_src: "{{ arr_base_dir }}"
+        state: present
+        pull: always
+      register: compose_result
+
+    - name: Display compose output
+      debug:
+        var: compose_result
+
+    # ============================================
+    # VERIFICATION
+    # ============================================
+
+    - name: Wait for services to start
+      # Why: Give containers time to initialize
+      pause:
+        seconds: 30
+
+    - name: Check running containers
+      command: docker ps --format "table {{ '{{' }}.Names{{ '}}' }}\t{{ '{{' }}.Status{{ '}}' }}\t{{ '{{' }}.Ports{{ '}}' }}"
+      register: container_status
+      changed_when: false
+
+    - name: Display running containers
+      debug:
+        msg: "{{ container_status.stdout_lines }}"
+
+    # ============================================
+    # POST-DEPLOYMENT INFO
+    # ============================================
+
+    - name: Display access information
+      debug:
+        msg: |
+          ============================================
+          ARR STACK DEPLOYED SUCCESSFULLY!
+          ============================================
+
+          Access your services at:
+
+          Media Server:
+            - Jellyfin:     http://{{ ansible_host }}:8096
+
+          Media Management:
+            - Radarr:       http://{{ ansible_host }}:7878  (Movies)
+            - Sonarr:       http://{{ ansible_host }}:8989  (TV Shows)
+            - Lidarr:       http://{{ ansible_host }}:8686  (Music)
+            - Bazarr:       http://{{ ansible_host }}:6767  (Subtitles)
+
+          Indexer & Automation:
+            - Prowlarr:     http://{{ ansible_host }}:9696  (Indexers)
+            - Autobrr:      http://{{ ansible_host }}:7474  (IRC/Automation)
+
+          Request Management:
+            - Overseerr:    http://{{ ansible_host }}:5055  (Plex requests)
+            - Jellyseerr:   http://{{ ansible_host }}:5056  (Jellyfin requests)
+
+          Transcoding:
+            - Tdarr:        http://{{ ansible_host }}:8265
+
+          Storage Paths:
+            - Config:       {{ arr_base_dir }}
+            - Media:        {{ media_mount_point }}
+            - Downloads:    {{ downloads_dir }}
+
+          Next Steps:
+          1. Configure Prowlarr first (add indexers)
+          2. Connect Prowlarr to Radarr/Sonarr/Lidarr
+          3. Set up Jellyfin libraries
+          4. Configure Jellyseerr with Jellyfin connection
+          5. (Optional) Set up Tdarr transcode rules
+
+          ============================================

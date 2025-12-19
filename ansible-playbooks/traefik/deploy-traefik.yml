@@ -1,0 +1,285 @@
+---
+# Traefik Reverse Proxy Deployment Playbook
+# Deploys Traefik v3 as a central reverse proxy using Docker Compose
+#
+# Usage: ansible-playbook traefik/deploy-traefik.yml -l traefik-vm01 -v
+#
+# Services Deployed:
+# - Traefik v3       (80, 443, 8080)  - Reverse proxy with dashboard
+#
+# Prerequisites:
+# - Docker and Docker Compose installed (use docker/install-docker.yml first)
+#
+# Features:
+# - HTTP to HTTPS redirect
+# - Dynamic service discovery via file provider
+# - Dashboard on port 8080
+# - Pre-configured routes for homelab services
+
+- name: Deploy Traefik Reverse Proxy
+  hosts: reverse_proxy
+  become: yes
+
+  vars:
+    # ============================================
+    # CONFIGURATION VARIABLES
+    # ============================================
+
+    # Timezone
+    timezone: "America/New_York"
+
+    # Traefik directories
+    traefik_dir: "/opt/traefik"
+
+    # Traefik version
+    traefik_version: "v3.2"
+
+  tasks:
+    # ============================================
+    # DIRECTORY STRUCTURE
+    # ============================================
+
+    - name: Create Traefik directories
+      file:
+        path: "{{ item }}"
+        state: directory
+        mode: "0755"
+      loop:
+        - "{{ traefik_dir }}"
+        - "{{ traefik_dir }}/config"
+        - "{{ traefik_dir }}/config/dynamic"
+        - "{{ traefik_dir }}/certs"
+        - "{{ traefik_dir }}/logs"
+
+    # ============================================
+    # STATIC CONFIGURATION
+    # ============================================
+
+    - name: Deploy Traefik static configuration
+      copy:
+        dest: "{{ traefik_dir }}/config/traefik.yml"
+        mode: "0644"
+        content: |
+          # Traefik Static Configuration
+          # Global settings
+          global:
+            checkNewVersion: false
+            sendAnonymousUsage: false
+
+          # API and Dashboard
+          api:
+            dashboard: true
+            insecure: true
+
+          # Logging
+          log:
+            level: INFO
+            filePath: /logs/traefik.log
+            format: json
+
+          accessLog:
+            filePath: /logs/access.log
+            format: json
+            bufferingSize: 100
+
+          # Entrypoints
+          entryPoints:
+            web:
+              address: ":80"
+              http:
+                redirections:
+                  entryPoint:
+                    to: websecure
+                    scheme: https
+                    permanent: true
+            websecure:
+              address: ":443"
+              http:
+                tls: {}
+
+          # Providers
+          providers:
+            docker:
+              endpoint: "unix:///var/run/docker.sock"
+              exposedByDefault: false
+              network: traefik-network
+              watch: true
+
+            file:
+              directory: /etc/traefik/dynamic
+              watch: true
+
+    # ============================================
+    # DYNAMIC CONFIGURATION
+    # ============================================
+
+    - name: Deploy Traefik dynamic configuration
+      copy:
+        dest: "{{ traefik_dir }}/config/dynamic/services.yml"
+        mode: "0644"
+        content: |
+          # Traefik Dynamic Configuration - Homelab Services
+          http:
+            routers:
+              authentik:
+                rule: "Host(`auth.homelab.local`)"
+                service: authentik
+                entryPoints:
+                  - websecure
+                tls: {}
+
+              immich:
+                rule: "Host(`photos.homelab.local`)"
+                service: immich
+                entryPoints:
+                  - websecure
+                tls: {}
+
+              gitlab:
+                rule: "Host(`gitlab.homelab.local`)"
+                service: gitlab
+                entryPoints:
+                  - websecure
+                tls: {}
+
+              jellyfin:
+                rule: "Host(`media.homelab.local`)"
+                service: jellyfin
+                entryPoints:
+                  - websecure
+                tls: {}
+
+            services:
+              authentik:
+                loadBalancer:
+                  servers:
+                    - url: "http://192.168.40.21:9000"
+
+              immich:
+                loadBalancer:
+                  servers:
+                    - url: "http://192.168.40.22:2283"
+
+              gitlab:
+                loadBalancer:
+                  servers:
+                    - url: "http://192.168.40.23:80"
+
+              jellyfin:
+                loadBalancer:
+                  servers:
+                    - url: "http://192.168.40.11:8096"
+
+            middlewares:
+              secure-headers:
+                headers:
+                  frameDeny: true
+                  browserXssFilter: true
+                  contentTypeNosniff: true
+
+          tls:
+            options:
+              default:
+                minVersion: VersionTLS12
+
+    # ============================================
+    # DOCKER COMPOSE
+    # ============================================
+
+    - name: Deploy Docker Compose file
+      copy:
+        dest: "{{ traefik_dir }}/docker-compose.yml"
+        mode: "0644"
+        content: |
+          name: traefik
+
+          services:
+            traefik:
+              container_name: traefik
+              image: traefik:{{ traefik_version }}
+              restart: unless-stopped
+              security_opt:
+                - no-new-privileges:true
+              ports:
+                - "80:80"
+                - "443:443"
+                - "8080:8080"
+              volumes:
+                - /var/run/docker.sock:/var/run/docker.sock:ro
+                - {{ traefik_dir }}/config/traefik.yml:/etc/traefik/traefik.yml:ro
+                - {{ traefik_dir }}/config/dynamic:/etc/traefik/dynamic:ro
+                - {{ traefik_dir }}/certs:/certs
+                - {{ traefik_dir }}/logs:/logs
+              environment:
+                - TZ={{ timezone }}
+              networks:
+                - traefik-network
+
+          networks:
+            traefik-network:
+              name: traefik-network
+              driver: bridge
+
+    # ============================================
+    # START THE STACK
+    # ============================================
+
+    - name: Start Traefik with Docker Compose
+      community.docker.docker_compose_v2:
+        project_src: "{{ traefik_dir }}"
+        state: present
+        pull: always
+      register: compose_result
+
+    # ============================================
+    # VERIFICATION
+    # ============================================
+
+    - name: Wait for Traefik to start
+      pause:
+        seconds: 10
+
+    - name: Check Traefik container status
+      command: docker ps --format "table {{'{{'}}.Names{{'}}'}}\t{{'{{'}}.Status{{'}}'}}\t{{'{{'}}.Ports{{'}}'}}"
+      register: container_status
+      changed_when: false
+
+    - name: Display container status
+      debug:
+        msg: "{{ container_status.stdout_lines }}"
+
+    - name: Display access information
+      debug:
+        msg: |
+          ============================================
+          TRAEFIK DEPLOYED SUCCESSFULLY!
+          ============================================
+
+          Dashboard:
+            - URL: http://{{ ansible_host }}:8080
+
+          Endpoints:
+            - HTTP:  http://{{ ansible_host }}:80 (redirects to HTTPS)
+            - HTTPS: https://{{ ansible_host }}:443
+
+          Pre-configured Routes:
+            - auth.homelab.local    -> Authentik (192.168.40.21:9000)
+            - photos.homelab.local  -> Immich (192.168.40.22:2283)
+            - gitlab.homelab.local  -> GitLab (192.168.40.23:80)
+            - media.homelab.local   -> Jellyfin (192.168.40.11:8096)
+
+          Configuration Files:
+            - Static:  {{ traefik_dir }}/config/traefik.yml
+            - Dynamic: {{ traefik_dir }}/config/dynamic/services.yml
+
+          To add new services, edit:
+            {{ traefik_dir }}/config/dynamic/services.yml
+
+          Useful Commands:
+            # View logs
+            cd {{ traefik_dir }} && docker compose logs -f
+
+            # Restart Traefik
+            cd {{ traefik_dir }} && docker compose restart
+
+          ============================================

@@ -1,0 +1,177 @@
+---
+# GitLab CE Deployment Playbook
+# Deploys GitLab Community Edition using Docker Compose
+#
+# Usage: ansible-playbook gitlab/deploy-gitlab.yml -l gitlab-vm01 -v
+#
+# Services Deployed:
+# - GitLab CE (80, 443, 2222) - Complete DevOps platform
+#
+# Prerequisites:
+# - Docker and Docker Compose installed (use docker/install-docker.yml first)
+# - Minimum 4GB RAM recommended
+#
+# Features:
+# - Git repository management
+# - CI/CD pipelines
+# - Issue tracking
+# - Wiki and documentation
+# - Container registry (disabled by default)
+
+- name: Deploy GitLab CE
+  hosts: devops
+  become: yes
+
+  vars:
+    # ============================================
+    # CONFIGURATION VARIABLES
+    # ============================================
+
+    # Timezone
+    timezone: "America/New_York"
+
+    # GitLab directories
+    gitlab_dir: "/opt/gitlab"
+
+    # External URL - how users access GitLab
+    gitlab_external_url: "http://{{ ansible_host }}"
+
+    # SSH port for Git operations
+    gitlab_ssh_port: 2222
+
+  tasks:
+    # ============================================
+    # DIRECTORY STRUCTURE
+    # ============================================
+
+    - name: Create GitLab directories
+      file:
+        path: "{{ item }}"
+        state: directory
+        mode: "0755"
+      loop:
+        - "{{ gitlab_dir }}"
+        - "{{ gitlab_dir }}/config"
+        - "{{ gitlab_dir }}/logs"
+        - "{{ gitlab_dir }}/data"
+
+    # ============================================
+    # DOCKER COMPOSE
+    # ============================================
+
+    - name: Deploy Docker Compose file
+      copy:
+        dest: "{{ gitlab_dir }}/docker-compose.yml"
+        mode: "0644"
+        content: |
+          # GitLab CE - Docker Compose Configuration
+          name: gitlab
+
+          services:
+            gitlab:
+              container_name: gitlab
+              image: gitlab/gitlab-ce:latest
+              restart: unless-stopped
+              hostname: gitlab.homelab.local
+              environment:
+                GITLAB_OMNIBUS_CONFIG: |
+                  external_url '{{ gitlab_external_url }}'
+                  gitlab_rails['gitlab_shell_ssh_port'] = {{ gitlab_ssh_port }}
+                  gitlab_rails['time_zone'] = '{{ timezone }}'
+
+                  # Disable monitoring to save resources
+                  prometheus_monitoring['enable'] = false
+                  alertmanager['enable'] = false
+                  grafana['enable'] = false
+
+                  # Optimize for homelab
+                  puma['worker_processes'] = 2
+                  sidekiq['max_concurrency'] = 10
+                  postgresql['shared_buffers'] = "256MB"
+
+                  # Disable unused features
+                  gitlab_rails['registry_enabled'] = false
+              ports:
+                - "80:80"
+                - "443:443"
+                - "{{ gitlab_ssh_port }}:22"
+              volumes:
+                - {{ gitlab_dir }}/config:/etc/gitlab
+                - {{ gitlab_dir }}/logs:/var/log/gitlab
+                - {{ gitlab_dir }}/data:/var/opt/gitlab
+              shm_size: '256m'
+              networks:
+                - gitlab-network
+
+          networks:
+            gitlab-network:
+              driver: bridge
+
+    # ============================================
+    # START THE STACK
+    # ============================================
+
+    - name: Start GitLab with Docker Compose
+      community.docker.docker_compose_v2:
+        project_src: "{{ gitlab_dir }}"
+        state: present
+        pull: always
+      register: compose_result
+
+    # ============================================
+    # VERIFICATION
+    # ============================================
+
+    - name: Check GitLab container status
+      command: docker ps --format "table {{'{{'}}.Names{{'}}'}}\t{{'{{'}}.Status{{'}}'}}"
+      register: container_status
+      changed_when: false
+
+    - name: Display container status
+      debug:
+        msg: "{{ container_status.stdout_lines }}"
+
+    - name: Display access information
+      debug:
+        msg: |
+          ============================================
+          GITLAB CE DEPLOYED!
+          ============================================
+
+          IMPORTANT: GitLab takes 3-5 minutes to fully initialize!
+
+          Web Interface:
+            - URL: {{ gitlab_external_url }}
+
+          Initial Setup:
+            1. Wait for GitLab to fully initialize (watch docker logs)
+            2. Get initial root password:
+               sudo docker exec gitlab grep 'Password:' /etc/gitlab/initial_root_password
+            3. Login with username: root
+            4. Change password immediately!
+
+          Git SSH Access:
+            - SSH Port: {{ gitlab_ssh_port }}
+            - Clone URL: git@{{ ansible_host }}:{{ gitlab_ssh_port }}/username/repo.git
+
+          Storage Layout:
+            - Config: {{ gitlab_dir }}/config
+            - Logs:   {{ gitlab_dir }}/logs
+            - Data:   {{ gitlab_dir }}/data
+
+          Useful Commands:
+            # View logs
+            cd {{ gitlab_dir }} && docker compose logs -f
+
+            # Check GitLab status
+            sudo docker exec gitlab gitlab-ctl status
+
+            # Reconfigure GitLab
+            sudo docker exec gitlab gitlab-ctl reconfigure
+
+            # Get initial password
+            sudo docker exec gitlab grep 'Password:' /etc/gitlab/initial_root_password
+
+          Note: Initial password file is deleted after 24 hours!
+
+          ============================================

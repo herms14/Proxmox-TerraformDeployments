@@ -1,0 +1,136 @@
+---
+# Docker Installation Playbook for Ubuntu 24.04
+# This playbook installs Docker CE and Docker Compose on target hosts
+#
+# Usage: ansible-playbook docker/install-docker.yml -l docker_media
+#
+# What this playbook does:
+# 1. Installs prerequisite packages needed for Docker
+# 2. Adds Docker official GPG key for package verification
+# 3. Adds Docker APT repository
+# 4. Installs Docker CE, CLI, containerd, and compose plugin
+# 5. Starts and enables Docker service
+# 6. Adds the ansible user to the docker group
+
+- name: Install Docker on target hosts
+  hosts: docker_hosts
+  become: yes  # Run as root (sudo)
+
+  vars:
+    docker_packages:
+      - docker-ce           # Docker Community Edition daemon
+      - docker-ce-cli       # Docker command-line interface
+      - containerd.io       # Container runtime
+      - docker-buildx-plugin  # Docker buildx for multi-platform builds
+      - docker-compose-plugin # Docker Compose v2 (compose subcommand)
+
+    # User to add to docker group (allows running docker commands without sudo)
+    docker_user: "{{ ansible_user }}"
+
+  tasks:
+    # ============================================
+    # PREREQUISITE PACKAGES
+    # ============================================
+
+    - name: Update apt cache
+      # Why: Ensures we have the latest package lists before installing
+      apt:
+        update_cache: yes
+        cache_valid_time: 3600  # Only update if cache is older than 1 hour
+
+    - name: Install prerequisite packages
+      # Why: These packages are required for adding external repositories
+      # - ca-certificates: SSL/TLS certificate handling
+      # - curl: For downloading Docker GPG key
+      # - gnupg: For GPG key management
+      # - lsb-release: Provides distribution information
+      apt:
+        name:
+          - ca-certificates
+          - curl
+          - gnupg
+          - lsb-release
+          - apt-transport-https
+        state: present
+
+    # ============================================
+    # DOCKER REPOSITORY SETUP
+    # ============================================
+
+    - name: Create directory for Docker GPG key
+      # Why: Official keyring directory for APT keys
+      file:
+        path: /etc/apt/keyrings
+        state: directory
+        mode: "0755"
+
+    - name: Add Docker official GPG key
+      # Why: Verifies that Docker packages are authentic and unmodified
+      # The GPG key signs all packages in the Docker repository
+      ansible.builtin.shell: |
+        curl -fsSL https://download.docker.com/linux/ubuntu/gpg | gpg --dearmor -o /etc/apt/keyrings/docker.gpg
+        chmod a+r /etc/apt/keyrings/docker.gpg
+      args:
+        creates: /etc/apt/keyrings/docker.gpg  # Only run if file doesn't exist
+
+    - name: Add Docker APT repository
+      # Why: Adds Docker official repository for Ubuntu
+      # Uses architecture detection for multi-arch support (amd64, arm64, etc.)
+      ansible.builtin.shell: |
+        echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/ubuntu $(lsb_release -cs) stable" > /etc/apt/sources.list.d/docker.list
+      args:
+        creates: /etc/apt/sources.list.d/docker.list
+
+    # ============================================
+    # DOCKER INSTALLATION
+    # ============================================
+
+    - name: Update apt cache after adding Docker repo
+      apt:
+        update_cache: yes
+
+    - name: Install Docker packages
+      # Why: Installs Docker CE with all components
+      apt:
+        name: "{{ docker_packages }}"
+        state: present
+
+    # ============================================
+    # DOCKER SERVICE CONFIGURATION
+    # ============================================
+
+    - name: Ensure Docker service is started and enabled
+      # Why: Starts Docker now and ensures it starts on boot
+      systemd:
+        name: docker
+        state: started
+        enabled: yes
+
+    - name: Add user to docker group
+      # Why: Allows running docker commands without sudo
+      # Security note: Users in docker group effectively have root access
+      user:
+        name: "{{ docker_user }}"
+        groups: docker
+        append: yes  # Don't remove from other groups
+
+    # ============================================
+    # VERIFICATION
+    # ============================================
+
+    - name: Verify Docker installation
+      # Why: Confirms Docker is working correctly
+      command: docker --version
+      register: docker_version
+      changed_when: false  # This is a read-only check
+
+    - name: Verify Docker Compose installation
+      command: docker compose version
+      register: compose_version
+      changed_when: false
+
+    - name: Display installed versions
+      debug:
+        msg: |
+          Docker version: {{ docker_version.stdout }}
+          Compose version: {{ compose_version.stdout }}

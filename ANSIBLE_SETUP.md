@@ -106,6 +106,33 @@ ansible-playbook k8s/05-k8s-join-nodes.yml
 
 See [Kubernetes_Setup.md](./Kubernetes_Setup.md) for complete Kubernetes deployment documentation.
 
+### Deploy Immich Photo Management
+```bash
+# Deploy Immich on immich-vm01
+cd ~/ansible
+ansible-playbook immich/deploy-immich.yml -l immich-vm01 -v
+```
+
+See [CLAUDE.md - Immich Section](./CLAUDE.md#immich-photo-management-immich-vm01) for complete Immich deployment documentation.
+
+### Deploy Traefik Reverse Proxy
+```bash
+# Deploy Traefik on traefik-vm01
+cd ~/ansible
+ansible-playbook traefik/deploy-traefik.yml -l traefik-vm01 -v
+```
+
+See [SERVICES_GUIDE.md - Traefik Section](./SERVICES_GUIDE.md#traefik-reverse-proxy) for complete Traefik deployment documentation.
+
+### Deploy GitLab CE
+```bash
+# Deploy GitLab on gitlab-vm01
+cd ~/ansible
+ansible-playbook gitlab/deploy-gitlab.yml -l gitlab-vm01 -v
+```
+
+See [SERVICES_GUIDE.md - GitLab Section](./SERVICES_GUIDE.md#gitlab-ce) for complete GitLab deployment documentation.
+
 ## Files
 
 ### General Playbooks
@@ -115,6 +142,14 @@ See [Kubernetes_Setup.md](./Kubernetes_Setup.md) for complete Kubernetes deploym
 - **gather-facts.yml**: Gather system information
 - **update-systems.yml**: Update all systems
 - **ansible.log**: Ansible execution log
+
+### Docker Service Playbooks (~/ansible/)
+- **docker/install-docker.yml**: Install Docker on target hosts
+- **docker/deploy-arr-stack.yml**: Deploy Arr media stack (Radarr, Sonarr, etc.)
+- **authentik/deploy-authentik.yml**: Deploy Authentik SSO/Identity provider
+- **immich/deploy-immich.yml**: Deploy Immich photo management
+- **traefik/deploy-traefik.yml**: Deploy Traefik reverse proxy with pre-configured routes
+- **gitlab/deploy-gitlab.yml**: Deploy GitLab CE DevOps platform
 
 ### Kubernetes Playbooks (~/ansible/k8s/)
 - **k8s-deploy-all.yml**: Master playbook - deploys complete K8s cluster

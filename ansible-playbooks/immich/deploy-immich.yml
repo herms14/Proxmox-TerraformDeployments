@@ -1,0 +1,352 @@
+---
+# Immich Photo Management Deployment Playbook
+# Deploys Immich self-hosted photo/video backup using Docker Compose
+#
+# Usage: ansible-playbook immich/deploy-immich.yml -l immich-vm01 -v
+#
+# Services Deployed:
+# - Immich Server     (2283)  - Main web interface and API
+# - Immich ML         (N/A)   - Machine learning for face/object recognition
+# - PostgreSQL        (5432)  - Database with pgvector extension
+# - Redis             (6379)  - Cache and job queue
+#
+# Prerequisites:
+# - Docker and Docker Compose installed (use docker/install-docker.yml first)
+#
+# Storage:
+# - Database: Local storage (PostgreSQL requires ownership control)
+# - Photos/Videos: NFS storage on ProxmoxData for persistence
+
+- name: Deploy Immich Photo Management
+  hosts: media_services
+  become: yes
+
+  vars:
+    # ============================================
+    # CONFIGURATION VARIABLES
+    # ============================================
+
+    # Timezone
+    timezone: "America/New_York"
+
+    # NFS Configuration
+    nas_ip: "192.168.20.31"
+    nas_data_share: "/volume2/ProxmoxData"
+    data_mount_point: "/mnt/appdata"
+
+    # Immich Configuration
+    immich_local_dir: "/opt/immich"
+    immich_nfs_dir: "{{ data_mount_point }}/immich"
+
+    # Immich version (use release tag)
+    immich_version: "release"
+
+    # Generate secure secrets
+    postgres_password: "{{ lookup('password', '/dev/null length=32 chars=ascii_letters,digits') }}"
+
+    # Database name
+    db_database_name: "immich"
+    db_username: "postgres"
+
+  tasks:
+    # ============================================
+    # NFS PREREQUISITES
+    # ============================================
+
+    - name: Install NFS client packages
+      apt:
+        name:
+          - nfs-common
+          - nfs4-acl-tools
+        state: present
+        update_cache: yes
+
+    # ============================================
+    # DIRECTORY STRUCTURE
+    # ============================================
+
+    - name: Check if mount point exists
+      stat:
+        path: "{{ data_mount_point }}"
+      register: mount_point_stat
+
+    - name: Create NFS mount point
+      file:
+        path: "{{ data_mount_point }}"
+        state: directory
+      when: not mount_point_stat.stat.exists
+
+    - name: Add NFS mount to fstab
+      lineinfile:
+        path: /etc/fstab
+        line: "{{ nas_ip }}:{{ nas_data_share }} {{ data_mount_point }} nfs rw,soft,intr,timeo=300,retrans=3,_netdev,nofail 0 0"
+        state: present
+        create: yes
+
+    - name: Mount NFS share
+      mount:
+        path: "{{ data_mount_point }}"
+        src: "{{ nas_ip }}:{{ nas_data_share }}"
+        fstype: nfs
+        opts: rw,soft,intr,timeo=300,retrans=3,_netdev,nofail
+        state: mounted
+      register: nfs_mount_result
+      ignore_errors: yes
+
+    - name: Verify NFS mount
+      command: df -h {{ data_mount_point }}
+      register: nfs_mount_check
+      changed_when: false
+      when: not (nfs_mount_result.failed | default(false))
+
+    - name: Display NFS mount status
+      debug:
+        msg: "{{ nfs_mount_check.stdout }}"
+      when: not (nfs_mount_result.failed | default(false))
+
+    - name: Create local Immich directories
+      # PostgreSQL and ML models need local storage
+      file:
+        path: "{{ item }}"
+        state: directory
+        mode: "0755"
+      loop:
+        - "{{ immich_local_dir }}"
+        - "{{ immich_local_dir }}/postgres"
+        - "{{ immich_local_dir }}/model-cache"
+
+    - name: Create Immich directories on NFS
+      # Photo uploads on NFS for persistence and large storage
+      file:
+        path: "{{ item }}"
+        state: directory
+        mode: "0777"
+      loop:
+        - "{{ immich_nfs_dir }}"
+        - "{{ immich_nfs_dir }}/upload"
+        - "{{ immich_nfs_dir }}/library"
+        - "{{ immich_nfs_dir }}/profile"
+      ignore_errors: yes
+
+    # ============================================
+    # SECRETS MANAGEMENT
+    # ============================================
+
+    - name: Check if secrets file exists
+      stat:
+        path: "{{ immich_local_dir }}/.secrets"
+      register: secrets_file
+
+    - name: Generate and save secrets (first run only)
+      copy:
+        dest: "{{ immich_local_dir }}/.secrets"
+        content: |
+          DB_PASSWORD={{ postgres_password }}
+        mode: "0600"
+      when: not secrets_file.stat.exists
+
+    - name: Read existing secrets
+      slurp:
+        src: "{{ immich_local_dir }}/.secrets"
+      register: existing_secrets
+      when: secrets_file.stat.exists
+
+    - name: Parse existing secrets
+      set_fact:
+        postgres_password: "{{ (existing_secrets.content | b64decode | regex_search('DB_PASSWORD=(.+)', '\\1'))[0] }}"
+      when: secrets_file.stat.exists
+
+    # ============================================
+    # DOCKER COMPOSE DEPLOYMENT
+    # ============================================
+
+    - name: Deploy Docker Compose file
+      copy:
+        dest: "{{ immich_local_dir }}/docker-compose.yml"
+        mode: "0644"
+        content: |
+          # Immich Photo Management - Docker Compose Configuration
+          # Generated by Ansible on {{ ansible_date_time.iso8601 }}
+          #
+          # Based on official Immich docker-compose
+          # https://immich.app/docs/install/docker-compose
+
+          name: immich
+
+          services:
+            # ============================================
+            # IMMICH SERVER
+            # ============================================
+            immich-server:
+              container_name: immich-server
+              image: ghcr.io/immich-app/immich-server:{{ immich_version }}
+              restart: unless-stopped
+              volumes:
+                # Photo/video uploads on NFS
+                - {{ immich_nfs_dir }}/upload:/usr/src/app/upload
+                - /etc/localtime:/etc/localtime:ro
+              environment:
+                DB_PASSWORD: {{ postgres_password }}
+                DB_USERNAME: {{ db_username }}
+                DB_DATABASE_NAME: {{ db_database_name }}
+                DB_HOSTNAME: immich-postgres
+                REDIS_HOSTNAME: immich-redis
+              ports:
+                - "2283:2283"
+              depends_on:
+                - immich-redis
+                - immich-postgres
+              networks:
+                - immich-network
+              healthcheck:
+                test: ["CMD", "wget", "-q", "--spider", "http://localhost:2283/api/server/ping"]
+                interval: 30s
+                timeout: 10s
+                retries: 5
+                start_period: 30s
+
+            # ============================================
+            # IMMICH MACHINE LEARNING
+            # ============================================
+            immich-machine-learning:
+              container_name: immich-ml
+              image: ghcr.io/immich-app/immich-machine-learning:{{ immich_version }}
+              restart: unless-stopped
+              volumes:
+                # ML model cache on local storage
+                - {{ immich_local_dir }}/model-cache:/cache
+              networks:
+                - immich-network
+
+            # ============================================
+            # REDIS CACHE
+            # ============================================
+            immich-redis:
+              container_name: immich-redis
+              image: docker.io/redis:6.2-alpine
+              restart: unless-stopped
+              healthcheck:
+                test: ["CMD", "redis-cli", "ping"]
+                interval: 10s
+                timeout: 5s
+                retries: 5
+              networks:
+                - immich-network
+
+            # ============================================
+            # POSTGRESQL DATABASE
+            # ============================================
+            immich-postgres:
+              container_name: immich-postgres
+              image: docker.io/tensorchord/pgvecto-rs:pg14-v0.2.0
+              restart: unless-stopped
+              environment:
+                POSTGRES_PASSWORD: {{ postgres_password }}
+                POSTGRES_USER: {{ db_username }}
+                POSTGRES_DB: {{ db_database_name }}
+                POSTGRES_INITDB_ARGS: '--data-checksums'
+              volumes:
+                # Database on local storage
+                - {{ immich_local_dir }}/postgres:/var/lib/postgresql/data
+              healthcheck:
+                test: ["CMD-SHELL", "pg_isready -d {{ db_database_name }} -U {{ db_username }}"]
+                interval: 10s
+                timeout: 5s
+                retries: 5
+              networks:
+                - immich-network
+
+          networks:
+            immich-network:
+              driver: bridge
+
+    # ============================================
+    # START THE STACK
+    # ============================================
+
+    - name: Start Immich stack with Docker Compose
+      community.docker.docker_compose_v2:
+        project_src: "{{ immich_local_dir }}"
+        state: present
+        pull: always
+      register: compose_result
+
+    # ============================================
+    # VERIFICATION
+    # ============================================
+
+    - name: Wait for services to start
+      pause:
+        seconds: 45
+
+    - name: Check running containers
+      command: docker ps --format "table {{'{{'}}.Names{{'}}'}}\t{{'{{'}}.Status{{'}}'}}\t{{'{{'}}.Ports{{'}}'}}"
+      register: container_status
+      changed_when: false
+
+    - name: Display running containers
+      debug:
+        msg: "{{ container_status.stdout_lines }}"
+
+    - name: Wait for Immich to be ready
+      uri:
+        url: "http://localhost:2283/api/server/ping"
+        method: GET
+        status_code: 200
+      register: health_check
+      retries: 12
+      delay: 10
+      until: health_check.status == 200
+      ignore_errors: yes
+
+    # ============================================
+    # POST-DEPLOYMENT INFO
+    # ============================================
+
+    - name: Display access information
+      debug:
+        msg: |
+          ============================================
+          IMMICH DEPLOYED SUCCESSFULLY!
+          ============================================
+
+          Access your Immich instance:
+
+          Web Interface:
+            - URL: http://{{ ansible_host }}:2283
+
+          Initial Setup:
+            1. Navigate to http://{{ ansible_host }}:2283
+            2. Create your admin account
+            3. Download mobile app from App Store / Play Store
+            4. Configure backup settings in the app
+
+          Storage Layout:
+            Local ({{ immich_local_dir }}):
+              - Docker Compose: {{ immich_local_dir }}/docker-compose.yml
+              - PostgreSQL: {{ immich_local_dir }}/postgres
+              - ML Models: {{ immich_local_dir }}/model-cache
+              - Secrets: {{ immich_local_dir }}/.secrets
+
+            NFS ({{ immich_nfs_dir }}):
+              - Photo Uploads: {{ immich_nfs_dir }}/upload
+              - Library: {{ immich_nfs_dir }}/library
+              - Profiles: {{ immich_nfs_dir }}/profile
+
+          Mobile App Setup:
+            1. Download Immich app
+            2. Server URL: http://{{ ansible_host }}:2283/api
+            3. Login with your credentials
+            4. Enable backup in app settings
+
+          Useful Commands:
+            # View logs
+            cd {{ immich_local_dir }} && docker compose logs -f
+
+            # Restart services
+            cd {{ immich_local_dir }} && docker compose restart
+
+            # Update Immich
+            cd {{ immich_local_dir }} && docker compose pull && docker compose up -d
+
+          ============================================
