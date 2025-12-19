@@ -347,16 +347,46 @@ services:
 
 ---
 
-## API Keys
+## API Keys & Inter-Application Connections
 
-### Obtaining API Keys
+### Current API Keys (December 19, 2025)
 
-Each *arr application has an API key for integration:
+| Service | API Key | Location |
+|---------|---------|----------|
+| **Radarr** | `21f807cf286941158e11ba6477853821` | Settings → General |
+| **Sonarr** | `50c598d01b294f929e5ecf36ae42ad2e` | Settings → General |
+| **Lidarr** | `13fe89b5dbdb45d48418e0879781ff3b` | Settings → General |
+| **Prowlarr** | `e5f64c69e6c04bd8ba5eb8952ed25dbc` | Settings → General |
+| **Bazarr** | `6c0037b075a3ee20f9818c14a3c35e7d` | Config file |
 
-**Radarr**: Settings → General → API Key
-**Sonarr**: Settings → General → API Key
-**Lidarr**: Settings → General → API Key
-**Prowlarr**: Settings → General → API Key
+### Configured Connections
+
+| From | To | Status | Notes |
+|------|-----|--------|-------|
+| Prowlarr | Radarr | ✅ Configured | Full Sync (Movies categories) |
+| Prowlarr | Sonarr | ✅ Configured | Full Sync (TV categories) |
+| Prowlarr | Lidarr | ✅ Configured | Full Sync (Audio categories) |
+| Bazarr | Radarr | ✅ Configured | Via container name `radarr:7878` |
+| Bazarr | Sonarr | ✅ Configured | Via container name `sonarr:8989` |
+| Jellyseerr | Jellyfin | ⚠️ Pending | Needs initial setup wizard |
+| Jellyseerr | Radarr/Sonarr | ⚠️ Pending | Needs initial setup wizard |
+
+### Services Needing Manual Setup
+
+**Jellyfin** (https://jellyfin.hrmsmrflrii.xyz):
+- Complete startup wizard
+- Add media libraries (`/data/movies`, `/data/tvshows`)
+- Generate API key for Jellyseerr
+
+**Bazarr** (https://bazarr.hrmsmrflrii.xyz):
+- Create language profile (Settings → Languages)
+- Assign profile to content
+
+**Jellyseerr** (https://jellyseerr.hrmsmrflrii.xyz):
+- Complete setup wizard
+- Connect to Jellyfin: `jellyfin:8096`
+- Add Radarr: `radarr:7878` + API key
+- Add Sonarr: `sonarr:8989` + API key
 
 ### Integration Matrix
 

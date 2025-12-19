@@ -493,15 +493,38 @@ GITLAB_OMNIBUS_CONFIG: |
 
 The Arr Stack is documented in [ARR_STACK_DEPLOYMENT.md](./ARR_STACK_DEPLOYMENT.md).
 
-Quick reference:
+### Quick Reference
 
-| Service | Port | Purpose |
-|---------|------|---------|
-| Jellyfin | 8096 | Media server |
-| Radarr | 7878 | Movie management |
-| Sonarr | 8989 | TV series management |
-| Lidarr | 8686 | Music management |
-| Prowlarr | 9696 | Indexer management |
+| Service | Port | URL | Purpose |
+|---------|------|-----|---------|
+| Jellyfin | 8096 | https://jellyfin.hrmsmrflrii.xyz | Media server |
+| Radarr | 7878 | https://radarr.hrmsmrflrii.xyz | Movie management |
+| Sonarr | 8989 | https://sonarr.hrmsmrflrii.xyz | TV series management |
+| Lidarr | 8686 | https://lidarr.hrmsmrflrii.xyz | Music management |
+| Prowlarr | 9696 | https://prowlarr.hrmsmrflrii.xyz | Indexer management |
+| Bazarr | 6767 | https://bazarr.hrmsmrflrii.xyz | Subtitle management |
+| Jellyseerr | 5056 | https://jellyseerr.hrmsmrflrii.xyz | Media requests |
+
+### Configured Connections (December 19, 2025)
+
+| Connection | Status |
+|------------|--------|
+| Prowlarr → Radarr | ✅ Full Sync |
+| Prowlarr → Sonarr | ✅ Full Sync |
+| Prowlarr → Lidarr | ✅ Full Sync |
+| Bazarr → Radarr | ✅ Connected |
+| Bazarr → Sonarr | ✅ Connected |
+| Jellyseerr → Jellyfin | ⚠️ Needs Setup |
+
+### API Keys
+
+| Service | API Key |
+|---------|---------|
+| Radarr | `21f807cf286941158e11ba6477853821` |
+| Sonarr | `50c598d01b294f929e5ecf36ae42ad2e` |
+| Lidarr | `13fe89b5dbdb45d48418e0879781ff3b` |
+| Prowlarr | `e5f64c69e6c04bd8ba5eb8952ed25dbc` |
+| Bazarr | `6c0037b075a3ee20f9818c14a3c35e7d` |
 
 ---
 

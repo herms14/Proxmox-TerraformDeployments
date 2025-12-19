@@ -769,6 +769,100 @@ arr_base_dir: /opt/arr-stack
 
 ### Connecting Services
 
+#### Configured Connections (API-Based - December 19, 2025)
+
+The following connections have been configured via API:
+
+| From | To | Connection Type | Status |
+|------|-----|-----------------|--------|
+| Prowlarr | Radarr | Full Sync (Movies) | ✅ Configured |
+| Prowlarr | Sonarr | Full Sync (TV) | ✅ Configured |
+| Prowlarr | Lidarr | Full Sync (Audio) | ✅ Configured |
+| Bazarr | Radarr | API Connection | ✅ Configured |
+| Bazarr | Sonarr | API Connection | ✅ Configured |
+| Jellyseerr | Jellyfin | - | ⚠️ Needs Setup Wizard |
+| Jellyseerr | Radarr/Sonarr | - | ⚠️ Needs Setup Wizard |
+
+#### API Keys Reference
+
+| Service | API Key | Config Location |
+|---------|---------|-----------------|
+| Radarr | `21f807cf286941158e11ba6477853821` | `/opt/arr-stack/radarr/config.xml` |
+| Sonarr | `50c598d01b294f929e5ecf36ae42ad2e` | `/opt/arr-stack/sonarr/config.xml` |
+| Lidarr | `13fe89b5dbdb45d48418e0879781ff3b` | `/opt/arr-stack/lidarr/config.xml` |
+| Prowlarr | `e5f64c69e6c04bd8ba5eb8952ed25dbc` | `/opt/arr-stack/prowlarr/config.xml` |
+| Bazarr | `6c0037b075a3ee20f9818c14a3c35e7d` | `/opt/arr-stack/bazarr/config/config.yaml` |
+
+#### Prowlarr Application Configuration
+
+Prowlarr is configured to sync indexers automatically to all *arr apps:
+
+```bash
+# Verify Prowlarr applications
+ssh hermes-admin@192.168.40.11 "curl -s http://localhost:9696/api/v1/applications \
+  -H 'X-Api-Key: e5f64c69e6c04bd8ba5eb8952ed25dbc' | python3 -c \"
+import json,sys
+apps=json.load(sys.stdin)
+for a in apps:
+    print(f'{a[\\\"name\\\"]}: {a[\\\"implementation\\\"]} - Enabled: {a[\\\"enable\\\"]}')
+\""
+```
+
+**Expected Output:**
+```
+Radarr: Radarr - Enabled: True
+Sonarr: Sonarr - Enabled: True
+Lidarr: Lidarr - Enabled: True
+```
+
+#### Bazarr Configuration
+
+Bazarr is configured to connect to Radarr and Sonarr using Docker container names:
+
+```yaml
+# /opt/arr-stack/bazarr/config/config.yaml (relevant sections)
+general:
+  use_radarr: true
+  use_sonarr: true
+
+radarr:
+  ip: radarr              # Docker container name
+  port: 7878
+  apikey: 21f807cf286941158e11ba6477853821
+
+sonarr:
+  ip: sonarr              # Docker container name
+  port: 8989
+  apikey: 50c598d01b294f929e5ecf36ae42ad2e
+```
+
+**Note:** Bazarr still needs a language profile configured via the web UI.
+
+#### Services Requiring Manual Setup
+
+**Jellyfin** (https://jellyfin.hrmsmrflrii.xyz):
+1. Complete startup wizard (create admin account)
+2. Add media libraries:
+   - Movies: `/data/movies`
+   - TV Shows: `/data/tvshows`
+3. Generate API key: Dashboard → API Keys → Add
+
+**Bazarr** (https://bazarr.hrmsmrflrii.xyz):
+1. Create language profile: Settings → Languages → Add Profile
+2. Select desired subtitle languages (e.g., English)
+3. Assign profile to movies/series
+
+**Jellyseerr** (https://jellyseerr.hrmsmrflrii.xyz):
+1. Complete initial setup wizard
+2. Connect to Jellyfin:
+   - Hostname: `jellyfin`
+   - Port: `8096`
+   - Paste Jellyfin API key
+3. Add Radarr: `radarr:7878`, API key from table above
+4. Add Sonarr: `sonarr:8989`, API key from table above
+
+#### Manual Connection Setup (Reference)
+
 **Prowlarr to Radarr/Sonarr/Lidarr**:
 1. In Prowlarr: Settings > Apps > Add
 2. Select Radarr/Sonarr/Lidarr
@@ -793,7 +887,10 @@ All containers are on the `arr-network` Docker bridge network. They can reach ea
 http://jellyfin:8096      # From any container to Jellyfin
 http://radarr:7878        # From any container to Radarr
 http://sonarr:8989        # From any container to Sonarr
+http://lidarr:8686        # From any container to Lidarr
 http://prowlarr:9696      # From any container to Prowlarr
+http://bazarr:6767        # From any container to Bazarr
+http://jellyseerr:5055    # From any container to Jellyseerr (internal port)
 ```
 
 ---
@@ -1059,5 +1156,6 @@ ssh hermes-admin@192.168.40.11 "sudo mount /mnt/media"
 ---
 
 *Document created: December 18, 2025*
-*Last updated: December 18, 2025*
+*Last updated: December 19, 2025*
 *Deployed by: Ansible automation from ansible-controller01*
+*Inter-app connections configured via API: December 19, 2025*
