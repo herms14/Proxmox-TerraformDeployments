@@ -1,0 +1,527 @@
+---
+# Traefik Reverse Proxy with SSL Deployment Playbook
+# Deploys Traefik v3 with Let's Encrypt certificates via Cloudflare DNS challenge
+#
+# Usage: ansible-playbook traefik/deploy-traefik-ssl.yml -l traefik-vm01 -v
+#
+# Prerequisites:
+# - Docker and Docker Compose installed (use docker/install-docker.yml first)
+# - Cloudflare API Token with Zone:DNS:Edit permissions
+# - OPNsense DNS configured to resolve *.hrmsmrflrii.xyz to 192.168.40.20
+#
+# Features:
+# - Let's Encrypt wildcard certificate for *.hrmsmrflrii.xyz
+# - Cloudflare DNS-01 challenge (no ports need to be open to internet)
+# - 14 services configured with HTTPS
+# - Automatic certificate renewal
+
+- name: Deploy Traefik with SSL (Let's Encrypt + Cloudflare)
+  hosts: reverse_proxy
+  become: yes
+
+  vars:
+    # ============================================
+    # CONFIGURATION VARIABLES
+    # ============================================
+
+    # Domain configuration
+    domain: "hrmsmrflrii.xyz"
+
+    # Let's Encrypt email for certificate notifications
+    acme_email: "herms14@gmail.com"
+
+    # Cloudflare API Token (Zone:DNS:Edit permission)
+    cloudflare_api_token: "VEfPrEHTI0mVZF-HrnHgtygK9OgKqR93EvXV7tWZ"
+
+    # Timezone
+    timezone: "America/New_York"
+
+    # Traefik directories
+    traefik_dir: "/opt/traefik"
+
+    # Traefik version
+    traefik_version: "v3.2"
+
+    # Backend service IPs
+    authentik_ip: "192.168.40.21"
+    immich_ip: "192.168.40.22"
+    gitlab_ip: "192.168.40.23"
+    media_server_ip: "192.168.40.11"
+
+  tasks:
+    # ============================================
+    # DIRECTORY STRUCTURE
+    # ============================================
+
+    - name: Create Traefik directories
+      file:
+        path: "{{ item }}"
+        state: directory
+        mode: "0755"
+      loop:
+        - "{{ traefik_dir }}"
+        - "{{ traefik_dir }}/config"
+        - "{{ traefik_dir }}/config/dynamic"
+        - "{{ traefik_dir }}/certs"
+        - "{{ traefik_dir }}/logs"
+
+    # ============================================
+    # ACME CERTIFICATE STORAGE
+    # ============================================
+
+    - name: Create acme.json for certificate storage
+      file:
+        path: "{{ traefik_dir }}/certs/acme.json"
+        state: touch
+        mode: "0600"
+        modification_time: preserve
+        access_time: preserve
+
+    # ============================================
+    # STATIC CONFIGURATION (with ACME)
+    # ============================================
+
+    - name: Deploy Traefik static configuration with SSL
+      copy:
+        dest: "{{ traefik_dir }}/config/traefik.yml"
+        mode: "0644"
+        content: |
+          # Traefik Static Configuration with Let's Encrypt SSL
+          # Domain: {{ domain }}
+
+          global:
+            checkNewVersion: false
+            sendAnonymousUsage: false
+
+          # API and Dashboard
+          api:
+            dashboard: true
+            insecure: false  # Dashboard behind HTTPS
+
+          # Logging
+          log:
+            level: INFO
+            filePath: /logs/traefik.log
+            format: json
+
+          accessLog:
+            filePath: /logs/access.log
+            format: json
+            bufferingSize: 100
+
+          # Entrypoints
+          entryPoints:
+            web:
+              address: ":80"
+              http:
+                redirections:
+                  entryPoint:
+                    to: websecure
+                    scheme: https
+                    permanent: true
+            websecure:
+              address: ":443"
+              http:
+                tls:
+                  certResolver: letsencrypt
+                  domains:
+                    - main: "{{ domain }}"
+                      sans:
+                        - "*.{{ domain }}"
+
+          # Certificate Resolvers (Let's Encrypt)
+          certificatesResolvers:
+            letsencrypt:
+              acme:
+                email: "{{ acme_email }}"
+                storage: /certs/acme.json
+                # Use staging for testing (uncomment to avoid rate limits)
+                # caServer: https://acme-staging-v02.api.letsencrypt.org/directory
+                dnsChallenge:
+                  provider: cloudflare
+                  delayBeforeCheck: 10
+                  resolvers:
+                    - "1.1.1.1:53"
+                    - "8.8.8.8:53"
+
+          # Providers
+          providers:
+            docker:
+              endpoint: "unix:///var/run/docker.sock"
+              exposedByDefault: false
+              network: traefik-network
+              watch: true
+
+            file:
+              directory: /etc/traefik/dynamic
+              watch: true
+
+    # ============================================
+    # DYNAMIC CONFIGURATION (All Services)
+    # ============================================
+
+    - name: Deploy Traefik dynamic configuration with all services
+      copy:
+        dest: "{{ traefik_dir }}/config/dynamic/services.yml"
+        mode: "0644"
+        content: |
+          # Traefik Dynamic Configuration - {{ domain }}
+          # 14 Services with SSL via Let's Encrypt
+
+          http:
+            # ==========================================
+            # ROUTERS
+            # ==========================================
+            routers:
+              # --- Core Services ---
+
+              traefik-dashboard:
+                rule: "Host(`traefik.{{ domain }}`)"
+                service: api@internal
+                entryPoints:
+                  - websecure
+                tls:
+                  certResolver: letsencrypt
+
+              authentik:
+                rule: "Host(`auth.{{ domain }}`)"
+                service: authentik
+                entryPoints:
+                  - websecure
+                tls:
+                  certResolver: letsencrypt
+
+              immich:
+                rule: "Host(`photos.{{ domain }}`)"
+                service: immich
+                entryPoints:
+                  - websecure
+                tls:
+                  certResolver: letsencrypt
+
+              gitlab:
+                rule: "Host(`gitlab.{{ domain }}`)"
+                service: gitlab
+                entryPoints:
+                  - websecure
+                tls:
+                  certResolver: letsencrypt
+
+              # --- Media Services (docker-vm-media01) ---
+
+              jellyfin:
+                rule: "Host(`jellyfin.{{ domain }}`)"
+                service: jellyfin
+                entryPoints:
+                  - websecure
+                tls:
+                  certResolver: letsencrypt
+
+              radarr:
+                rule: "Host(`radarr.{{ domain }}`)"
+                service: radarr
+                entryPoints:
+                  - websecure
+                tls:
+                  certResolver: letsencrypt
+
+              sonarr:
+                rule: "Host(`sonarr.{{ domain }}`)"
+                service: sonarr
+                entryPoints:
+                  - websecure
+                tls:
+                  certResolver: letsencrypt
+
+              lidarr:
+                rule: "Host(`lidarr.{{ domain }}`)"
+                service: lidarr
+                entryPoints:
+                  - websecure
+                tls:
+                  certResolver: letsencrypt
+
+              prowlarr:
+                rule: "Host(`prowlarr.{{ domain }}`)"
+                service: prowlarr
+                entryPoints:
+                  - websecure
+                tls:
+                  certResolver: letsencrypt
+
+              bazarr:
+                rule: "Host(`bazarr.{{ domain }}`)"
+                service: bazarr
+                entryPoints:
+                  - websecure
+                tls:
+                  certResolver: letsencrypt
+
+              overseerr:
+                rule: "Host(`overseerr.{{ domain }}`)"
+                service: overseerr
+                entryPoints:
+                  - websecure
+                tls:
+                  certResolver: letsencrypt
+
+              jellyseerr:
+                rule: "Host(`jellyseerr.{{ domain }}`)"
+                service: jellyseerr
+                entryPoints:
+                  - websecure
+                tls:
+                  certResolver: letsencrypt
+
+              tdarr:
+                rule: "Host(`tdarr.{{ domain }}`)"
+                service: tdarr
+                entryPoints:
+                  - websecure
+                tls:
+                  certResolver: letsencrypt
+
+              autobrr:
+                rule: "Host(`autobrr.{{ domain }}`)"
+                service: autobrr
+                entryPoints:
+                  - websecure
+                tls:
+                  certResolver: letsencrypt
+
+            # ==========================================
+            # SERVICES (Backend Servers)
+            # ==========================================
+            services:
+              # --- Core Services ---
+
+              authentik:
+                loadBalancer:
+                  servers:
+                    - url: "http://{{ authentik_ip }}:9000"
+
+              immich:
+                loadBalancer:
+                  servers:
+                    - url: "http://{{ immich_ip }}:2283"
+
+              gitlab:
+                loadBalancer:
+                  servers:
+                    - url: "http://{{ gitlab_ip }}:80"
+
+              # --- Media Services ---
+
+              jellyfin:
+                loadBalancer:
+                  servers:
+                    - url: "http://{{ media_server_ip }}:8096"
+
+              radarr:
+                loadBalancer:
+                  servers:
+                    - url: "http://{{ media_server_ip }}:7878"
+
+              sonarr:
+                loadBalancer:
+                  servers:
+                    - url: "http://{{ media_server_ip }}:8989"
+
+              lidarr:
+                loadBalancer:
+                  servers:
+                    - url: "http://{{ media_server_ip }}:8686"
+
+              prowlarr:
+                loadBalancer:
+                  servers:
+                    - url: "http://{{ media_server_ip }}:9696"
+
+              bazarr:
+                loadBalancer:
+                  servers:
+                    - url: "http://{{ media_server_ip }}:6767"
+
+              overseerr:
+                loadBalancer:
+                  servers:
+                    - url: "http://{{ media_server_ip }}:5055"
+
+              jellyseerr:
+                loadBalancer:
+                  servers:
+                    - url: "http://{{ media_server_ip }}:5056"
+
+              tdarr:
+                loadBalancer:
+                  servers:
+                    - url: "http://{{ media_server_ip }}:8265"
+
+              autobrr:
+                loadBalancer:
+                  servers:
+                    - url: "http://{{ media_server_ip }}:7474"
+
+            # ==========================================
+            # MIDDLEWARES
+            # ==========================================
+            middlewares:
+              secure-headers:
+                headers:
+                  frameDeny: true
+                  browserXssFilter: true
+                  contentTypeNosniff: true
+                  stsSeconds: 31536000
+                  stsIncludeSubdomains: true
+                  stsPreload: true
+
+              # Rate limiting middleware (optional, for protection)
+              rate-limit:
+                rateLimit:
+                  average: 100
+                  burst: 50
+
+          # ==========================================
+          # TLS OPTIONS
+          # ==========================================
+          tls:
+            options:
+              default:
+                minVersion: VersionTLS12
+                cipherSuites:
+                  - TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256
+                  - TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384
+                  - TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256
+
+    # ============================================
+    # DOCKER COMPOSE
+    # ============================================
+
+    - name: Deploy Docker Compose file with Cloudflare credentials
+      copy:
+        dest: "{{ traefik_dir }}/docker-compose.yml"
+        mode: "0644"
+        content: |
+          # Traefik with Let's Encrypt SSL via Cloudflare DNS
+          name: traefik
+
+          services:
+            traefik:
+              container_name: traefik
+              image: traefik:{{ traefik_version }}
+              restart: unless-stopped
+              security_opt:
+                - no-new-privileges:true
+              ports:
+                - "80:80"
+                - "443:443"
+                # Dashboard now accessible via HTTPS at traefik.{{ domain }}
+              volumes:
+                - /var/run/docker.sock:/var/run/docker.sock:ro
+                - {{ traefik_dir }}/config/traefik.yml:/etc/traefik/traefik.yml:ro
+                - {{ traefik_dir }}/config/dynamic:/etc/traefik/dynamic:ro
+                - {{ traefik_dir }}/certs:/certs
+                - {{ traefik_dir }}/logs:/logs
+              environment:
+                - TZ={{ timezone }}
+                - CF_DNS_API_TOKEN={{ cloudflare_api_token }}
+              networks:
+                - traefik-network
+
+          networks:
+            traefik-network:
+              name: traefik-network
+              driver: bridge
+
+    # ============================================
+    # DEPLOY THE STACK
+    # ============================================
+
+    - name: Stop existing Traefik container
+      community.docker.docker_compose_v2:
+        project_src: "{{ traefik_dir }}"
+        state: absent
+      ignore_errors: yes
+
+    - name: Start Traefik with SSL configuration
+      community.docker.docker_compose_v2:
+        project_src: "{{ traefik_dir }}"
+        state: present
+        pull: always
+      register: compose_result
+
+    # ============================================
+    # VERIFICATION
+    # ============================================
+
+    - name: Wait for Traefik to start and request certificates
+      pause:
+        seconds: 30
+        prompt: "Waiting for Traefik to start and request SSL certificates..."
+
+    - name: Check Traefik container status
+      command: docker ps --format "table {{'{{'}}.Names{{'}}'}}\\t{{'{{'}}.Status{{'}}'}}\\t{{'{{'}}.Ports{{'}}'}}"
+      register: container_status
+      changed_when: false
+
+    - name: Display container status
+      debug:
+        msg: "{{ container_status.stdout_lines }}"
+
+    - name: Check Traefik logs for certificate status
+      command: docker logs traefik --tail 50
+      register: traefik_logs
+      changed_when: false
+
+    - name: Display certificate request status
+      debug:
+        msg: |
+          ============================================
+          TRAEFIK SSL DEPLOYMENT COMPLETE!
+          ============================================
+
+          Domain: {{ domain }}
+          Certificate: Wildcard (*.{{ domain }})
+
+          IMPORTANT: Configure OPNsense DNS!
+          ------------------------------------
+          1. Go to: Services → Unbound DNS → Overrides
+          2. Add Host Override:
+             - Host: *
+             - Domain: {{ domain }}
+             - Type: A
+             - IP: {{ ansible_host }}
+          3. Apply changes
+
+          Service URLs (after DNS configured):
+          ------------------------------------
+          Core Services:
+            - https://traefik.{{ domain }}     (Dashboard)
+            - https://auth.{{ domain }}        (Authentik)
+            - https://photos.{{ domain }}      (Immich)
+            - https://gitlab.{{ domain }}      (GitLab)
+
+          Media Services:
+            - https://jellyfin.{{ domain }}    (Media Server)
+            - https://radarr.{{ domain }}      (Movies)
+            - https://sonarr.{{ domain }}      (TV Shows)
+            - https://lidarr.{{ domain }}      (Music)
+            - https://prowlarr.{{ domain }}    (Indexers)
+            - https://bazarr.{{ domain }}      (Subtitles)
+            - https://overseerr.{{ domain }}   (Requests - Plex)
+            - https://jellyseerr.{{ domain }}  (Requests - Jellyfin)
+            - https://tdarr.{{ domain }}       (Transcoding)
+            - https://autobrr.{{ domain }}     (Automation)
+
+          Verification:
+          ------------------------------------
+          # Check certificate status
+          docker logs traefik | grep -i "certificate"
+
+          # View acme.json (contains certificates)
+          cat {{ traefik_dir }}/certs/acme.json | jq '.letsencrypt'
+
+          # Test HTTPS (after DNS)
+          curl -v https://traefik.{{ domain }}
+
+          ============================================

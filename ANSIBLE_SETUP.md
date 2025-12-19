@@ -149,7 +149,10 @@ See [SERVICES_GUIDE.md - GitLab Section](./SERVICES_GUIDE.md#gitlab-ce) for comp
 - **authentik/deploy-authentik.yml**: Deploy Authentik SSO/Identity provider
 - **immich/deploy-immich.yml**: Deploy Immich photo management
 - **traefik/deploy-traefik.yml**: Deploy Traefik reverse proxy with pre-configured routes
+- **traefik/deploy-traefik-ssl.yml**: Deploy Traefik with Let's Encrypt SSL via Cloudflare
 - **gitlab/deploy-gitlab.yml**: Deploy GitLab CE DevOps platform
+- **paperless/deploy-paperless.yml**: Deploy Paperless-ngx document management
+- **glance/deploy-glance.yml**: Deploy Glance dashboard
 
 ### Kubernetes Playbooks (~/ansible/k8s/)
 - **k8s-deploy-all.yml**: Master playbook - deploys complete K8s cluster

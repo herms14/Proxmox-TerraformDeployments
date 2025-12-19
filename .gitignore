@@ -36,3 +36,6 @@ terraform.tfvars
 
 # But include env/*.tfvars (shared configurations)
 !env/*.tfvars
+
+# Credentials file (contains sensitive API tokens and keys)
+CREDENTIALS.md

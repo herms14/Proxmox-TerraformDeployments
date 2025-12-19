@@ -15,7 +15,9 @@ This repository contains Terraform configurations for managing a 3-node Proxmox 
 - **Cloud-init provisioning**: ✅ Fully operational automated VM configuration (UEFI boot support added Dec 2025)
 - **UEFI boot support**: Native UEFI template compatibility for modern cloud-init images
 - **Ansible automation**: Centralized configuration management with production-grade playbooks
-- **Docker service deployment**: ✅ Arr media stack, Authentik SSO, Immich photo management (Dec 2025)
+- **Docker service deployment**: ✅ Arr media stack, Authentik SSO, Immich, Paperless-ngx, Glance (Dec 2025)
+- **SSL/HTTPS**: ✅ Let's Encrypt wildcard certificates via Cloudflare DNS challenge
+- **Custom Domain**: ✅ Internal DNS with hrmsmrflrii.xyz domain for all services
 - **NAS automation**: Synology NFS permissions management via Ansible
 - **LXC container support**: Lightweight containers with persistent storage via NFS bind mounts
 
@@ -28,6 +30,9 @@ This repository contains Terraform configurations for managing a 3-node Proxmox 
 - ✅ **Arr Media Stack**: 10 containerized services on docker-vm-media01 (Jellyfin, Radarr, Sonarr, etc.)
 - ✅ **Authentik SSO**: Identity provider on authentik-vm01 (SSO, OAuth, SAML)
 - ✅ **Immich Photos**: Self-hosted photo management on immich-vm01 (Dec 2025)
+- ✅ **Paperless-ngx**: Document management on docker-vm-utilities01 (Dec 2025)
+- ✅ **Glance Dashboard**: Homelab dashboard on docker-vm-utilities01 (Dec 2025)
+- ✅ **SSL Everywhere**: 21 services with HTTPS via Traefik + Let's Encrypt
 
 **Resources:**
 - **Total VMs**: 17 across 2 VLANs
@@ -85,8 +90,10 @@ tf-proxmox/
 │   ├── docker/            # Docker installation & arr stack
 │   ├── authentik/         # Authentik SSO deployment
 │   ├── immich/            # Immich photo management
-│   ├── traefik/           # Traefik reverse proxy
+│   ├── traefik/           # Traefik reverse proxy (with SSL)
 │   ├── gitlab/            # GitLab CE DevOps platform
+│   ├── paperless/         # Paperless-ngx document management
+│   ├── glance/            # Glance dashboard
 │   ├── synology/          # NAS automation
 │   └── k8s/               # Kubernetes deployment
 ├── CLAUDE.md              # Comprehensive infrastructure documentation
@@ -483,15 +490,19 @@ Central reverse proxy deployed on traefik-vm01 (192.168.40.20):
 | Traefik HTTPS | 443 | HTTPS reverse proxy |
 | Traefik Dashboard | 8080 | Admin dashboard |
 
-**Features**: Dynamic service discovery, automatic HTTPS, dashboard, file-based routing
+**Features**: Dynamic service discovery, Let's Encrypt SSL via Cloudflare DNS, dashboard
+
+**Domain**: `hrmsmrflrii.xyz` (21 services with HTTPS)
 
 **Pre-configured Routes**:
-- `auth.homelab.local` → Authentik (192.168.40.21:9000)
-- `photos.homelab.local` → Immich (192.168.40.22:2283)
-- `gitlab.homelab.local` → GitLab (192.168.40.23:80)
-- `media.homelab.local` → Jellyfin (192.168.40.11:8096)
+- `https://proxmox.hrmsmrflrii.xyz` → Proxmox Cluster
+- `https://auth.hrmsmrflrii.xyz` → Authentik SSO
+- `https://photos.hrmsmrflrii.xyz` → Immich
+- `https://gitlab.hrmsmrflrii.xyz` → GitLab
+- `https://jellyfin.hrmsmrflrii.xyz` → Jellyfin
+- Plus 15 more services (see [CLAUDE.md](./CLAUDE.md#service-urls-https))
 
-**Dashboard**: http://192.168.40.20:8080
+**Dashboard**: https://traefik.hrmsmrflrii.xyz
 
 ### GitLab CE (gitlab-vm01)
 
@@ -512,15 +523,45 @@ Self-hosted DevOps platform deployed on gitlab-vm01 (192.168.40.23):
 
 **Note**: Initial password file is deleted after 24 hours!
 
+### Paperless-ngx (docker-vm-utilities01)
+
+Document management system deployed on docker-vm-utilities01 (192.168.40.10):
+
+| Service | Port | Purpose |
+|---------|------|---------|
+| Paperless-ngx | 8000 | Web UI & API |
+
+**Features**: OCR document scanning, tagging, full-text search, consumption folder
+
+**Access**: https://paperless.hrmsmrflrii.xyz
+
+### Glance Dashboard (docker-vm-utilities01)
+
+Customizable homelab dashboard deployed on docker-vm-utilities01 (192.168.40.10):
+
+| Service | Port | Purpose |
+|---------|------|---------|
+| Glance | 8080 | Dashboard |
+
+**Features**: RSS feeds, weather, bookmarks, calendar, multi-timezone clocks
+
+**Access**: https://glance.hrmsmrflrii.xyz
+
 ## Documentation
 
 - **[CLAUDE.md](./CLAUDE.md)**: Comprehensive infrastructure documentation including:
   - Storage architecture deep-dive
   - Network configuration and requirements
+  - Domain & SSL configuration (21 HTTPS services)
   - Node setup requirements (VLAN-aware bridges)
   - Deployed infrastructure inventory (17 VMs across 2 VLANs)
-  - Docker services (Arr stack, Authentik, Immich, Traefik, GitLab)
+  - Docker services (Arr stack, Authentik, Immich, Traefik, GitLab, Paperless, Glance)
   - Terraform usage guide
+
+- **[CHANGELOG.md](./CHANGELOG.md)**: Version history and changes:
+  - All commits documented with descriptions
+  - Categorized by Added, Changed, Fixed
+  - Chronological release history
 
 - **[SERVICES_GUIDE.md](./SERVICES_GUIDE.md)**: Complete services documentation and learning guide:
   - Traefik reverse proxy architecture and configuration

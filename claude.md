@@ -185,6 +185,65 @@ ip -d link show vmbr0 | grep vlan_filtering
 
 **Common Issue**: Node03 initially lacked VLAN-aware configuration, causing all VM deployments to fail with "no physical interface on bridge 'vmbr0'" error. See [TROUBLESHOOTING.md](./TROUBLESHOOTING.md) for detailed resolution steps.
 
+### Domain & SSL Configuration
+
+**Domain**: `hrmsmrflrii.xyz` (GoDaddy + Cloudflare)
+**SSL Provider**: Let's Encrypt (wildcard certificate via Cloudflare DNS-01 challenge)
+**Reverse Proxy**: Traefik v3.2 (192.168.40.20)
+**Internal DNS**: OPNsense (192.168.91.30) with host overrides
+
+#### Service URLs (HTTPS)
+
+**Infrastructure:**
+| Service | URL | Backend |
+|---------|-----|---------|
+| Proxmox Cluster | https://proxmox.hrmsmrflrii.xyz | 192.168.20.21:8006 |
+| Proxmox Node01 | https://node01.hrmsmrflrii.xyz | 192.168.20.20:8006 |
+| Proxmox Node02 | https://node02.hrmsmrflrii.xyz | 192.168.20.21:8006 |
+| Proxmox Node03 | https://node03.hrmsmrflrii.xyz | 192.168.20.22:8006 |
+| Traefik Dashboard | https://traefik.hrmsmrflrii.xyz | localhost:8080 |
+
+**Core Services:**
+| Service | URL | Backend |
+|---------|-----|---------|
+| Authentik (SSO) | https://auth.hrmsmrflrii.xyz | 192.168.40.21:9000 |
+| Immich (Photos) | https://photos.hrmsmrflrii.xyz | 192.168.40.22:2283 |
+| GitLab | https://gitlab.hrmsmrflrii.xyz | 192.168.40.23:80 |
+
+**Media Services (docker-vm-media01):**
+| Service | URL | Backend |
+|---------|-----|---------|
+| Jellyfin | https://jellyfin.hrmsmrflrii.xyz | 192.168.40.11:8096 |
+| Radarr | https://radarr.hrmsmrflrii.xyz | 192.168.40.11:7878 |
+| Sonarr | https://sonarr.hrmsmrflrii.xyz | 192.168.40.11:8989 |
+| Lidarr | https://lidarr.hrmsmrflrii.xyz | 192.168.40.11:8686 |
+| Prowlarr | https://prowlarr.hrmsmrflrii.xyz | 192.168.40.11:9696 |
+| Bazarr | https://bazarr.hrmsmrflrii.xyz | 192.168.40.11:6767 |
+| Overseerr | https://overseerr.hrmsmrflrii.xyz | 192.168.40.11:5055 |
+| Jellyseerr | https://jellyseerr.hrmsmrflrii.xyz | 192.168.40.11:5056 |
+| Tdarr | https://tdarr.hrmsmrflrii.xyz | 192.168.40.11:8265 |
+| Autobrr | https://autobrr.hrmsmrflrii.xyz | 192.168.40.11:7474 |
+
+**Utility Services (docker-vm-utilities01):**
+| Service | URL | Backend |
+|---------|-----|---------|
+| Paperless-ngx | https://paperless.hrmsmrflrii.xyz | 192.168.40.10:8000 |
+| Glance Dashboard | https://glance.hrmsmrflrii.xyz | 192.168.40.10:8080 |
+
+#### SSL Certificate Configuration
+
+Traefik automatically obtains and renews Let's Encrypt certificates using Cloudflare DNS-01 challenge:
+
+- **Certificate Storage**: `/opt/traefik/certs/acme.json`
+- **Email**: herms14@gmail.com
+- **Challenge Type**: DNS-01 via Cloudflare API
+- **Certificate Type**: Wildcard (*.hrmsmrflrii.xyz)
+
+#### DNS Configuration (OPNsense)
+
+Host overrides configured in OPNsense Unbound DNS (192.168.91.30):
+- All `*.hrmsmrflrii.xyz` subdomains resolve to `192.168.40.20` (Traefik)
+
 ## Deployed Infrastructure
 
 ### Current Deployment Status
