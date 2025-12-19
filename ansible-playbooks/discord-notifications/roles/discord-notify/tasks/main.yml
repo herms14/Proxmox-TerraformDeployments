@@ -1,0 +1,93 @@
+---
+# Discord Notification Tasks
+
+- name: Validate Discord webhook URL is set
+  ansible.builtin.assert:
+    that:
+      - discord_webhook_url is defined
+      - discord_webhook_url | length > 0
+    fail_msg: "discord_webhook_url must be set. Set it in inventory, group_vars, or pass via -e"
+    quiet: true
+
+- name: Calculate playbook statistics
+  ansible.builtin.set_fact:
+    notification_stats:
+      playbook_name: "{{ ansible_play_name | default('Unknown Playbook') }}"
+      total_hosts: "{{ ansible_play_hosts_all | length }}"
+      start_time: "{{ ansible_date_time.iso8601 }}"
+      status: "{{ 'Failed' if ansible_stats.failures | default(0) | int > 0 else ('Changed' if ansible_stats.changed | default(0) | int > 0 else 'Success') }}"
+  run_once: true
+  delegate_to: localhost
+
+- name: Determine notification color
+  ansible.builtin.set_fact:
+    notification_color: >-
+      {%- if ansible_stats.failures | default(0) | int > 0 -%}
+        {{ discord_color_failure }}
+      {%- elif ansible_stats.changed | default(0) | int > 0 -%}
+        {{ discord_color_changed }}
+      {%- else -%}
+        {{ discord_color_success }}
+      {%- endif -%}
+  run_once: true
+  delegate_to: localhost
+
+- name: Determine status emoji
+  ansible.builtin.set_fact:
+    status_emoji: >-
+      {%- if ansible_stats.failures | default(0) | int > 0 -%}
+        ❌
+      {%- elif ansible_stats.changed | default(0) | int > 0 -%}
+        🔄
+      {%- else -%}
+        ✅
+      {%- endif -%}
+  run_once: true
+  delegate_to: localhost
+
+- name: Send Discord notification
+  ansible.builtin.uri:
+    url: "{{ discord_webhook_url }}"
+    method: POST
+    body_format: json
+    headers:
+      Content-Type: "application/json"
+    body:
+      username: "{{ discord_bot_username }}"
+      avatar_url: "{{ discord_bot_avatar }}"
+      embeds:
+        - title: "{{ status_emoji }} Ansible Playbook: {{ notification_stats.playbook_name }}"
+          color: "{{ notification_color | int }}"
+          fields:
+            - name: "📊 Status"
+              value: "{{ notification_stats.status }}"
+              inline: true
+            - name: "🖥️ Hosts"
+              value: "{{ notification_stats.total_hosts }}"
+              inline: true
+            - name: "⏱️ Timestamp"
+              value: "{{ notification_stats.start_time }}"
+              inline: true
+            - name: "📈 Task Summary"
+              value: |
+                ```
+                ✓ OK:      {{ ansible_stats.ok | default(0) }}
+                ↻ Changed: {{ ansible_stats.changed | default(0) }}
+                ⊘ Skipped: {{ ansible_stats.skipped | default(0) }}
+                ✗ Failed:  {{ ansible_stats.failures | default(0) }}
+                ```
+              inline: false
+            - name: "🎯 Target Hosts"
+              value: "{{ ansible_play_hosts_all | join(', ') | truncate(1000) }}"
+              inline: false
+          footer:
+            text: "Ansible Automation | ansible-controller01"
+          timestamp: "{{ ansible_date_time.iso8601 }}"
+    status_code: [200, 204]
+  delegate_to: localhost
+  run_once: true
+  ignore_errors: true
+  when: >
+    (discord_notify_on_success and notification_stats.status == 'Success') or
+    (discord_notify_on_failure and notification_stats.status == 'Failed') or
+    (discord_notify_on_change and notification_stats.status == 'Changed')

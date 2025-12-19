@@ -1,0 +1,26 @@
+---
+# Discord Notification Role Defaults
+
+# Discord webhook URL (set in inventory or pass as extra var)
+# discord_webhook_url: "https://discord.com/api/webhooks/YOUR_WEBHOOK_ID/YOUR_WEBHOOK_TOKEN"
+
+# Notification settings
+discord_notify_on_success: true
+discord_notify_on_failure: true
+discord_notify_on_change: true
+
+# Message customization
+discord_bot_username: "Ansible Bot"
+discord_bot_avatar: "https://raw.githubusercontent.com/ansible/logos/main/vscode-ansible/vscode-ansible.png"
+
+# Colors (Discord embed colors in decimal)
+discord_color_success: 3066993    # Green
+discord_color_failure: 15158332   # Red
+discord_color_changed: 15844367   # Orange
+discord_color_info: 3447003       # Blue
+
+# Include timing information
+discord_include_timing: true
+
+# Include task details
+discord_include_task_details: true
