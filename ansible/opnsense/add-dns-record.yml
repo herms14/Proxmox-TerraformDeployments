@@ -88,7 +88,7 @@
         body_format: json
         body: {}
         status_code: [200]
-      when: add_results is defined and add_results.changed
+      when: dns_records_to_add is defined
 
     - name: Display results
       debug:

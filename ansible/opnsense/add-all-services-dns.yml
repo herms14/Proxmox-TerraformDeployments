@@ -73,6 +73,10 @@
       - hostname: n8n
         description: "n8n Workflow Automation"
 
+      # Kubernetes Services
+      - hostname: k8s-test
+        description: "Kubernetes Test Service (nginx)"
+
   tasks:
     - name: Validate API credentials
       fail:
