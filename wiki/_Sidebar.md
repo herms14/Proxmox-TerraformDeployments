@@ -42,4 +42,16 @@
 
 ---
 
+### Modular Docs (Repo)
+- [NETWORKING.md](../docs/NETWORKING.md)
+- [PROXMOX.md](../docs/PROXMOX.md)
+- [STORAGE.md](../docs/STORAGE.md)
+- [TERRAFORM.md](../docs/TERRAFORM.md)
+- [SERVICES.md](../docs/SERVICES.md)
+- [ANSIBLE.md](../docs/ANSIBLE.md)
+- [INVENTORY.md](../docs/INVENTORY.md)
+- [TROUBLESHOOTING.md](../docs/TROUBLESHOOTING.md)
+
+---
+
 **Repository**: [GitHub](https://github.com/herms14/Proxmox-TerraformDeployments)

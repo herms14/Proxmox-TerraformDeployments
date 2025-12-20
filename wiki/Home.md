@@ -15,16 +15,33 @@ Whether you're setting up your first homelab or looking for inspiration, this do
 
 ---
 
+## Quick Reference (Modular Docs)
+
+For developers and advanced users, we maintain modular documentation in the repository:
+
+| Resource | Link | Description |
+|----------|------|-------------|
+| **Network** | [docs/NETWORKING.md](../docs/NETWORKING.md) | VLANs, IPs, DNS, SSL |
+| **Compute** | [docs/PROXMOX.md](../docs/PROXMOX.md) | Cluster nodes, VM/LXC standards |
+| **Storage** | [docs/STORAGE.md](../docs/STORAGE.md) | NFS, Synology, storage pools |
+| **Terraform** | [docs/TERRAFORM.md](../docs/TERRAFORM.md) | Modules, deployment |
+| **Services** | [docs/SERVICES.md](../docs/SERVICES.md) | Docker services |
+| **Ansible** | [docs/ANSIBLE.md](../docs/ANSIBLE.md) | Automation, playbooks |
+| **Inventory** | [docs/INVENTORY.md](../docs/INVENTORY.md) | Deployed infrastructure |
+| **Troubleshooting** | [docs/TROUBLESHOOTING.md](../docs/TROUBLESHOOTING.md) | Common issues |
+
+---
+
 ## Quick Navigation
 
-### 🚀 Just Getting Started?
+### Getting Started
 
 1. **[Introduction](Introduction)** - What this project is and who it's for
 2. **[Prerequisites](Prerequisites)** - What you need before starting
 3. **[Architecture Overview](Architecture-Overview)** - See the big picture
 4. **[Quick Start](Quick-Start)** - Deploy your first VM in 15 minutes
 
-### 🏗️ Infrastructure Guides
+### Infrastructure Guides
 
 - **[Proxmox Cluster](Proxmox-Cluster)** - Setting up the virtualization platform
 - **[Network Architecture](Network-Architecture)** - VLANs, IPs, and routing
@@ -32,78 +49,65 @@ Whether you're setting up your first homelab or looking for inspiration, this do
 - **[DNS Configuration](DNS-Configuration)** - Internal DNS with OPNsense
 - **[SSL Certificates](SSL-Certificates)** - Let's Encrypt with Cloudflare
 
-### 🛠️ Deployment Tools
+### Deployment Tools
 
 - **[Terraform Basics](Terraform-Basics)** - Infrastructure as Code fundamentals
 - **[Ansible Basics](Ansible-Basics)** - Configuration management fundamentals
 - **[VM Deployment](VM-Deployment)** - Creating virtual machines
 - **[Cloud-Init Templates](Cloud-Init-Templates)** - Automated VM provisioning
 
-### 📦 Services
+### Services
 
 - **[Services Overview](Services-Overview)** - All services at a glance
 - **[Traefik](Traefik)** - Reverse proxy and SSL termination
-- **[Authentik](Authentik)** - Single Sign-On (SSO)
 - **[Arr Stack](Arr-Stack)** - Media automation (Jellyfin, Radarr, Sonarr, etc.)
-- **[Immich](Immich)** - Photo management
-- **[GitLab](GitLab)** - DevOps platform
-- **[Paperless](Paperless)** - Document management
-- **[n8n](n8n)** - Workflow automation
 
-### ☸️ Kubernetes
+### Kubernetes
 
-- **[Kubernetes Overview](Kubernetes-Overview)** - Container orchestration basics
-- **[Cluster Deployment](Kubernetes-Deployment)** - Building the cluster
+- **[Kubernetes Overview](Kubernetes)** - Container orchestration basics
 
-### 📋 Operations
-
-- **[Daily Operations](Daily-Operations)** - Common tasks and health checks
-- **[Troubleshooting Guide](Troubleshooting-Guide)** - When things go wrong
-
-### 📚 Reference
+### Reference
 
 - **[IP Address Map](IP-Address-Map)** - Complete IP allocation table
-- **[Port Reference](Port-Reference)** - All service ports
 - **[Command Cheatsheet](Command-Cheatsheet)** - Quick reference commands
-- **[Glossary](Glossary)** - Terms explained
 
 ---
 
 ## Infrastructure Overview
 
 ```
-┌─────────────────────────────────────────────────────────────────┐
-│                     PROXMOX CLUSTER                              │
-├─────────────────┬─────────────────┬─────────────────────────────┤
-│    node01       │     node02      │         node03              │
-│  192.168.20.20  │  192.168.20.21  │      192.168.20.22          │
-│    (VMs)        │    (LXC)        │      (Kubernetes)           │
-└────────┬────────┴────────┬────────┴────────────┬────────────────┘
-         │                 │                      │
-         ▼                 ▼                      ▼
-┌─────────────────────────────────────────────────────────────────┐
-│                    VLAN 20 - Infrastructure                      │
-│  • Ansible Controller (192.168.20.30)                           │
-│  • Kubernetes: 3 Controllers + 6 Workers (192.168.20.32-45)     │
-└─────────────────────────────────────────────────────────────────┘
-         │
-         ▼
-┌─────────────────────────────────────────────────────────────────┐
-│                    VLAN 40 - Services                            │
-│  • Traefik Reverse Proxy (192.168.40.20)                        │
-│  • Authentik SSO (192.168.40.21)                                │
-│  • Immich Photos (192.168.40.22)                                │
-│  • GitLab (192.168.40.23)                                       │
-│  • Docker Hosts (192.168.40.10-11) - Arr Stack, Paperless, n8n  │
-└─────────────────────────────────────────────────────────────────┘
-         │
-         ▼
-┌─────────────────────────────────────────────────────────────────┐
-│                    Storage (Synology NAS)                        │
-│  • VM Disks: /volume2/ProxmoxCluster-VMDisks                    │
-│  • Media: /volume2/Proxmox-Media                                │
-│  • ISOs: /volume2/ProxmoxCluster-ISOs                           │
-└─────────────────────────────────────────────────────────────────┘
++---------------------------------------------------------------+
+|                     PROXMOX CLUSTER                              |
++-----------------+-----------------+-----------------------------+
+|    node01       |     node02      |         node03              |
+|  192.168.20.20  |  192.168.20.21  |      192.168.20.22          |
+|    (VMs)        |    (LXC)        |      (Kubernetes)           |
++--------+--------+--------+--------+------------+----------------+
+         |                 |                      |
+         v                 v                      v
++---------------------------------------------------------------+
+|                    VLAN 20 - Infrastructure                      |
+|  * Ansible Controller (192.168.20.30)                           |
+|  * Kubernetes: 3 Controllers + 6 Workers (192.168.20.32-45)     |
++---------------------------------------------------------------+
+         |
+         v
++---------------------------------------------------------------+
+|                    VLAN 40 - Services                            |
+|  * Traefik Reverse Proxy (192.168.40.20)                        |
+|  * Authentik SSO (192.168.40.21)                                |
+|  * Immich Photos (192.168.40.22)                                |
+|  * GitLab (192.168.40.23)                                       |
+|  * Docker Hosts (192.168.40.10-11) - Arr Stack, Paperless, n8n  |
++---------------------------------------------------------------+
+         |
+         v
++---------------------------------------------------------------+
+|                    Storage (Synology NAS)                        |
+|  * VM Disks: /volume2/ProxmoxCluster-VMDisks                    |
+|  * Media: /volume2/Proxmox-Media                                |
+|  * ISOs: /volume2/ProxmoxCluster-ISOs                           |
++---------------------------------------------------------------+
 ```
 
 ---
@@ -125,7 +129,7 @@ Whether you're setting up your first homelab or looking for inspiration, this do
 
 ## Getting Help
 
-- **Issues**: If something doesn't work, check [Troubleshooting Guide](Troubleshooting-Guide)
+- **Issues**: If something doesn't work, check [Troubleshooting Guide](../docs/TROUBLESHOOTING.md)
 - **Questions**: Open an issue on [GitHub](https://github.com/herms14/Proxmox-TerraformDeployments/issues)
 - **Credentials**: Sensitive values are in `CREDENTIALS.md` (not in git)
 
