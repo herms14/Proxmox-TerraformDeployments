@@ -80,9 +80,24 @@ See [docs/TERRAFORM.md](./docs/TERRAFORM.md) for more operations.
 
 | Access | Details |
 |--------|---------|
-| SSH User | hermes-admin |
-| SSH Key | ed25519 (key-based auth only) |
+| SSH User | hermes-admin (VMs), root (Proxmox) |
+| SSH Key | `~/.ssh/homelab_ed25519` (no passphrase) |
+| SSH Config | `~/.ssh/config` with host aliases |
 | Proxmox API | terraform-deployment-user@pve!tf |
+
+### SSH Quick Access
+
+```bash
+# Using host aliases (from ~/.ssh/config)
+ssh node01              # Proxmox node01 as root
+ssh ansible             # Ansible controller
+ssh k8s-controller01    # K8s primary controller
+ssh docker-utilities    # Docker utilities host
+
+# Direct IP access (auto-selects key)
+ssh root@192.168.20.20
+ssh hermes-admin@192.168.20.30
+```
 
 ## Service URLs
 
@@ -95,6 +110,10 @@ See [docs/TERRAFORM.md](./docs/TERRAFORM.md) for more operations.
 | GitLab | https://gitlab.hrmsmrflrii.xyz |
 | Jellyfin | https://jellyfin.hrmsmrflrii.xyz |
 | n8n | https://n8n.hrmsmrflrii.xyz |
+| **Monitoring** | |
+| Uptime Kuma | https://uptime.hrmsmrflrii.xyz |
+| Prometheus | https://prometheus.hrmsmrflrii.xyz |
+| Grafana | https://grafana.hrmsmrflrii.xyz |
 
 See [docs/NETWORKING.md](./docs/NETWORKING.md) for complete URL list.
 
@@ -121,6 +140,71 @@ tf-proxmox/
 │   ├── TROUBLESHOOTING.md  # Issue resolution
 │   └── legacy/             # Extended documentation
 └── CLAUDE.md               # This file
+```
+
+## Troubleshooting Documentation Format
+
+When documenting resolved issues in [docs/TROUBLESHOOTING.md](./docs/TROUBLESHOOTING.md), use this standard format:
+
+```markdown
+### Issue Title
+
+**Resolved**: Month Day, Year
+
+#### Problem Statement
+
+Describe the error message or symptom the user experiences. Include:
+- Exact error messages (in code blocks)
+- When the issue occurs
+- What the user was trying to do
+
+#### Root Cause
+
+Explain the technical reason why this issue occurred. Be specific about:
+- What configuration was wrong
+- Why the default behavior caused the issue
+- Any version-specific or environment-specific factors
+
+#### Fix
+
+Provide step-by-step instructions to resolve the issue:
+1. Commands to run (in code blocks)
+2. Files to edit (with exact content)
+3. Services to restart
+
+#### Verification
+
+How to confirm the fix worked:
+- Commands to run
+- Expected output
+- What success looks like
+
+#### How to Avoid in the Future
+
+Preventive measures:
+- Configuration best practices
+- Ansible playbook additions
+- Monitoring/alerting recommendations
+```
+
+**Example Structure**:
+```
+### Kubernetes kubectl Connection Refused
+
+#### Problem Statement
+Error: "The connection to the server localhost:8080 was refused"
+
+#### Root Cause
+Kubeconfig not copied to secondary controller nodes after kubeadm join.
+
+#### Fix
+Copy kubeconfig: `ssh controller01 "cat ~/.kube/config" | ssh controller02 "cat > ~/.kube/config"`
+
+#### Verification
+`kubectl get nodes` returns node list without errors.
+
+#### How to Avoid in the Future
+Add kubeconfig copy step to Ansible K8s playbook.
 ```
 
 ## Key Configuration

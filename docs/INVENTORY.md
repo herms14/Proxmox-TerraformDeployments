@@ -6,10 +6,12 @@
 
 | Category | Count | vCPUs | RAM | Storage |
 |----------|-------|-------|-----|---------|
-| Ansible | 1 | 2 | 4GB | 20GB |
-| Kubernetes | 9 | 18 | 36GB | 180GB |
-| Services | 7 | 16 | 32GB | 170GB |
-| **Total** | **17** | **36** | **72GB** | **370GB** |
+| Ansible | 1 | 2 | 8GB | 20GB |
+| Kubernetes | 9 | 18 | 72GB | 180GB |
+| Services | 7 | 16 | 56GB | 170GB |
+| **Total** | **17** | **36** | **136GB** | **370GB** |
+
+*Last updated: December 20, 2025*
 
 ## VLAN 20 - Infrastructure (192.168.20.0/24)
 
@@ -17,7 +19,7 @@
 
 | Hostname | Node | IP | Cores | RAM | Disk | Purpose |
 |----------|------|----|-------|-----|------|---------|
-| ansible-controller01 | node01 | 192.168.20.30 | 2 | 4GB | 20GB | Ansible automation |
+| ansible-controller01 | node01 | 192.168.20.30 | 2 | 8GB | 20GB | Ansible automation |
 
 ### Kubernetes Cluster (9 nodes)
 
@@ -34,20 +36,20 @@
 
 | Hostname | Node | IP | Cores | RAM | Disk | Role |
 |----------|------|----|-------|-----|------|------|
-| k8s-controller01 | node03 | 192.168.20.32 | 2 | 4GB | 20GB | Primary |
-| k8s-controller02 | node03 | 192.168.20.33 | 2 | 4GB | 20GB | HA |
-| k8s-controller03 | node03 | 192.168.20.34 | 2 | 4GB | 20GB | HA |
+| k8s-controller01 | node01 | 192.168.20.32 | 2 | 8GB | 20GB | Primary |
+| k8s-controller02 | node01 | 192.168.20.33 | 2 | 8GB | 20GB | HA |
+| k8s-controller03 | node01 | 192.168.20.34 | 2 | 8GB | 20GB | HA |
 
 #### Worker Nodes
 
 | Hostname | Node | IP | Cores | RAM | Disk |
 |----------|------|----|-------|-----|------|
-| k8s-worker01 | node03 | 192.168.20.40 | 2 | 4GB | 20GB |
-| k8s-worker02 | node03 | 192.168.20.41 | 2 | 4GB | 20GB |
-| k8s-worker03 | node03 | 192.168.20.42 | 2 | 4GB | 20GB |
-| k8s-worker04 | node03 | 192.168.20.43 | 2 | 4GB | 20GB |
-| k8s-worker05 | node03 | 192.168.20.44 | 2 | 4GB | 20GB |
-| k8s-worker06 | node03 | 192.168.20.45 | 2 | 4GB | 20GB |
+| k8s-worker01 | node01 | 192.168.20.40 | 2 | 8GB | 20GB |
+| k8s-worker02 | node01 | 192.168.20.41 | 2 | 8GB | 20GB |
+| k8s-worker03 | node01 | 192.168.20.42 | 2 | 8GB | 20GB |
+| k8s-worker04 | node01 | 192.168.20.43 | 2 | 8GB | 20GB |
+| k8s-worker05 | node01 | 192.168.20.44 | 2 | 8GB | 20GB |
+| k8s-worker06 | node01 | 192.168.20.45 | 2 | 8GB | 20GB |
 
 ## VLAN 40 - Services (192.168.40.0/24)
 
@@ -55,13 +57,13 @@
 
 | Hostname | Node | IP | Cores | RAM | Disk | Purpose |
 |----------|------|----|-------|-----|------|---------|
-| linux-syslog-server01 | node02 | 192.168.40.5 | 8 | 6GB | 50GB | Centralized logging |
-| docker-vm-utilities01 | node02 | 192.168.40.10 | 2 | 4GB | 20GB | Docker utilities (n8n, Paperless) |
-| docker-vm-media01 | node02 | 192.168.40.11 | 2 | 4GB | 20GB | Arr media stack |
-| traefik-vm01 | node02 | 192.168.40.20 | 2 | 4GB | 20GB | Reverse proxy |
-| authentik-vm01 | node02 | 192.168.40.21 | 2 | 4GB | 20GB | Identity/SSO |
-| immich-vm01 | node02 | 192.168.40.22 | 2 | 4GB | 20GB | Photo management |
-| gitlab-vm01 | node02 | 192.168.40.23 | 2 | 4GB | 20GB | DevOps platform |
+| linux-syslog-server01 | node02 | 192.168.40.5 | 8 | 8GB | 50GB | Centralized logging |
+| docker-vm-utilities01 | node02 | 192.168.40.10 | 2 | 8GB | 20GB | Docker utilities (n8n, Paperless, Glance, OpenSpeedTest) |
+| docker-vm-media01 | node02 | 192.168.40.11 | 2 | 8GB | 20GB | Arr media stack |
+| traefik-vm01 | node02 | 192.168.40.20 | 2 | 8GB | 20GB | Reverse proxy |
+| authentik-vm01 | node02 | 192.168.40.21 | 2 | 8GB | 20GB | Identity/SSO |
+| immich-vm01 | node02 | 192.168.40.22 | 2 | 8GB | 20GB | Photo management |
+| gitlab-vm01 | node02 | 192.168.40.23 | 2 | 8GB | 20GB | DevOps platform |
 
 ## LXC Containers
 

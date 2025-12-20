@@ -13,7 +13,7 @@ All services deployed via Docker Compose, managed by Ansible automation from `an
 | Photos | immich-vm01 | Immich |
 | DevOps | gitlab-vm01 | GitLab CE |
 | Media | docker-vm-media01 | Arr Stack (10 services) |
-| Utilities | docker-vm-utilities01 | n8n, Paperless, Glance |
+| Utilities | docker-vm-utilities01 | n8n, Paperless, Glance, OpenSpeedTest |
 
 ## Traefik Reverse Proxy
 
@@ -302,6 +302,48 @@ ssh hermes-admin@192.168.40.10 "cd /opt/n8n && sudo docker compose pull && sudo 
 ```
 
 **Ansible**: `~/ansible/n8n/deploy-n8n.yml`
+
+---
+
+## Monitoring Stack
+
+**Host**: docker-vm-utilities01 (192.168.40.10)
+**Status**: Deployed December 20, 2025
+
+| Service | Port | URL | Purpose |
+|---------|------|-----|---------|
+| Uptime Kuma | 3001 | https://uptime.hrmsmrflrii.xyz | Service uptime monitoring |
+| Prometheus | 9090 | https://prometheus.hrmsmrflrii.xyz | Metrics collection |
+| Grafana | 3030 | https://grafana.hrmsmrflrii.xyz | Dashboards & visualization |
+
+### Components
+
+- **Uptime Kuma**: Service availability monitoring with ICMP ping and HTTP checks
+- **Prometheus**: Time-series metrics database for infrastructure monitoring
+- **Grafana**: Dashboard visualization (default login: admin/admin)
+
+### Storage
+
+- Config: `/opt/monitoring/`
+  - Docker Compose: `/opt/monitoring/docker-compose.yml`
+  - Uptime Kuma: `/opt/monitoring/uptime-kuma/`
+  - Prometheus: `/opt/monitoring/prometheus/`
+  - Grafana: `/opt/monitoring/grafana/`
+
+### Management
+
+```bash
+# View logs
+ssh hermes-admin@192.168.40.10 "cd /opt/monitoring && sudo docker compose logs -f"
+
+# Restart all
+ssh hermes-admin@192.168.40.10 "cd /opt/monitoring && sudo docker compose restart"
+
+# Update
+ssh hermes-admin@192.168.40.10 "cd /opt/monitoring && sudo docker compose pull && sudo docker compose up -d"
+```
+
+**Ansible**: `~/ansible/monitoring/deploy-monitoring-stack.yml`
 
 ---
 
