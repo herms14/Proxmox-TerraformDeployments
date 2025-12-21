@@ -260,6 +260,7 @@ C:\Users\herms\OneDrive\Obsidian Vault\Hermes's Life Knowledge Base\07 HomeLab T
 | OBSERVABILITY.md | Observability.md | 18 - Observability Stack.md |
 | WATCHTOWER.md | Watchtower.md | 19 - Watchtower Updates.md |
 | CICD.md | GitLab-CICD.md | 20 - GitLab CI-CD Automation.md |
+| SERVICE_ONBOARDING.md | Service-Onboarding.md | 22 - Service Onboarding Workflow.md |
 | TROUBLESHOOTING.md | Troubleshooting.md | 12 - Troubleshooting.md |
 | - | - | 11 - Credentials.md (private) |
 
