@@ -49,8 +49,10 @@ cd ~/ansible
 │   └── deploy-sysadmin-bot.yml         # Argus Discord bot
 ├── arr-stack/
 │   └── deploy-download-monitor.yml     # Download notifications
-└── glance/
-    └── deploy-life-progress-api.yml    # Life progress widget API
+├── glance/
+│   └── deploy-life-progress-api.yml    # Life progress widget API
+└── reddit-manager/
+    └── deploy-reddit-manager.yml       # Reddit feed manager for Glance
 ```
 
 ## Common Operations
@@ -97,6 +99,7 @@ See [Kubernetes_Setup.md](./legacy/Kubernetes_Setup.md) for complete guide.
 | Argus SysAdmin Bot | `sysadmin-bot/deploy-sysadmin-bot.yml` | docker-vm-utilities01 |
 | Download Monitor | `arr-stack/deploy-download-monitor.yml` | docker-vm-media01 |
 | Life Progress API | `glance/deploy-life-progress-api.yml` | docker-vm-utilities01 |
+| Reddit Manager | `reddit-manager/deploy-reddit-manager.yml` | docker-vm-utilities01 |
 
 ## OPNsense DNS Automation
 

@@ -12,6 +12,8 @@ This guide documents resolved issues and common problems organized by category f
 - [Kubernetes Issues](#kubernetes-issues)
 - [Authentication Issues](#authentication-issues)
 - [Container & Docker Issues](#container--docker-issues)
+  - [Glance Reddit Widget Timeout Error](#glance-reddit-widget-timeout-error)
+  - [Glance Template Error - Wrong Number of Args](#glance-template-error---wrong-number-of-args)
 - [Service-Specific Issues](#service-specific-issues)
 - [Network Issues](#network-issues)
 - [Common Issues](#common-issues)
@@ -331,6 +333,57 @@ ssh hermes-admin@192.168.40.10 "docker exec update-manager ssh -i /root/.ssh/hom
 ```bash
 sudo docker compose down && sudo docker compose build --no-cache && sudo docker compose up -d
 ```
+
+---
+
+### Glance Reddit Widget Timeout Error
+
+**Resolved**: December 22, 2025
+
+**Symptoms**:
+- Glance Reddit page shows error: `context deadline exceeded (Client.Timeout exceeded while awaiting headers)`
+- Reddit Manager API takes too long to respond
+
+**Root Cause**: Sequential fetching of multiple subreddits from Reddit API exceeded Glance's default timeout. Fetching 6 subreddits one-by-one could take 30+ seconds.
+
+**Fix**: Updated Reddit Manager to fetch subreddits in parallel using ThreadPoolExecutor:
+```python
+from concurrent.futures import ThreadPoolExecutor, as_completed
+
+with ThreadPoolExecutor(max_workers=6) as executor:
+    future_to_sub = {executor.submit(fetch_subreddit_posts, sub, sort): sub for sub in subreddits}
+    for future in as_completed(future_to_sub, timeout=15):
+        posts = future.result()
+```
+
+**Verification**:
+```bash
+time curl -s "http://192.168.40.10:5053/api/feed" | head -c 100
+# Should complete in ~2 seconds
+```
+
+**Prevention**: Parallel fetching is now default behavior.
+
+---
+
+### Glance Template Error - Wrong Number of Args
+
+**Resolved**: December 22, 2025
+
+**Symptoms**: Glance shows error: `template: :2:54: executing "" at <.JSON.String>: wrong number of args for String: want 1 got 2`
+
+**Root Cause**: Attempting to access nested JSON in Glance template with incorrect syntax. Used `.JSON.String "settings" "sort"` but Glance's `.String` method only accepts one argument.
+
+**Fix**: Simplified template to not access nested settings object:
+```yaml
+# Wrong - multiple arguments
+{{ .JSON.String "settings" "sort" }}
+
+# Correct - single key access only
+{{ .String "title" }}
+```
+
+**Note**: Glance custom-api templates have limited support for nested JSON access. Keep API responses flat where possible.
 
 ---
 

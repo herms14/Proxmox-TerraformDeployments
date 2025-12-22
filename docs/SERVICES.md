@@ -14,8 +14,8 @@ All services deployed via Docker Compose, managed by Ansible automation from `an
 | DevOps | gitlab-vm01 | GitLab CE |
 | CI/CD | gitlab-runner-vm01 | GitLab Runner, Ansible |
 | Media | docker-vm-media01 | Arr Stack (12 services), Download Monitor |
-| Dashboard | docker-vm-utilities01 | Glance, Life Progress API |
-| Utilities | docker-vm-utilities01 | n8n, Paperless, OpenSpeedTest |
+| Dashboard | docker-vm-utilities01 | Glance, Life Progress API, Reddit Manager |
+| Utilities | docker-vm-utilities01 | n8n, Paperless, Speedtest Tracker |
 | Update Management | docker-vm-utilities01 | Watchtower, Update Manager (Discord bot) |
 | Discord Bots | docker-vm-utilities01 | Argus SysAdmin Bot |
 | Container Metrics | Both Docker hosts | Docker Stats Exporter |
@@ -416,6 +416,61 @@ ssh hermes-admin@192.168.40.10 "cd /opt/n8n && sudo docker compose pull && sudo 
 
 ---
 
+## Speedtest Tracker
+
+**Host**: docker-vm-utilities01 (192.168.40.10)
+**Status**: Deployed December 22, 2025
+
+| Port | URL | Purpose |
+|------|-----|---------|
+| 3000 | http://192.168.40.10:3000 | Web interface |
+| 443 | https://speedtest.hrmsmrflrii.xyz | Via Traefik |
+
+### Purpose
+
+Scheduled network speed tests with historical tracking and visualization. Automatically runs tests every 6 hours and stores results for trend analysis.
+
+### Features
+
+- Scheduled speed tests (Ookla Speedtest CLI)
+- Historical results with graphs
+- Download, upload, and ping tracking
+- Multi-server support
+- Dark theme interface
+- SQLite database for lightweight storage
+
+### Schedule
+
+Tests run automatically every 6 hours (configurable via `SPEEDTEST_SCHEDULE` cron expression).
+
+### Storage
+
+- Config & Database: `/opt/speedtest-tracker/data/`
+- Docker Compose: `/opt/speedtest-tracker/docker-compose.yml`
+
+### Initial Setup
+
+1. Navigate to https://speedtest.hrmsmrflrii.xyz
+2. Default login: `admin@example.com` / `password`
+3. Change credentials immediately in Settings
+
+### Management
+
+```bash
+# View logs
+ssh hermes-admin@192.168.40.10 "docker logs speedtest-tracker"
+
+# Trigger manual test
+ssh hermes-admin@192.168.40.10 "docker exec speedtest-tracker php artisan app:ookla-speedtest"
+
+# Update
+ssh hermes-admin@192.168.40.10 "cd /opt/speedtest-tracker && sudo docker compose pull && sudo docker compose up -d"
+```
+
+**GitHub**: https://github.com/alexjustesen/speedtest-tracker
+
+---
+
 ## Glance Dashboard
 
 **Host**: docker-vm-utilities01 (192.168.40.10)
@@ -467,6 +522,116 @@ ssh hermes-admin@192.168.40.10 "cd /opt/glance && sudo docker compose pull && su
 ```
 
 **Ansible**: `~/ansible/glance/deploy-glance-dashboard.yml`
+
+---
+
+## Reddit Manager
+
+**Host**: docker-vm-utilities01 (192.168.40.10)
+**Status**: Deployed December 22, 2025
+
+| Port | URL | Purpose |
+|------|-----|---------|
+| 5053 | http://192.168.40.10:5053 | Management UI & API |
+
+### Purpose
+
+Flask API that provides dynamic subreddit management for Glance dashboard. Allows adding/removing subreddits via web UI and fetches Reddit posts with thumbnails for display.
+
+### Features
+
+- **Dynamic Subreddit Management**: Add/remove subreddits without config file editing
+- **Web Management UI**: Simple interface at port 5053
+- **Thumbnail Support**: Fetches and displays post thumbnails from Reddit
+- **Grouped View**: Posts organized by subreddit with headers
+- **Sort Options**: Hot, New, or Top posts (configurable)
+- **Parallel Fetching**: All subreddits fetched concurrently for fast response
+- **Caching**: 5-minute cache to reduce Reddit API calls
+
+### API Endpoints
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/` | Management UI (web interface) |
+| GET | `/api/subreddits` | List configured subreddits |
+| POST | `/api/subreddits` | Add subreddit `{"name": "programming"}` |
+| DELETE | `/api/subreddits/<name>` | Remove subreddit |
+| GET | `/api/settings` | Get current sort/view settings |
+| POST | `/api/settings` | Update settings `{"sort": "new", "view": "grouped"}` |
+| GET | `/api/feed` | Get combined feed (grouped or combined) |
+| GET | `/api/feed/<subreddit>` | Get single subreddit feed |
+| GET | `/health` | Health check |
+
+### Settings
+
+| Setting | Options | Default | Description |
+|---------|---------|---------|-------------|
+| sort | hot, new, top | hot | Post sort order |
+| view | grouped, combined | grouped | Display mode |
+
+### Glance Integration
+
+Uses `custom-api` widget with Go template:
+
+```yaml
+- type: custom-api
+  title: Reddit Feed
+  cache: 5m
+  url: http://192.168.40.10:5053/api/feed
+  template: |
+    {{ range .JSON.Array "groups" }}
+    <div>r/{{ .String "name" }}</div>
+    {{ range .Array "posts" }}
+      {{ .String "title" }} - {{ .Int "score" }} pts
+    {{ end }}
+    {{ end }}
+```
+
+### Storage
+
+- Flask App: `/opt/reddit-manager/reddit-manager.py`
+- Dockerfile: `/opt/reddit-manager/Dockerfile`
+- Docker Compose: `/opt/reddit-manager/docker-compose.yml`
+- Data: `/opt/reddit-manager/data/`
+  - `subreddits.json`: Configured subreddit list
+  - `settings.json`: Sort/view preferences
+
+### Default Subreddits
+
+homelab, selfhosted, linux, devops, kubernetes, docker
+
+### Management
+
+```bash
+# View logs
+ssh hermes-admin@192.168.40.10 "docker logs reddit-manager --tail 50"
+
+# Test API
+curl http://192.168.40.10:5053/api/feed
+
+# Add subreddit
+curl -X POST http://192.168.40.10:5053/api/subreddits -H "Content-Type: application/json" -d '{"name": "programming"}'
+
+# Change sort to "new"
+curl -X POST http://192.168.40.10:5053/api/settings -H "Content-Type: application/json" -d '{"sort": "new"}'
+
+# Rebuild after code changes
+ssh hermes-admin@192.168.40.10 "cd /opt/reddit-manager && sudo docker compose build --no-cache && sudo docker compose up -d"
+```
+
+### Troubleshooting
+
+**Glance shows timeout error**:
+- Reddit Manager fetches all subreddits in parallel to stay under Glance's timeout
+- Check if Reddit API is accessible from the container
+- Verify with: `curl http://192.168.40.10:5053/api/feed`
+
+**Template errors in Glance**:
+- Glance uses Go templates with specific syntax
+- Use `.JSON.Array "key"` for arrays, `.String "key"` for strings
+- Nested access: `.Array "posts"` inside a range block
+
+**Ansible**: `~/ansible/reddit-manager/deploy-reddit-manager.yml`
 
 ---
 
