@@ -14,7 +14,8 @@ All services deployed via Docker Compose, managed by Ansible automation from `an
 | DevOps | gitlab-vm01 | GitLab CE |
 | CI/CD | gitlab-runner-vm01 | GitLab Runner, Ansible |
 | Media | docker-vm-media01 | Arr Stack (12 services) |
-| Utilities | docker-vm-utilities01 | n8n, Paperless, Glance, OpenSpeedTest |
+| Dashboard | docker-vm-utilities01 | Glance, Life Progress API |
+| Utilities | docker-vm-utilities01 | n8n, Paperless, OpenSpeedTest |
 | Update Management | docker-vm-utilities01 | Watchtower, Update Manager (Discord bot) |
 
 ## Traefik Reverse Proxy
@@ -410,6 +411,135 @@ ssh hermes-admin@192.168.40.10 "cd /opt/n8n && sudo docker compose pull && sudo 
 ```
 
 **Ansible**: `~/ansible/n8n/deploy-n8n.yml`
+
+---
+
+## Glance Dashboard
+
+**Host**: docker-vm-utilities01 (192.168.40.10)
+**Status**: Deployed December 2025
+
+| Port | URL | Purpose |
+|------|-----|---------|
+| 8080 | http://192.168.40.10:8080 | Dashboard |
+| 443 | https://glance.hrmsmrflrii.xyz | Via Traefik |
+
+### Features
+
+- Self-hosted dashboard with multiple widget types
+- Service health monitoring (Proxmox, K8s, Traefik, etc.)
+- Market data (Bitcoin, stocks)
+- RSS feeds from Reddit
+- NBA/NFL scores
+- Network device monitoring
+- Life Progress widget with API integration
+- Synology NAS monitoring (embedded Grafana)
+
+### Pages
+
+| Page | Widgets |
+|------|---------|
+| Home | Life Progress, Service Health, K8s Cluster, Markets, RSS |
+| Media | Arr Stack Downloads, Radarr Calendar, Media Bookmarks |
+| Sports | NBA Scores, NFL Scores |
+| Network | Network Devices, OPNsense Unbound Stats |
+| Storage | Synology NAS Dashboard (iframe) |
+
+### Storage
+
+- Config: `/opt/glance/config/glance.yml`
+- Secrets: `/opt/glance/.env`
+- Assets: `/opt/glance/assets/`
+
+### Management
+
+```bash
+# View logs
+ssh hermes-admin@192.168.40.10 "cd /opt/glance && sudo docker compose logs -f"
+
+# Restart
+ssh hermes-admin@192.168.40.10 "cd /opt/glance && sudo docker compose restart"
+
+# Update
+ssh hermes-admin@192.168.40.10 "cd /opt/glance && sudo docker compose pull && sudo docker compose up -d"
+```
+
+**Ansible**: `~/ansible/glance/deploy-glance-dashboard.yml`
+
+---
+
+## Life Progress API
+
+**Host**: docker-vm-utilities01 (192.168.40.10)
+**Status**: Deployed December 22, 2025
+
+| Port | URL | Purpose |
+|------|-----|---------|
+| 5051 | http://192.168.40.10:5051/progress | JSON API |
+| 5051 | http://192.168.40.10:5051/health | Health check |
+
+### Purpose
+
+Flask API that calculates life progress percentages for Glance dashboard integration. Shows Year/Month/Day/Life progress bars with daily rotating motivational quotes.
+
+### Configuration
+
+| Setting | Value |
+|---------|-------|
+| Birth Date | February 14, 1989 |
+| Target Age | 75 years |
+| Quote Pool | 30 quotes (daily rotation) |
+
+### API Response
+
+```json
+{
+  "year": 97.4,
+  "month": 69.5,
+  "day": 53.3,
+  "life": 49.1,
+  "age": 36.9,
+  "remaining_years": 38.1,
+  "remaining_days": 13933,
+  "quote": "Time is the wisest counselor of all. - Pericles",
+  "target_age": 75
+}
+```
+
+### Glance Integration
+
+Uses `custom-api` widget with gjson templates:
+
+```yaml
+- type: custom-api
+  url: http://192.168.40.10:5051/progress
+  template: |
+    {{ .JSON.Float "year" }}
+    {{ .JSON.String "quote" }}
+    {{ .JSON.Int "remaining_days" }}
+```
+
+### Storage
+
+- Flask App: `/opt/life-progress/app.py`
+- Dockerfile: `/opt/life-progress/Dockerfile`
+- Docker Compose: `/opt/life-progress/docker-compose.yml`
+
+### Management
+
+```bash
+# View logs
+ssh hermes-admin@192.168.40.10 "docker logs life-progress"
+
+# Test API
+curl http://192.168.40.10:5051/progress
+
+# Rebuild (after config changes)
+ssh hermes-admin@192.168.40.10 "cd /opt/life-progress && sudo docker compose up -d --build"
+```
+
+**Ansible**: `~/ansible/glance/deploy-life-progress-api.yml`
+**GitHub**: https://github.com/herms14/life-progress-api
 
 ---
 

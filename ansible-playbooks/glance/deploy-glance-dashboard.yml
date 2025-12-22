@@ -11,6 +11,7 @@
 # - Network health via Omada/Prometheus
 # - OPNsense Unbound stats
 # - Kubernetes node status
+# - Synology NAS monitoring (embedded Grafana dashboard)
 #
 # Usage:
 #   ansible-playbook glance/deploy-glance-dashboard.yml
@@ -89,6 +90,49 @@
 
                 - size: full
                   widgets:
+                    - type: custom-api
+                      title: Hermes Miraflor II Life Progress
+                      cache: 1h
+                      url: http://192.168.40.10:5051/progress
+                      template: |
+                        <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; padding: 10px;">
+                          <div style="text-align: center; margin-bottom: 15px;">
+                            <span style="color: #f87171; font-weight: 600; font-size: 18px;">{{ "{{" }} .JSON.Int "remaining_days" | formatNumber {{ "}}" }}</span>
+                            <span style="color: #888; font-size: 14px;"> days remaining until age {{ "{{" }} .JSON.Int "target_age" {{ "}}" }}</span>
+                          </div>
+                          <div style="display: flex; align-items: center; margin-bottom: 12px;">
+                            <span style="width: 60px; font-weight: bold; color: #f87171;">Year</span>
+                            <div style="flex: 1; height: 24px; background: #333; border-radius: 4px; position: relative; margin: 0 15px; overflow: hidden;">
+                              <div style="width: {{ "{{" }} .JSON.Float "year" {{ "}}" }}%; height: 100%; background: linear-gradient(90deg, #ef4444, #f87171); border-radius: 4px;"></div>
+                            </div>
+                            <span style="width: 50px; text-align: right; font-weight: 500;">{{ "{{" }} .JSON.Float "year" | printf "%.0f" {{ "}}" }}%</span>
+                          </div>
+                          <div style="display: flex; align-items: center; margin-bottom: 12px;">
+                            <span style="width: 60px; font-weight: bold; color: #facc15;">Month</span>
+                            <div style="flex: 1; height: 24px; background: #333; border-radius: 4px; position: relative; margin: 0 15px; overflow: hidden;">
+                              <div style="width: {{ "{{" }} .JSON.Float "month" {{ "}}" }}%; height: 100%; background: linear-gradient(90deg, #eab308, #facc15); border-radius: 4px;"></div>
+                            </div>
+                            <span style="width: 50px; text-align: right; font-weight: 500;">{{ "{{" }} .JSON.Float "month" | printf "%.0f" {{ "}}" }}%</span>
+                          </div>
+                          <div style="display: flex; align-items: center; margin-bottom: 12px;">
+                            <span style="width: 60px; font-weight: bold; color: #4ade80;">Day</span>
+                            <div style="flex: 1; height: 24px; background: #333; border-radius: 4px; position: relative; margin: 0 15px; overflow: hidden;">
+                              <div style="width: {{ "{{" }} .JSON.Float "day" {{ "}}" }}%; height: 100%; background: linear-gradient(90deg, #22c55e, #4ade80); border-radius: 4px;"></div>
+                            </div>
+                            <span style="width: 50px; text-align: right; font-weight: 500;">{{ "{{" }} .JSON.Float "day" | printf "%.0f" {{ "}}" }}%</span>
+                          </div>
+                          <div style="display: flex; align-items: center; margin-bottom: 15px;">
+                            <span style="width: 60px; font-weight: bold; color: #4ade80;">Life</span>
+                            <div style="flex: 1; height: 24px; background: #333; border-radius: 4px; position: relative; margin: 0 15px; overflow: hidden;">
+                              <div style="width: {{ "{{" }} .JSON.Float "life" {{ "}}" }}%; height: 100%; background: linear-gradient(90deg, #22c55e, #4ade80); border-radius: 4px;"></div>
+                            </div>
+                            <span style="width: 50px; text-align: right; font-weight: 500;">{{ "{{" }} .JSON.Float "life" | printf "%.0f" {{ "}}" }}%</span>
+                          </div>
+                          <div style="text-align: center; padding: 12px; background: rgba(255,255,255,0.05); border-radius: 8px;">
+                            <em style="color: #aaa; font-size: 13px; line-height: 1.5;">"{{ "{{" }} .JSON.String "quote" {{ "}}" }}"</em>
+                          </div>
+                        </div>
+
                     - type: monitor
                       title: Service Health
                       cache: 1m
@@ -197,9 +241,9 @@
                       headers:
                         X-Api-Key: "${RADARR_API_KEY}"
                       template: |
-                        {{ range .data.records }}
-                        {{ .title }} - {{ .status }} ({{ .sizeleft | formatBytes }}/{{ .size | formatBytes }})
-                        {{ end }}
+                        {{ "{{" }} range .data.records {{ "}}" }}
+                        {{ "{{" }} .title {{ "}}" }} - {{ "{{" }} .status {{ "}}" }}
+                        {{ "{{" }} end {{ "}}" }}
 
                     - type: iframe
                       title: Radarr Calendar
@@ -235,23 +279,23 @@
                       cache: 5m
                       url: https://site.api.espn.com/apis/site/v2/sports/basketball/nba/scoreboard
                       template: |
-                        {{ range .events }}
-                        {{ .name }} - {{ .status.type.shortDetail }}
-                        {{ range .competitions }}
-                          {{ range .competitors }}
-                            {{ .team.displayName }}: {{ .score }}
-                          {{ end }}
-                        {{ end }}
-                        {{ end }}
+                        {{ "{{" }} range .events {{ "}}" }}
+                        {{ "{{" }} .name {{ "}}" }} - {{ "{{" }} .status.type.shortDetail {{ "}}" }}
+                        {{ "{{" }} range .competitions {{ "}}" }}
+                          {{ "{{" }} range .competitors {{ "}}" }}
+                            {{ "{{" }} .team.displayName {{ "}}" }}: {{ "{{" }} .score {{ "}}" }}
+                          {{ "{{" }} end {{ "}}" }}
+                        {{ "{{" }} end {{ "}}" }}
+                        {{ "{{" }} end {{ "}}" }}
 
                     - type: custom-api
                       title: NFL Scores
                       cache: 5m
                       url: https://site.api.espn.com/apis/site/v2/sports/football/nfl/scoreboard
                       template: |
-                        {{ range .events }}
-                        {{ .name }} - {{ .status.type.shortDetail }}
-                        {{ end }}
+                        {{ "{{" }} range .events {{ "}}" }}
+                        {{ "{{" }} .name {{ "}}" }} - {{ "{{" }} .status.type.shortDetail {{ "}}" }}
+                        {{ "{{" }} end {{ "}}" }}
 
             - name: Network
               columns:
@@ -289,9 +333,18 @@
                         Authorization: "Basic ${OPNSENSE_API_CREDENTIALS}"
                       allow-insecure: true
                       template: |
-                        Total Queries: {{ .data.total.num.queries }}
-                        Cache Hits: {{ .data.total.num.cachehits }}
-                        Blocked: {{ .data.total.num.zero_ttl }}
+                        Total Queries: {{ "{{" }} .data.total.num.queries {{ "}}" }}
+                        Cache Hits: {{ "{{" }} .data.total.num.cachehits {{ "}}" }}
+                        Blocked: {{ "{{" }} .data.total.num.zero_ttl {{ "}}" }}
+
+            - name: Storage
+              columns:
+                - size: full
+                  widgets:
+                    - type: iframe
+                      title: Synology NAS Dashboard
+                      source: http://192.168.40.10:3030/d/synology-nas/synology-nas?orgId=1&kiosk&refresh=30s
+                      height: 800
         mode: '0644'
 
     - name: Create environment file for secrets
@@ -307,8 +360,8 @@
       copy:
         dest: "{{ glance_path }}/docker-compose.yml"
         content: |
-          version: '3.8'
-
+          # Glance v0.7.0+ requires config directory mount (not single file)
+          # See: https://github.com/glanceapp/glance/blob/main/docs/v0.7.0-upgrade.md
           services:
             glance:
               image: glanceapp/glance:latest
@@ -317,17 +370,21 @@
               ports:
                 - "{{ glance_port }}:8080"
               volumes:
-                - {{ glance_path }}/config/glance.yml:/app/glance.yml:ro
-                - {{ glance_path }}/assets:/app/assets:ro
+                - ./config:/app/config
+                - ./assets:/app/assets:ro
+                - /etc/timezone:/etc/timezone:ro
+                - /etc/localtime:/etc/localtime:ro
               env_file:
                 - .env
+              environment:
+                - TZ=America/New_York
         mode: '0644'
 
     - name: Deploy Glance container
-      community.docker.docker_compose:
+      community.docker.docker_compose_v2:
         project_src: "{{ glance_path }}"
         state: present
-        pull: yes
+        pull: always
 
     - name: Wait for Glance to be ready
       uri:
@@ -358,6 +415,7 @@
           - Arr Stack Download Progress
           - OPNsense Unbound Statistics
           - Tech News from Reddit
+          - Synology NAS Monitoring (Storage page - embedded Grafana)
 
           Configuration: {{ glance_path }}/config/glance.yml
           Secrets: {{ glance_path }}/.env
