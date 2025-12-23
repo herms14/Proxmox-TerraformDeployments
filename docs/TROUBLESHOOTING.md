@@ -717,6 +717,49 @@ ssh hermes-admin@192.168.40.10 "curl -s -o /dev/null -w '%{http_code}' http://19
 
 ---
 
+### Glance Bookmark Icons Not Displaying (Arr Stack)
+
+**Resolved**: December 23, 2025
+
+**Symptoms**: Several icons in the Media Apps bookmarks show as placeholder squares or missing:
+- Lidarr, Prowlarr, Bazarr, Jellyseerr, Tdarr icons not loading
+
+**Root Cause**: Simple Icons (`si:`) prefix works for some icons but not all. Some icons may not exist in Simple Icons or have different slug names.
+
+**Fix**: Replace `si:` icons with Dashboard Icons URLs (more reliable):
+```bash
+# Fix Lidarr icon
+ssh hermes-admin@192.168.40.10 'sudo sed -i "s|icon: si:lidarr|icon: https://cdn.jsdelivr.net/gh/walkxcode/dashboard-icons/png/lidarr.png|g" /opt/glance/config/glance.yml'
+
+# Fix Prowlarr icon
+ssh hermes-admin@192.168.40.10 'sudo sed -i "s|icon: si:prowlarr|icon: https://cdn.jsdelivr.net/gh/walkxcode/dashboard-icons/png/prowlarr.png|g" /opt/glance/config/glance.yml'
+
+# Fix Bazarr icon
+ssh hermes-admin@192.168.40.10 'sudo sed -i "s|icon: si:bazarr|icon: https://cdn.jsdelivr.net/gh/walkxcode/dashboard-icons/png/bazarr.png|g" /opt/glance/config/glance.yml'
+
+# Fix Jellyseerr icon
+ssh hermes-admin@192.168.40.10 'sudo sed -i "s|icon: si:jellyseerr|icon: https://cdn.jsdelivr.net/gh/walkxcode/dashboard-icons/png/jellyseerr.png|g" /opt/glance/config/glance.yml'
+
+# Fix Tdarr icon
+ssh hermes-admin@192.168.40.10 'sudo sed -i "s|icon: si:tdarr|icon: https://cdn.jsdelivr.net/gh/walkxcode/dashboard-icons/png/tdarr.png|g" /opt/glance/config/glance.yml'
+
+# Restart Glance
+ssh hermes-admin@192.168.40.10 'cd /opt/glance && sudo docker compose restart'
+```
+
+**Icon Sources for Glance**:
+| Source | Format | Example |
+|--------|--------|---------|
+| Simple Icons | `si:iconname` | `si:radarr` |
+| Material Design | `mdi:iconname` | `mdi:home` |
+| Dashboard Icons | Full URL | `https://cdn.jsdelivr.net/gh/walkxcode/dashboard-icons/png/radarr.png` |
+
+**Dashboard Icons Repository**: https://github.com/walkxcode/dashboard-icons
+
+**Prevention**: For arr stack apps, prefer Dashboard Icons URLs as they are consistently maintained and display correctly.
+
+---
+
 ## Network Issues
 
 ### VLAN-Aware Bridge Missing

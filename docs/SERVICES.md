@@ -87,10 +87,32 @@ ssh hermes-admin@192.168.40.20 "cd /opt/traefik && sudo docker compose restart"
 ### Storage
 
 - Config: `/opt/arr-stack/` (local)
-- Media: `/mnt/media/` (NFS)
-  - Movies: `/mnt/media/Movies`
-  - Series: `/mnt/media/Series`
-  - Music: `/mnt/media/Music`
+- Media: `/mnt/media/` (NFS) - Unified mount for all services
+
+**Unified Path Structure** (Updated December 23, 2025):
+
+All arr-stack services use a unified `/data` mount inside containers pointing to `/mnt/media` on the host. This enables hardlinks and consistent paths across all services.
+
+| Host Path | Container Path | Purpose |
+|-----------|----------------|---------|
+| `/mnt/media` | `/data` | Unified media mount (Radarr, Sonarr, Lidarr, Deluge, SABnzbd) |
+| `/mnt/media/Movies` | `/data/Movies` | Movie library (Radarr root folder) |
+| `/mnt/media/Series` | `/data/Series` | TV library (Sonarr root folder) |
+| `/mnt/media/Music` | `/data/Music` | Music library (Lidarr root folder) |
+| `/mnt/media/Completed` | `/data/Completed` | Download client completed folder |
+| `/mnt/media/Downloading` | `/data/Downloading` | Active downloads |
+| `/mnt/media/Incomplete` | `/data/Incomplete` | Incomplete downloads |
+
+**App Path Configuration**:
+
+| App | Root Folder | Download Path |
+|-----|-------------|---------------|
+| Radarr | `/data/Movies` | `/data/Completed` |
+| Sonarr | `/data/Series` | `/data/Completed` |
+| Lidarr | `/data/Music` | `/data/Completed` |
+| Bazarr | `/data/Movies`, `/data/Series` | N/A |
+| Deluge | N/A | `/data/Completed` |
+| SABnzbd | N/A | `/data/Completed` |
 
 ### Inter-App Connections
 
@@ -116,10 +138,10 @@ ssh hermes-admin@192.168.40.20 "cd /opt/traefik && sudo docker compose restart"
 - Default password: `deluge` (change immediately)
 - Enable label plugin for category support
 - Ports: 8112 (web), 6881 (incoming TCP/UDP)
-- Download paths (NFS mounted):
-  - Downloading: `/downloads/downloading`
-  - Completed: `/downloads/completed`
-  - Incomplete: `/downloads/incomplete`
+- Download paths (unified `/data` mount):
+  - Downloading: `/data/Downloading`
+  - Completed: `/data/Completed`
+  - Incomplete: `/data/Incomplete`
 
 **SABnzbd** (Usenet):
 - Web UI: http://192.168.40.11:8081 | https://sabnzbd.hrmsmrflrii.xyz
@@ -127,21 +149,22 @@ ssh hermes-admin@192.168.40.20 "cd /opt/traefik && sudo docker compose restart"
 - Add Usenet server credentials in Config
 - Get API key from Config → General → Security
 - Configure categories: `radarr`, `sonarr`, `lidarr`
-- Download paths (NFS mounted):
-  - Temporary: `/downloads/incomplete`
-  - Completed: `/downloads/complete`
-  - Downloading: `/downloads/downloading`
+- Download paths (unified `/data` mount):
+  - Temporary: `/data/Incomplete`
+  - Completed: `/data/Completed`
+  - Downloading: `/data/Downloading`
 
 ### Download Storage (NFS)
 
-Both download clients store files on the NAS via NFS mounts:
+All media services use a unified NFS mount for hardlink support:
 
-| Container Path | NAS Location |
-|---------------|--------------|
-| `/downloads/completed` (deluge) | NAS:/MediaFiles/Completed |
-| `/downloads/complete` (sabnzbd) | NAS:/MediaFiles/Completed |
-| `/downloads/downloading` | NAS:/MediaFiles/Downloading |
-| `/downloads/incomplete` | NAS:/MediaFiles/Incomplete |
+| Container Path | Host Path | NAS Location |
+|---------------|-----------|--------------|
+| `/data/Completed` | `/mnt/media/Completed` | NAS:/MediaFiles/Completed |
+| `/data/Downloading` | `/mnt/media/Downloading` | NAS:/MediaFiles/Downloading |
+| `/data/Incomplete` | `/mnt/media/Incomplete` | NAS:/MediaFiles/Incomplete |
+| `/data/Movies` | `/mnt/media/Movies` | NAS:/MediaFiles/Movies |
+| `/data/Series` | `/mnt/media/Series` | NAS:/MediaFiles/Series |
 
 ### API Keys
 
@@ -479,6 +502,7 @@ ssh hermes-admin@192.168.40.10 "cd /opt/speedtest-tracker && sudo docker compose
 | Port | URL | Purpose |
 |------|-----|---------|
 | 8080 | http://192.168.40.10:8080 | Dashboard |
+| 5054 | http://192.168.40.10:5054 | Media Stats API |
 | 443 | https://glance.hrmsmrflrii.xyz | Via Traefik |
 
 ### Features
@@ -491,16 +515,32 @@ ssh hermes-admin@192.168.40.10 "cd /opt/speedtest-tracker && sudo docker compose
 - Network device monitoring
 - Life Progress widget with API integration
 - Synology NAS monitoring (embedded Grafana)
+- **Media Stats Grid** - Radarr/Sonarr stats in colorful 3x2 tile grid
 
 ### Pages
 
 | Page | Widgets |
 |------|---------|
 | Home | Life Progress, Service Health, K8s Cluster, Markets, RSS |
-| Media | Arr Stack Downloads, Radarr Calendar, Media Bookmarks |
+| Media | **Media Stats Grid**, Recent Movies, RSS Feeds, Media Bookmarks |
 | Sports | NBA Scores, NFL Scores |
 | Network | Network Devices, OPNsense Unbound Stats |
 | Storage | Synology NAS Dashboard (iframe) |
+| Containers | Container Monitoring (iframe) |
+| Reddit | Dynamic Reddit Feed (via Reddit Manager) |
+
+### Media Stats API
+
+Aggregates Radarr and Sonarr statistics for the dashboard grid widget.
+
+| Endpoint | Purpose |
+|----------|---------|
+| `/api/stats` | Combined media statistics |
+| `/health` | Health check |
+
+Location: `/opt/media-stats-api/`
+
+See [GLANCE.md](./GLANCE.md) for detailed implementation guide.
 
 ### Storage
 

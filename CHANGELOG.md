@@ -7,8 +7,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- **Glance Dashboard Icons** - Replaced broken `si:` icons with Dashboard Icons URLs for Lidarr, Prowlarr, Bazarr, Jellyseerr, and Tdarr
+- **SABnzbd Health Monitor** - Corrected port from 8082 to 8081 in Glance config
+- **Arr Stack Path Mapping** - Added additional volume mappings for download client compatibility:
+  - `/mnt/media/Completed:/downloads/complete`
+  - `/mnt/media/Movies:/movies`
+  - `/mnt/media/Series:/tv`
+
+### Added
+- **Media Page Enhancements** - "Now Showing" widget with recent downloads and poster covers
+- **Download Progress Widget** - Real-time download progress bars with ETA
+- Media Stats API endpoints: `/api/recent` and `/api/queue`
+
 ### Changed
 - Updated `.claude/settings.local.json`
+
+### Documentation
+- Added Glance icon troubleshooting guide to TROUBLESHOOTING.md
+- Documented Dashboard Icons as preferred icon source for arr stack apps
 
 ## [2025-12-23] - Glance Dashboard Home Page Configuration
 
@@ -335,6 +352,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 [Unreleased]: https://github.com/herms14/Proxmox-TerraformDeployments/compare/v2025-12-23...HEAD
 [2025-12-23]: https://github.com/herms14/Proxmox-TerraformDeployments/compare/v2025-12-19...v2025-12-23
 [2025-12-19]: https://github.com/herms14/Proxmox-TerraformDeployments/compare/v2025-12-16...v2025-12-19
-[2025-12-16]: https://github.com/yourusername/tf-proxmox/compare/v2025-12-15...v2025-12-16
-[2025-12-15]: https://github.com/yourusername/tf-proxmox/compare/v2025-12-14...v2025-12-15
-[2025-12-14]: https://github.com/yourusername/tf-proxmox/releases/tag/v2025-12-14
+[2025-12-16]: https://github.com/herms14/tf-proxmox/compare/v2025-12-15...v2025-12-16
+[2025-12-15]: https://github.com/herms14/tf-proxmox/compare/v2025-12-14...v2025-12-15
+[2025-12-14]: https://github.com/herms14/tf-proxmox/releases/tag/v2025-12-14

@@ -8,6 +8,11 @@ This document provides detailed configuration guides for applications in the hom
 
 ## Table of Contents
 
+- [Arr Stack Path Configuration](#arr-stack-path-configuration)
+  - [Why Unified Paths](#why-unified-paths)
+  - [Path Structure](#path-structure)
+  - [App Configuration](#arr-stack-app-configuration)
+  - [Troubleshooting](#arr-stack-troubleshooting)
 - [Immich Photo Management](#immich-photo-management)
   - [Architecture Overview](#architecture-overview)
   - [Storage Configuration](#storage-configuration)
@@ -29,6 +34,207 @@ This document provides detailed configuration guides for applications in the hom
   - [Custom CSS Enhancements](#custom-css-enhancements)
   - [Adding a New Theme](#adding-a-new-theme)
   - [Theme Design Reference](#theme-design-reference)
+
+---
+
+## Arr Stack Path Configuration
+
+**Host**: docker-vm-media01 (192.168.40.11)
+**Configured**: December 23, 2025
+
+### Why Unified Paths
+
+The *arr stack (Radarr, Sonarr, Lidarr) and download clients (Deluge, SABnzbd) must share a common filesystem view for two critical reasons:
+
+1. **Hardlinks**: When Radarr/Sonarr imports a completed download, it can create a hardlink instead of copying. This saves disk space and is instant.
+
+2. **Atomic Moves**: Files can be moved instantly within the same filesystem instead of copy+delete operations.
+
+**The Problem (Before Fix)**:
+
+```
+Download clients used:  /mnt/media/Completed → /downloads/completed
+Radarr/Sonarr used:     /opt/arr-stack/downloads → /downloads
+```
+
+These were different host paths, so Radarr/Sonarr couldn't see completed downloads.
+
+**The Solution (After Fix)**:
+
+```
+All services use:       /mnt/media → /data
+```
+
+Now all services share the same filesystem view and hardlinks work.
+
+### Path Structure
+
+**Host Directory Layout** (`/mnt/media/` on docker-vm-media01):
+
+```
+/mnt/media/                    # NFS mount from Synology NAS
+├── Completed/                 # Download clients put finished files here
+├── Downloading/               # Active downloads
+├── Incomplete/                # Partial downloads
+├── Movies/                    # Radarr organizes movies here
+├── Series/                    # Sonarr organizes TV here
+├── Music/                     # Lidarr organizes music here
+└── downloads/                 # Legacy folder (unused)
+```
+
+**Container Volume Mappings**:
+
+| Service | Volume Mount | Container View |
+|---------|--------------|----------------|
+| Radarr | `/mnt/media:/data` | `/data/Movies`, `/data/Completed` |
+| Sonarr | `/mnt/media:/data` | `/data/Series`, `/data/Completed` |
+| Lidarr | `/mnt/media:/data` | `/data/Music`, `/data/Completed` |
+| Bazarr | `/mnt/media:/data` | `/data/Movies`, `/data/Series` |
+| Deluge | `/mnt/media:/data` | `/data/Completed`, `/data/Downloading` |
+| SABnzbd | `/mnt/media:/data` | `/data/Completed`, `/data/Downloading` |
+| Jellyfin | `/mnt/media/Movies:/data/movies:ro`<br>`/mnt/media/Series:/data/tvshows:ro` | Read-only media access |
+
+### Arr Stack App Configuration
+
+After deploying with unified paths, configure each app:
+
+#### Radarr Configuration
+
+1. **Settings → Media Management → Root Folders**
+   - Delete old root folder if exists
+   - Add: `/data/Movies`
+
+2. **Settings → Download Clients → Deluge/SABnzbd**
+   - Remote Path Mapping: NOT needed (same paths)
+
+3. **Settings → Download Clients → Category**
+   - Set category to `radarr`
+
+#### Sonarr Configuration
+
+1. **Settings → Media Management → Root Folders**
+   - Delete old root folder if exists
+   - Add: `/data/Series`
+
+2. **Settings → Download Clients**
+   - Configure Deluge/SABnzbd with no remote path mapping
+
+3. **Settings → Download Clients → Category**
+   - Set category to `sonarr`
+
+#### Lidarr Configuration
+
+1. **Settings → Media Management → Root Folders**
+   - Add: `/data/Music`
+
+2. **Settings → Download Clients**
+   - Configure with category `lidarr`
+
+#### Deluge Configuration
+
+1. **Preferences → Downloads**
+   - Download to: `/data/Downloading`
+   - Move completed to: `/data/Completed`
+
+2. **Enable Label Plugin**
+   - Used for category-based organization
+
+#### SABnzbd Configuration
+
+1. **Config → Folders**
+   - Temporary Download Folder: `/data/Incomplete`
+   - Completed Download Folder: `/data/Completed`
+
+2. **Config → Categories**
+   - Add categories: `radarr`, `sonarr`, `lidarr`
+   - Each pointing to `/data/Completed`
+
+### Arr Stack Troubleshooting
+
+#### Issue: Jellyfin Shows No Movies/TV Shows
+
+**Resolved**: December 23, 2025
+
+**Symptoms**:
+- Jellyfin web UI loads but shows "Library folder is inaccessible or empty"
+- Media files exist in `/mnt/media/Completed/` but not in `/mnt/media/Movies/`
+
+**Root Cause**: Path mismatch between download clients and *arr apps. Download clients put files in `/mnt/media/Completed` but Radarr/Sonarr were configured to look at `/opt/arr-stack/downloads` (a different host path).
+
+**Diagnosis**:
+```bash
+# Check Jellyfin logs
+ssh hermes-admin@192.168.40.11 "docker logs jellyfin 2>&1 | grep -i 'inaccessible\|empty'"
+
+# Check where downloads are
+ssh hermes-admin@192.168.40.11 "ls -la /mnt/media/"
+
+# Check Radarr/Sonarr container mounts
+ssh hermes-admin@192.168.40.11 "docker inspect radarr --format '{{range .Mounts}}{{.Source}} -> {{.Destination}}{{println}}{{end}}'"
+```
+
+**Fix**:
+
+1. Update `/opt/arr-stack/docker-compose.yml` to use unified paths:
+   ```yaml
+   radarr:
+     volumes:
+       - /opt/arr-stack/radarr:/config
+       - /mnt/media:/data
+
+   sonarr:
+     volumes:
+       - /opt/arr-stack/sonarr:/config
+       - /mnt/media:/data
+
+   deluge:
+     volumes:
+       - /opt/arr-stack/deluge:/config
+       - /mnt/media:/data
+   ```
+
+2. Recreate containers:
+   ```bash
+   ssh hermes-admin@192.168.40.11 "cd /opt/arr-stack && sudo docker compose down && sudo docker compose up -d"
+   ```
+
+3. Reconfigure each app with new paths (see App Configuration above)
+
+4. Trigger manual import in Radarr/Sonarr for existing downloads
+
+**Verification**:
+```bash
+# Check Radarr can see completed downloads
+ssh hermes-admin@192.168.40.11 "docker exec radarr ls /data/Completed/"
+
+# Check Jellyfin can see movies
+ssh hermes-admin@192.168.40.11 "docker exec jellyfin ls /data/movies/"
+```
+
+**Prevention**: Always use unified `/data` mount for all *arr stack services. Never use separate mount paths for download clients vs media managers.
+
+---
+
+#### Issue: Hardlinks Not Working (Copy Instead of Instant Move)
+
+**Symptoms**:
+- Import takes a long time (copying instead of instant)
+- Disk usage doubles during import
+- Radarr/Sonarr logs show "copy" instead of "hardlink"
+
+**Root Cause**: Source and destination are on different filesystems (different mount points).
+
+**Diagnosis**:
+```bash
+# Check if paths are on same filesystem
+ssh hermes-admin@192.168.40.11 "df /mnt/media/Completed /mnt/media/Movies"
+# Should show SAME filesystem for both
+
+# Check Radarr logs for copy vs hardlink
+ssh hermes-admin@192.168.40.11 "docker logs radarr 2>&1 | grep -i 'hardlink\|copy'"
+```
+
+**Fix**: Ensure all paths use the same NFS mount (`/mnt/media`). The unified `/data` configuration solves this.
 
 ---
 
