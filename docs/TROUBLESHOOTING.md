@@ -12,6 +12,7 @@ This guide documents resolved issues and common problems organized by category f
 - [Kubernetes Issues](#kubernetes-issues)
 - [Authentication Issues](#authentication-issues)
 - [Container & Docker Issues](#container--docker-issues)
+  - [Jellyfin Shows Fewer Movies Than Download Monitor](#jellyfin-shows-fewer-movies-than-download-monitor)
   - [Glance Reddit Widget Timeout Error](#glance-reddit-widget-timeout-error)
   - [Glance Template Error - Wrong Number of Args](#glance-template-error---wrong-number-of-args)
 - [Service-Specific Issues](#service-specific-issues)
@@ -267,6 +268,118 @@ curl -s -k -o /dev/null -w "%{http_code}" https://grafana.hrmsmrflrii.xyz
 1. Always assign new proxy providers to the Embedded Outpost in Authentik Admin UI
 2. Include outpost assignment in blueprints
 3. Verify outpost has providers assigned before testing
+
+---
+
+### Authentik "Permission Denied - Internal Users Only"
+
+**Resolved**: December 24, 2025
+
+**Symptoms**: User logs in via Google/GitHub OAuth and sees "Permission denied - Interface can only be accessed by internal users"
+
+**Root Cause**: OAuth sources create users with `type=external` by default. The Authentik Admin Interface (`/if/admin/`) is restricted to internal users by design.
+
+**Understanding User Types**:
+| User Type | App Access | Admin UI Access |
+|-----------|------------|-----------------|
+| `internal` | ✅ Yes | ✅ Yes |
+| `external` | ✅ Yes | ❌ No |
+
+**Note**: External users CAN access regular applications (Grafana, Jellyfin, etc.) - this restriction only applies to the Authentik Admin Interface.
+
+**Diagnosis**:
+```bash
+ssh hermes-admin@192.168.40.21 "sudo docker exec authentik-server ak shell -c \"
+from authentik.core.models import User
+for u in User.objects.all():
+    print(f'{u.username}: type={u.type}')
+\""
+```
+
+**Fix** (if user needs admin access):
+```bash
+ssh hermes-admin@192.168.40.21 "sudo docker exec authentik-server ak shell -c \"
+from authentik.core.models import User
+user = User.objects.get(username='USERNAME_HERE')
+user.type = 'internal'
+user.save()
+print(f'Changed {user.username} to internal')
+\""
+```
+
+**Verification**: User can now access https://auth.hrmsmrflrii.xyz/if/admin/
+
+**Note**: Only change users to `internal` if they need admin access. Regular app users should remain `external` for security.
+
+---
+
+### Jellyfin SSO Button Not Showing on Login Page
+
+**Resolved**: December 24, 2025
+
+**Symptoms**: Jellyfin login page shows only username/password fields, no "Sign in with Authentik" button despite SSO-Auth plugin being installed and configured.
+
+**Root Cause**: The SSO-Auth plugin does not automatically add a login button to the Jellyfin login page. The button must be manually added via Jellyfin's Branding settings.
+
+**Fix**: Add SSO button via Jellyfin Dashboard:
+
+1. Navigate to **Dashboard → General → Branding**
+2. In the **"Login disclaimer"** field, add:
+```html
+<a href="/sso/OID/start/authentik" style="display: block; width: 100%; padding: 12px; margin-top: 10px; background-color: #00a4dc; color: white; text-align: center; text-decoration: none; border-radius: 4px; font-weight: bold;">Sign in with Authentik</a>
+```
+3. Click **Save**
+
+**Verification**: Refresh Jellyfin login page - "Sign in with Authentik" button should appear below the password field.
+
+**Note**: The button URL `/sso/OID/start/authentik` must match your provider name configured in SSO-Auth plugin settings.
+
+---
+
+### Jellyfin SSO invalid_grant Error
+
+**Resolved**: December 24, 2025
+
+**Symptoms**: After clicking "Sign in with Authentik", user is redirected to Authentik, logs in successfully, but upon redirect back to Jellyfin sees:
+```
+Error logging in: Error redeeming code: invalid_grant
+The provided authorization grant or refresh token is invalid, expired, revoked,
+does not match the redirection URI used in the authorization request,
+or was issued to another client
+```
+
+**Root Cause**: Scheme mismatch during OAuth token exchange. Jellyfin behind Traefik reverse proxy doesn't know it's being accessed via HTTPS, so it generates `http://` redirect URIs during token exchange while the authorization was done with `https://`.
+
+**Diagnosis**:
+```bash
+# Verify redirect URIs in Authentik match both HTTP and HTTPS
+ssh hermes-admin@192.168.40.21 "sudo docker exec authentik-server ak shell -c \"
+from authentik.providers.oauth2.models import OAuth2Provider
+provider = OAuth2Provider.objects.get(name='jellyfin-provider')
+print(provider.redirect_uris)
+\""
+```
+
+**Fix**: Configure Scheme Override in SSO-Auth plugin:
+
+1. Navigate to **Jellyfin Dashboard → Plugins → SSO-Auth → Settings**
+2. In the provider dropdown, select your provider (e.g., "authentik")
+3. Click **"Load Provider"**
+4. Scroll down to find **"Scheme Override"** field
+5. Set to: `https`
+6. Click **"Save Provider"**
+7. Restart Jellyfin container:
+```bash
+ssh hermes-admin@192.168.40.11 "docker restart jellyfin"
+```
+
+**Verification**:
+1. Open Jellyfin login page
+2. Click "Sign in with Authentik"
+3. Complete Authentik login
+4. Should redirect back to Jellyfin and be logged in successfully
+
+**Prevention**: Always configure Scheme Override to `https` for services behind reverse proxies that terminate TLS.
 
 ---
 
@@ -713,6 +826,128 @@ ssh hermes-admin@192.168.40.23 "sudo docker exec gitlab gitlab-ctl reconfigure"
 ```bash
 ssh hermes-admin@192.168.40.10 "curl -s -o /dev/null -w '%{http_code}' http://192.168.40.23/users/sign_in"
 # Should return: 200
+```
+
+---
+
+### Jellyfin Shows Fewer Movies Than Download Monitor
+
+**Resolved**: December 24, 2025
+
+**Symptoms**:
+- Download Monitor (Discord bot) shows several movies downloaded
+- Jellyfin only shows 5 movies in library
+- Movies visible in `/mnt/media/Completed/` but not in `/mnt/media/Movies/`
+- Jellyfin logs show: `Library folder /data/movies is inaccessible or empty, skipping`
+
+**Root Causes (Multiple Issues)**:
+
+1. **Docker Volume Mount Failure**: Jellyfin's `/data/movies` mount wasn't active despite being configured in docker-compose.yml. This was caused by nested bind mounts over NFS not initializing properly.
+
+2. **Dual Root Folders in Radarr**: Two root folders configured (`/data/Movies` and `/movies`) causing inconsistent import paths. Some movies imported to one path, others to another.
+
+3. **Missing SABnzbd Remote Path Mapping**: Only Deluge had remote path mapping configured. SABnzbd downloads weren't being tracked properly for automatic import.
+
+4. **Stuck Radarr Command**: `ProcessMonitoredDownloads` command was stuck in "started" state, blocking other operations including manual imports.
+
+**Diagnosis**:
+```bash
+# Check Jellyfin container mounts
+ssh hermes-admin@192.168.40.11 "docker exec jellyfin ls -la /data/movies"
+# Returns: "No such file or directory" = mount not active
+
+# Check Radarr root folders
+ssh hermes-admin@192.168.40.11 "curl -s 'http://localhost:7878/api/v3/rootfolder' -H 'X-Api-Key: YOUR_KEY' | jq '.[] | {id, path}'"
+# Shows both /data/Movies AND /movies = dual root folder issue
+
+# Check remote path mappings
+ssh hermes-admin@192.168.40.11 "curl -s 'http://localhost:7878/api/v3/remotepathmapping' -H 'X-Api-Key: YOUR_KEY' | jq"
+# Missing SABnzbd mapping
+
+# Check for stuck commands
+ssh hermes-admin@192.168.40.11 "curl -s 'http://localhost:7878/api/v3/command?pageSize=10' -H 'X-Api-Key: YOUR_KEY' | jq '.[] | {name, status}'"
+```
+
+**Fix - Step 1: Recreate Jellyfin Container**:
+```bash
+ssh hermes-admin@192.168.40.11 "cd /opt/arr-stack && sudo docker compose up -d --force-recreate jellyfin"
+```
+
+**Fix - Step 2: Add SABnzbd Remote Path Mapping**:
+```bash
+ssh hermes-admin@192.168.40.11 'curl -s -X POST "http://localhost:7878/api/v3/remotepathmapping" \
+  -H "X-Api-Key: YOUR_KEY" \
+  -H "Content-Type: application/json" \
+  -d "{\"host\":\"192.168.40.11\",\"remotePath\":\"/data/Completed/\",\"localPath\":\"/data/Completed/\"}"'
+```
+
+**Fix - Step 3: Consolidate Root Folders**:
+```bash
+# Update all movies to use /data/Movies path (Python script)
+ssh hermes-admin@192.168.40.11 'cat > /tmp/fix_paths.py << '\''PYEOF'\''
+import requests
+API_KEY = "YOUR_KEY"
+BASE_URL = "http://localhost:7878/api/v3"
+HEADERS = {"X-Api-Key": API_KEY, "Content-Type": "application/json"}
+
+movies = requests.get(f"{BASE_URL}/movie", headers=HEADERS).json()
+for movie in movies:
+    if movie["path"].startswith("/movies/"):
+        movie["path"] = movie["path"].replace("/movies/", "/data/Movies/")
+        movie["folderName"] = movie["path"]
+        movie["rootFolderPath"] = "/data/Movies"
+        requests.put(f"{BASE_URL}/movie/{movie[\"id\"]}?moveFiles=false", headers=HEADERS, json=movie)
+        print(f"Updated: {movie[\"title\"]}")
+PYEOF
+python3 /tmp/fix_paths.py'
+
+# Delete legacy root folder
+ssh hermes-admin@192.168.40.11 'curl -s -X DELETE "http://localhost:7878/api/v3/rootfolder/3" -H "X-Api-Key: YOUR_KEY"'
+```
+
+**Fix - Step 4: Restart Radarr to Clear Stuck Commands**:
+```bash
+ssh hermes-admin@192.168.40.11 "docker restart radarr"
+```
+
+**Fix - Step 5: Trigger Manual Import for Orphaned Downloads**:
+```bash
+ssh hermes-admin@192.168.40.11 'curl -s -X POST "http://localhost:7878/api/v3/command" \
+  -H "X-Api-Key: YOUR_KEY" \
+  -H "Content-Type: application/json" \
+  -d "{\"name\":\"DownloadedMoviesScan\"}"'
+```
+
+**Verification**:
+```bash
+# Verify Jellyfin sees movies
+ssh hermes-admin@192.168.40.11 "docker exec jellyfin ls /data/movies/"
+
+# Verify single root folder
+ssh hermes-admin@192.168.40.11 "curl -s 'http://localhost:7878/api/v3/rootfolder' -H 'X-Api-Key: YOUR_KEY' | jq '.[] | .path'"
+# Should only show: /data/Movies
+
+# Verify movies have files
+ssh hermes-admin@192.168.40.11 "curl -s 'http://localhost:7878/api/v3/movie' -H 'X-Api-Key: YOUR_KEY' | jq '[.[] | select(.hasFile == true)] | length'"
+```
+
+**Prevention**:
+1. Use unified `/data` mount for all arr-stack services (documented in SERVICES.md)
+2. Configure remote path mappings for ALL download clients
+3. Use only ONE root folder per media type
+4. Avoid nested Docker bind mounts over NFS - use single parent mount
+5. Monitor Radarr commands for stuck operations
+
+**Configuration Best Practices (docker-compose.yml)**:
+```yaml
+# All arr-stack services should use the same unified mount
+volumes:
+  - /mnt/media:/data  # Single parent mount
+
+# NOT this (causes mount issues):
+volumes:
+  - /mnt/media:/data
+  - /mnt/media/Movies:/data/movies  # Nested mount - problematic!
 ```
 
 ---

@@ -37,6 +37,7 @@ This document provides detailed configuration guides for applications in the hom
 - [Authentik SSO Configuration](#authentik-sso-configuration)
   - [Overview](#authentik-overview)
   - [GitLab OIDC Integration](#gitlab-oidc-integration)
+  - [Jellyfin SSO Integration](#jellyfin-sso-integration)
   - [OAuth Sources](#oauth-sources)
   - [Application Dashboard Organization](#application-dashboard-organization)
   - [Troubleshooting](#authentik-troubleshooting)
@@ -1289,6 +1290,495 @@ The playbook (`ansible-playbooks/authentik/configure-gitlab-sso.yml`):
 2. Creates Application linked to provider
 3. Updates GitLab docker-compose with OmniAuth config
 4. Restarts and reconfigures GitLab
+
+### Jellyfin SSO Integration
+
+**Configured**: December 24, 2025
+**Purpose**: Allow users to log into Jellyfin using their Authentik account instead of separate Jellyfin credentials.
+
+#### What This Does (Non-Technical Explanation)
+
+Normally, when you want to watch movies on Jellyfin, you need to create a separate username and password just for Jellyfin. This is annoying because:
+- You have to remember yet another password
+- If you want to share Jellyfin with family, you need to create accounts for them manually
+- There's no way to use your Google/GitHub/Discord login
+
+**With SSO (Single Sign-On)**, you can click "Login with Authentik" on Jellyfin, and it will:
+1. Redirect you to the Authentik login page (where you can use Google, GitHub, Discord, or your regular password)
+2. After you log in, automatically create a Jellyfin account for you
+3. Log you into Jellyfin without typing any additional passwords
+
+**Benefits**:
+- One login for everything (Jellyfin, Grafana, GitLab, etc.)
+- Easier to give family/friends access (just add them to Authentik)
+- More secure (Authentik handles all the password security)
+
+#### How It Works (Technical Overview)
+
+```
+┌─────────────────┐     ┌──────────────────┐     ┌─────────────────┐
+│   User clicks   │     │    Authentik     │     │    Jellyfin     │
+│  "Login with    │────▶│   (Identity      │────▶│   (Creates      │
+│   Authentik"    │     │   Provider)      │     │   user account) │
+└─────────────────┘     └──────────────────┘     └─────────────────┘
+        │                       │                        │
+        │  1. Redirect to      │  3. Send user info    │
+        │     Authentik        │     back to Jellyfin  │
+        │                      │                        │
+        │  2. User logs in     │  4. Jellyfin creates  │
+        │     (Google/GitHub/  │     or finds user     │
+        │     Discord/password)│                        │
+```
+
+**Components Involved**:
+
+| Component | Purpose | Location |
+|-----------|---------|----------|
+| Jellyfin SSO-Auth Plugin | Adds OIDC login capability to Jellyfin | Installed in Jellyfin |
+| Authentik OAuth2 Provider | Issues authentication tokens | auth.hrmsmrflrii.xyz |
+| Traefik Route | Bypasses ForwardAuth for SSO callbacks | docker-vm-utilities01 |
+
+#### Step-by-Step Configuration
+
+##### Step 1: Install Jellyfin SSO-Auth Plugin
+
+The SSO-Auth plugin adds the ability for Jellyfin to accept logins from external identity providers like Authentik.
+
+**Via Jellyfin Admin Dashboard**:
+1. Go to https://jellyfin.hrmsmrflrii.xyz
+2. Log in as admin
+3. Click **Dashboard** (gear icon) → **Plugins** → **Catalog**
+4. Search for "SSO-Auth"
+5. Click **Install**
+6. Restart Jellyfin when prompted
+
+**What This Plugin Does**: It adds a new login method to Jellyfin. Instead of just username/password, users can click a button to log in through Authentik.
+
+##### Step 2: Create OAuth2 Provider in Authentik
+
+An OAuth2 Provider tells Authentik how to communicate with Jellyfin. It's like setting up a secure handshake between the two systems.
+
+**Via Authentik Admin Shell** (for automation):
+
+```bash
+# Connect to Authentik server and run Python commands
+ssh hermes-admin@192.168.40.21 "sudo docker exec authentik-server ak shell -c \"
+from authentik.providers.oauth2.models import OAuth2Provider
+from authentik.crypto.models import CertificateKeyPair
+from authentik.flows.models import Flow
+
+# Get the default authorization flow
+# (This flow handles the 'Do you want to allow this app?' screen)
+auth_flow = Flow.objects.get(slug='default-provider-authorization-implicit-consent')
+
+# Get the signing key for secure tokens
+signing_key = CertificateKeyPair.objects.get(name='authentik Self-signed Certificate')
+
+# Create the provider
+provider = OAuth2Provider.objects.create(
+    name='jellyfin-provider',
+    authorization_flow=auth_flow,
+    client_type='confidential',
+    client_id='0P0onx9x6xxYozLO58DzLLAKguC9SQPrTtyVFMtu',
+    client_secret='YOUR_GENERATED_SECRET_HERE',
+    signing_key=signing_key,
+    sub_mode='hashed_user_id',
+    include_claims_in_id_token=True,
+    issuer_mode='per_provider'
+)
+print(f'Created provider: {provider.name}')
+print(f'Client ID: {provider.client_id}')
+\""
+```
+
+**What Each Setting Means**:
+
+| Setting | Purpose | Non-Technical Explanation |
+|---------|---------|---------------------------|
+| `name` | Internal name for this provider | Just a label so we know what it's for |
+| `authorization_flow` | Which screens the user sees | Uses the "implicit consent" flow (no extra confirmation clicks) |
+| `client_type` | Security level | "Confidential" means it uses a secret key (more secure) |
+| `client_id` | Public identifier | Like a username - identifies Jellyfin to Authentik |
+| `client_secret` | Private key | Like a password - proves Jellyfin is really Jellyfin |
+| `signing_key` | Encryption certificate | Makes sure nobody can tamper with the login data |
+| `sub_mode` | User ID format | How Authentik identifies each user uniquely |
+
+##### Step 3: Create Authentik Application
+
+An Application in Authentik is the "entry point" - it tells Authentik "Jellyfin exists and is allowed to use login services."
+
+```bash
+ssh hermes-admin@192.168.40.21 "sudo docker exec authentik-server ak shell -c \"
+from authentik.core.models import Application
+from authentik.providers.oauth2.models import OAuth2Provider
+
+# Get the provider we just created
+provider = OAuth2Provider.objects.get(name='jellyfin-provider')
+
+# Create the application
+app = Application.objects.create(
+    name='Jellyfin',
+    slug='jellyfin',
+    provider=provider,
+    meta_launch_url='https://jellyfin.hrmsmrflrii.xyz',
+    meta_group='Media'
+)
+print(f'Created application: {app.name} (slug: {app.slug})')
+\""
+```
+
+**What This Creates**: An entry in Authentik's app list. Users will see "Jellyfin" on their Authentik dashboard, and clicking it will take them to Jellyfin.
+
+##### Step 4: Configure Redirect URIs
+
+Redirect URIs tell Authentik where to send users after they log in. This is a security feature - Authentik will only redirect to approved URLs.
+
+```bash
+ssh hermes-admin@192.168.40.21 "sudo docker exec authentik-server ak shell -c \"
+from authentik.providers.oauth2.models import OAuth2Provider, RedirectURI, RedirectURIMatchingMode
+
+provider = OAuth2Provider.objects.get(name='jellyfin-provider')
+
+# Set up all the URLs where Authentik can redirect users
+uris = [
+    # For the SSO plugin login callback
+    RedirectURI(
+        matching_mode=RedirectURIMatchingMode.STRICT,
+        url='https://jellyfin.hrmsmrflrii.xyz/sso/OID/redirect/authentik'
+    ),
+    # HTTP version (needed because Jellyfin is behind a reverse proxy)
+    RedirectURI(
+        matching_mode=RedirectURIMatchingMode.STRICT,
+        url='http://jellyfin.hrmsmrflrii.xyz/sso/OID/redirect/authentik'
+    ),
+]
+provider.redirect_uris = uris
+provider.save()
+print('Redirect URIs configured')
+\""
+```
+
+**Why Both HTTP and HTTPS?**: Jellyfin runs behind Traefik (reverse proxy). From Jellyfin's perspective, it receives HTTP requests (Traefik handles the HTTPS). So when Jellyfin generates the callback URL, it uses HTTP. We add both to be safe.
+
+##### Step 5: Create Groups Scope Mapping
+
+Scope mappings tell Authentik what information to send to Jellyfin. The "groups" scope sends the user's group memberships, which Jellyfin uses to decide admin privileges.
+
+```bash
+ssh hermes-admin@192.168.40.21 "sudo docker exec authentik-server ak shell -c \"
+from authentik.providers.oauth2.models import OAuth2Provider, ScopeMapping
+
+# Create a mapping that sends group information
+groups_scope = ScopeMapping.objects.create(
+    name='Jellyfin Groups Mapping',
+    scope_name='groups',
+    description='Send user group memberships to Jellyfin',
+    expression='return {\\\"groups\\\": [group.name for group in request.user.ak_groups.all()]}'
+)
+
+# Add this scope to our provider
+provider = OAuth2Provider.objects.get(name='jellyfin-provider')
+provider.property_mappings.add(groups_scope)
+provider.save()
+print('Groups scope mapping created and assigned')
+\""
+```
+
+**What This Does**: When a user logs in, Authentik will include their group names (like "media-users", "authentik Admins") in the login data. Jellyfin can then use this to automatically make certain users admins.
+
+##### Step 6: Add Traefik Route for SSO Callback
+
+The SSO callback URL (`/sso/OID/redirect/authentik`) needs to bypass Authentik ForwardAuth protection. Otherwise, you'd need to log in to access the login callback - a chicken-and-egg problem!
+
+**Edit Traefik Configuration**:
+
+```bash
+ssh hermes-admin@192.168.40.10 "sudo nano /opt/traefik/config/dynamic/services.yml"
+```
+
+**Add this route** (before the main jellyfin route, with higher priority):
+
+```yaml
+# In the http.routers section:
+jellyfin-sso:
+  rule: Host(`jellyfin.hrmsmrflrii.xyz`) && PathPrefix(`/sso`)
+  service: jellyfin
+  entryPoints:
+    - websecure
+  priority: 100
+  tls:
+    certResolver: letsencrypt
+```
+
+**What This Does**:
+- `rule`: Match requests to jellyfin.hrmsmrflrii.xyz that start with `/sso`
+- `priority: 100`: Process this rule before the main Jellyfin rule (higher number = higher priority)
+- No `middlewares`: Unlike the main route, this one has NO ForwardAuth middleware
+
+**Reload Traefik**:
+
+```bash
+ssh hermes-admin@192.168.40.10 "cd /opt/traefik && sudo docker compose restart"
+```
+
+##### Step 7: Configure DNS Resolution in Jellyfin Container
+
+Jellyfin needs to contact Authentik to verify logins. But Docker containers have limited DNS - they can't resolve `auth.hrmsmrflrii.xyz`. We fix this by telling Docker the IP address.
+
+**Edit docker-compose.yml**:
+
+```bash
+ssh hermes-admin@192.168.40.11 "sudo nano /opt/arr-stack/docker-compose.yml"
+```
+
+**Add extra_hosts to Jellyfin service**:
+
+```yaml
+jellyfin:
+  image: jellyfin/jellyfin:latest
+  container_name: jellyfin
+  # ... other settings ...
+  extra_hosts:
+    - "auth.hrmsmrflrii.xyz:192.168.40.20"
+  # ... rest of config ...
+```
+
+**What This Does**: Adds an entry to Jellyfin's `/etc/hosts` file inside the container, so when Jellyfin tries to reach `auth.hrmsmrflrii.xyz`, it knows to go to `192.168.40.20`.
+
+**Also add to VM's hosts file** (for DNS resolution at the host level):
+
+```bash
+ssh hermes-admin@192.168.40.11 "echo '192.168.40.20 auth.hrmsmrflrii.xyz' | sudo tee -a /etc/hosts"
+```
+
+**Recreate Jellyfin container**:
+
+```bash
+ssh hermes-admin@192.168.40.11 "cd /opt/arr-stack && sudo docker compose up -d jellyfin"
+```
+
+##### Step 8: Configure Jellyfin SSO Plugin
+
+Now configure the SSO-Auth plugin in Jellyfin to use our Authentik provider.
+
+**Via Jellyfin Web UI**:
+
+1. Go to https://jellyfin.hrmsmrflrii.xyz
+2. Log in as admin
+3. Click **Dashboard** → **Plugins** → **SSO-Auth** → **Settings**
+
+**Fill in these settings**:
+
+| Field | Value | Explanation |
+|-------|-------|-------------|
+| Name of OpenID Provider | `authentik` | A name for this login method |
+| OpenID Endpoint | `https://auth.hrmsmrflrii.xyz/application/o/jellyfin/` | Authentik's OIDC discovery URL |
+| OpenID Client ID | `0P0onx9x6xxYozLO58DzLLAKguC9SQPrTtyVFMtu` | From Step 2 |
+| OpenID client secret | (your secret) | From Step 2 |
+| Enabled | ✓ Checked | Turns on this login method |
+| Enable Authorization by Plugin | ✓ Checked | Let plugin manage permissions |
+| Enable All Folders | ✓ Checked | Give users access to all libraries |
+| Admin Roles | `authentik Admins` | Users in this Authentik group become Jellyfin admins |
+| Role Claim | `groups` | Where to find group info in the login data |
+| Request Additional Scopes | `groups` | Ask Authentik to send group info |
+| **Scheme Override** | `https` | **CRITICAL**: Forces HTTPS redirect URIs (required behind reverse proxy) |
+
+4. Click **Save**
+5. **Restart Jellyfin** (required for plugin changes)
+
+```bash
+ssh hermes-admin@192.168.40.11 "cd /opt/arr-stack && sudo docker compose restart jellyfin"
+```
+
+##### Step 9: Add SSO Button to Jellyfin Login Page
+
+The SSO-Auth plugin does **not** automatically add a login button to Jellyfin's login page. You need to manually add it via Jellyfin's Branding settings.
+
+**Via Jellyfin Web UI**:
+
+1. Go to https://jellyfin.hrmsmrflrii.xyz
+2. Log in as admin
+3. Click **Dashboard** → **General** → **Branding**
+4. In the **"Login disclaimer"** field, add:
+
+```html
+<a href="/sso/OID/start/authentik" style="display: block; width: 100%; padding: 12px; margin-top: 10px; background-color: #00a4dc; color: white; text-align: center; text-decoration: none; border-radius: 4px; font-weight: bold;">Sign in with Authentik</a>
+```
+
+5. Click **Save**
+
+**What This Does**: Adds a styled "Sign in with Authentik" button below the password field on the Jellyfin login page. When clicked, it redirects to `/sso/OID/start/authentik` which triggers the SSO login flow.
+
+**Customization Options**:
+
+| Change | Modify |
+|--------|--------|
+| Button color | `background-color: #00a4dc` (Jellyfin blue) |
+| Button text | The text inside the `<a>` tag |
+| Provider name | The last part of the URL (must match plugin config) |
+
+#### Testing the SSO Login
+
+**Direct SSO Login URL**:
+```
+https://jellyfin.hrmsmrflrii.xyz/sso/OID/start/authentik
+```
+
+**What Should Happen**:
+1. Browser redirects to `auth.hrmsmrflrii.xyz` login page
+2. User logs in (Google, GitHub, Discord, or password)
+3. Browser redirects back to Jellyfin
+4. User is logged in! (new Jellyfin user created automatically if first login)
+
+**Verify from Command Line**:
+
+```bash
+# Check Jellyfin can reach Authentik's OIDC discovery
+ssh hermes-admin@192.168.40.11 "curl -s https://auth.hrmsmrflrii.xyz/application/o/jellyfin/.well-known/openid-configuration | head -5"
+```
+
+#### User Types and Permissions
+
+| Authentik Group | Jellyfin Role | Capabilities |
+|-----------------|---------------|--------------|
+| `authentik Admins` | Administrator | Full admin access, manage users, settings |
+| Any other group | Regular User | Watch content, manage own profile |
+| No group | Regular User | Watch content (if Enable All Folders is on) |
+
+#### Configuration Summary
+
+**Authentik Side**:
+
+| Item | Value |
+|------|-------|
+| Provider Name | `jellyfin-provider` |
+| Client ID | `0P0onx9x6xxYozLO58DzLLAKguC9SQPrTtyVFMtu` |
+| Application Slug | `jellyfin` |
+| OIDC Discovery URL | `https://auth.hrmsmrflrii.xyz/application/o/jellyfin/.well-known/openid-configuration` |
+| Redirect URIs | `https://jellyfin.hrmsmrflrii.xyz/sso/OID/redirect/authentik`<br>`http://jellyfin.hrmsmrflrii.xyz/sso/OID/redirect/authentik` |
+
+**Jellyfin Side**:
+
+| Item | Value |
+|------|-------|
+| Plugin | SSO-Auth v4.0.0.3 |
+| Provider Name | `authentik` |
+| Admin Role Mapping | `authentik Admins` group → Admin |
+| Default User Access | All libraries |
+
+**Infrastructure**:
+
+| Item | Value |
+|------|-------|
+| extra_hosts | `auth.hrmsmrflrii.xyz:192.168.40.20` |
+| Traefik Route | `jellyfin-sso` (bypasses ForwardAuth for `/sso` paths) |
+
+#### Troubleshooting Jellyfin SSO
+
+##### Issue: "Error processing request" on SSO Login
+
+**Symptoms**: Clicking the SSO login shows "Error processing request" on a black screen.
+
+**Root Cause**: Jellyfin container cannot reach Authentik (DNS or network issue).
+
+**Diagnosis**:
+```bash
+# Check Jellyfin logs
+ssh hermes-admin@192.168.40.11 "sudo docker logs jellyfin 2>&1 | grep -i 'error\|exception' | tail -10"
+
+# Test from inside container
+ssh hermes-admin@192.168.40.11 "sudo docker exec jellyfin curl -s https://auth.hrmsmrflrii.xyz/application/o/jellyfin/.well-known/openid-configuration | head -1"
+```
+
+**Fix**: Add `extra_hosts` to docker-compose.yml (see Step 7) and ensure host `/etc/hosts` has the entry.
+
+---
+
+##### Issue: "redirect_uri_mismatch" Error
+
+**Symptoms**: After logging in to Authentik, you see an error about redirect URI mismatch.
+
+**Root Cause**: The redirect URI Jellyfin sends doesn't match what's configured in Authentik.
+
+**Diagnosis**:
+```bash
+# Check what URIs are configured in Authentik
+ssh hermes-admin@192.168.40.21 "sudo docker exec authentik-server ak shell -c \"
+from authentik.providers.oauth2.models import OAuth2Provider
+p = OAuth2Provider.objects.get(name='jellyfin-provider')
+for uri in p.redirect_uris:
+    print(uri.url)
+\""
+```
+
+**Fix**: Ensure both HTTP and HTTPS versions of the redirect URI are configured (see Step 4).
+
+---
+
+##### Issue: User Created But No Library Access
+
+**Symptoms**: SSO login works, but user can't see any movies or TV shows.
+
+**Root Cause**: "Enable All Folders" not checked in SSO plugin settings.
+
+**Fix**:
+1. Go to Jellyfin Dashboard → Plugins → SSO-Auth → Settings
+2. Check "Enable All Folders"
+3. Save and restart Jellyfin
+
+---
+
+##### Issue: SSO Users Not Getting Admin Rights
+
+**Symptoms**: Users in "authentik Admins" group don't have admin access in Jellyfin.
+
+**Root Cause**: Admin Roles or Role Claim misconfigured.
+
+**Diagnosis**:
+- Verify user is in "authentik Admins" group in Authentik
+- Check "Admin Roles" field matches exactly: `authentik Admins`
+- Check "Role Claim" is set to `groups`
+- Check "Request Additional Scopes" includes `groups`
+
+**Fix**: Update SSO plugin settings and have user log out and back in.
+
+---
+
+##### Issue: SSO Button Not Appearing on Login Page
+
+**Resolved**: December 24, 2025
+
+**Symptoms**: Jellyfin login page shows only username/password fields, no SSO button.
+
+**Root Cause**: The SSO-Auth plugin does not automatically add a button. It must be manually added via Branding settings.
+
+**Fix**:
+1. Go to Dashboard → General → Branding
+2. Add SSO button HTML to "Login disclaimer" field (see Step 9)
+3. Click Save
+
+---
+
+##### Issue: invalid_grant Error After SSO Login
+
+**Resolved**: December 24, 2025
+
+**Symptoms**: After logging in via Authentik, redirected back to Jellyfin with:
+```
+Error logging in: Error redeeming code: invalid_grant
+The provided authorization grant or refresh token is invalid...
+```
+
+**Root Cause**: Scheme mismatch. Jellyfin behind reverse proxy generates HTTP redirect URIs, but authorization was done with HTTPS.
+
+**Fix**:
+1. In SSO-Auth plugin settings, set **Scheme Override** to `https`
+2. Save and restart Jellyfin
+3. Test SSO login again
+
+**Prevention**: Always configure Scheme Override to `https` for services behind TLS-terminating reverse proxies.
+
+---
 
 ### OAuth Sources
 
