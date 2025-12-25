@@ -7,25 +7,49 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-### Added - New Services Batch Deployment (December 2025)
-- **5 New Services** prepared for deployment on docker-vm-utilities01:
+### Fixed - Jellyfin SSO Redirect URI Error (December 25, 2025)
+- **Issue**: "Redirect URI Error" when clicking "Sign in with Authentik" on Jellyfin
+- **Root Cause**: Authentik provider had ForwardAuth redirect URIs (`/outpost.goauthentik.io/callback`) instead of SSO-Auth plugin URIs (`/sso/OID/redirect/authentik`)
+- **Fix**: Updated Authentik provider with correct redirect URIs:
+  - `https://jellyfin.hrmsmrflrii.xyz/sso/OID/redirect/authentik`
+  - `http://jellyfin.hrmsmrflrii.xyz/sso/OID/redirect/authentik` (for reverse proxy scheme mismatch)
+- **Documentation**: Added comprehensive troubleshooting guide in `docs/TROUBLESHOOTING.md` explaining:
+  - OAuth2 redirect URI security mechanism
+  - ForwardAuth vs SSO-Auth Plugin authentication methods
+  - Scheme mismatch problem with TLS-terminating reverse proxies
+
+### Fixed - Container Dashboard Top 5 Memory Sorting (December 25, 2025)
+- **Issue**: Top 5 Memory panels displayed unsorted (random order instead of highest to lowest)
+- **Root Cause**: Grafana `bargauge` visualization doesn't support value-based series sorting
+- **Fix**: Changed visualization from `bargauge` to `barchart` with:
+  - `instant: true` query for single values
+  - `reduce` transformation to convert time series
+  - `sortBy` transformation with descending order
+- Dashboard version updated to 15
+
+### Added - New Services Batch Deployment (December 25, 2025)
+- **4 New Services** deployed to docker-vm-utilities01:
   - **Lagident** (Port 9933) - Simple photo gallery with SQLite backend
-  - **Karakeep** (Port 3001) - AI-powered bookmark manager (formerly Hoarder)
+  - **Karakeep** (Port 3005) - AI-powered bookmark manager (formerly Hoarder)
   - **Wizarr** (Port 5690) - Jellyfin/Plex user invitation system
-  - **Feeds Fun** (Port 8001) - AI-powered RSS reader with tagging
-  - **Tracearr** (Port 3002) - Media request tracking and analytics
-- Ansible playbooks created for all services:
+  - **Tracearr** (Port 3002) - Media tracking and analytics
+- Traefik routes configured in `/opt/traefik/config/dynamic/new-services.yml`
+- Glance Home page updated with:
+  - New Services monitor (health checks for all 4 services)
+  - Bookmark entries: Lagident (Photos), Karakeep (Productivity), Wizarr (Media), Tracearr (Media)
+  - Dashboard icons from walkxcode/dashboard-icons
+- DNS entries added in OPNsense for all services
+- Ansible playbooks:
   - `ansible-playbooks/services/deploy-lagident.yml`
   - `ansible-playbooks/services/deploy-karakeep.yml`
   - `ansible-playbooks/services/deploy-wizarr.yml`
-  - `ansible-playbooks/services/deploy-feedsfun.yml`
   - `ansible-playbooks/services/deploy-tracearr.yml`
   - `ansible-playbooks/services/deploy-all-new-services.yml` (master playbook)
-- Traefik configuration: `ansible-playbooks/services/traefik-new-services.yml`
-- Glance dashboard update: `ansible-playbooks/services/update-glance-new-services.yml`
-- DNS configuration guide: `ansible-playbooks/services/configure-dns-new-services.yml`
-- Services skipped (not suitable for containerization):
-  - Simple Photo Gallery (static site generator, not a service)
+  - `ansible-playbooks/services/traefik-new-services.yml`
+  - `ansible-playbooks/services/update-glance-new-services.yml`
+- Services not deployed:
+  - Feeds Fun (no public Docker image - requires building from source)
+  - Simple Photo Gallery (static site generator)
   - Stonks Dashboard (no official Docker support)
   - Personal Management System (requires separate frontend repo)
 

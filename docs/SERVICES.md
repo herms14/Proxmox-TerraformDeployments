@@ -1324,7 +1324,7 @@ Container metrics displayed in Grafana at:
 **Host**: docker-vm-utilities01 (192.168.40.10)
 **Port**: 9933
 **URL**: https://lagident.hrmsmrflrii.xyz
-**Status**: Pending Deployment
+**Status**: Deployed December 25, 2025
 
 Simple, elegant photo gallery with SQLite backend.
 
@@ -1334,6 +1334,21 @@ Simple, elegant photo gallery with SQLite backend.
 | Platform | Go + Node.js |
 | Architecture | amd64, arm64 |
 
+### Storage
+
+- Config & Database: `/opt/lagident/`
+- Photos: `/opt/lagident/photos/`
+
+### Management
+
+```bash
+# View logs
+ssh hermes-admin@192.168.40.10 "docker logs lagident"
+
+# Update
+ssh hermes-admin@192.168.40.10 "cd /opt/lagident && sudo docker compose pull && sudo docker compose up -d"
+```
+
 **Ansible**: `ansible-playbooks/services/deploy-lagident.yml`
 
 ---
@@ -1341,15 +1356,15 @@ Simple, elegant photo gallery with SQLite backend.
 ### Karakeep - Bookmark Manager
 
 **Host**: docker-vm-utilities01 (192.168.40.10)
-**Port**: 3001
+**Port**: 3005
 **URL**: https://karakeep.hrmsmrflrii.xyz
-**Status**: Pending Deployment
+**Status**: Deployed December 25, 2025
 
 AI-powered bookmark and content manager (formerly Hoarder).
 
 | Component | Port | Purpose |
 |-----------|------|---------|
-| Karakeep | 3001 | Main application |
+| Karakeep | 3005 | Main application |
 | Meilisearch | 7700 | Full-text search |
 | Chrome | 9222 | Screenshot capture |
 
@@ -1358,6 +1373,21 @@ AI-powered bookmark and content manager (formerly Hoarder).
 - Full-text search via Meilisearch
 - Screenshot capture for bookmarks
 - Browser extension support
+
+### Storage
+
+- Config: `/opt/karakeep/`
+- Data: Docker volumes `karakeep-data`, `meilisearch-data`
+
+### Management
+
+```bash
+# View logs
+ssh hermes-admin@192.168.40.10 "docker logs karakeep"
+
+# Update
+ssh hermes-admin@192.168.40.10 "cd /opt/karakeep && sudo docker compose pull && sudo docker compose up -d"
+```
 
 **Ansible**: `ansible-playbooks/services/deploy-karakeep.yml`
 
@@ -1368,7 +1398,7 @@ AI-powered bookmark and content manager (formerly Hoarder).
 **Host**: docker-vm-utilities01 (192.168.40.10)
 **Port**: 5690
 **URL**: https://wizarr.hrmsmrflrii.xyz
-**Status**: Pending Deployment
+**Status**: Deployed December 25, 2025
 
 User invitation and onboarding system for Jellyfin.
 
@@ -1379,9 +1409,25 @@ User invitation and onboarding system for Jellyfin.
 | Onboarding | Guided setup wizard for new users |
 
 **Jellyfin Configuration**:
-1. Get API key from Jellyfin Admin > API Keys
-2. Configure Wizarr with Jellyfin URL: http://192.168.40.11:8096
-3. Create invitation links to share
+1. Access https://wizarr.hrmsmrflrii.xyz
+2. Complete setup wizard
+3. Configure Jellyfin URL: http://192.168.40.11:8096
+4. Get API key from Jellyfin Admin > API Keys
+5. Create invitation links to share with users
+
+### Storage
+
+- Config & Database: `/opt/wizarr/data/`
+
+### Management
+
+```bash
+# View logs
+ssh hermes-admin@192.168.40.10 "docker logs wizarr"
+
+# Update
+ssh hermes-admin@192.168.40.10 "cd /opt/wizarr && sudo docker compose pull && sudo docker compose up -d"
+```
 
 **Ansible**: `ansible-playbooks/services/deploy-wizarr.yml`
 
@@ -1392,9 +1438,11 @@ User invitation and onboarding system for Jellyfin.
 **Host**: docker-vm-utilities01 (192.168.40.10)
 **Port**: 8001
 **URL**: https://feeds.hrmsmrflrii.xyz
-**Status**: Pending Deployment
+**Status**: Not Deployed (no public Docker image)
 
 Self-hosted RSS reader with AI-powered tagging.
+
+> **Note**: This service requires building from source. No official Docker image is published.
 
 | Component | Port | Purpose |
 |-----------|------|---------|
@@ -1408,18 +1456,18 @@ Self-hosted RSS reader with AI-powered tagging.
 - Single-user mode (simplified auth)
 - Background feed processing
 
-**Ansible**: `ansible-playbooks/services/deploy-feedsfun.yml`
+**GitHub**: https://github.com/Tiendil/feeds.fun
 
 ---
 
-### Tracearr - Media Request Tracking
+### Tracearr - Media Tracking
 
 **Host**: docker-vm-utilities01 (192.168.40.10)
 **Port**: 3002
 **URL**: https://tracearr.hrmsmrflrii.xyz
-**Status**: Pending Deployment
+**Status**: Deployed December 25, 2025
 
-Media request tracking and analytics.
+Streaming access manager for Plex, Jellyfin, and Emby servers. Tracks who's using your server and detects shared logins.
 
 | Component | Notes |
 |-----------|-------|
@@ -1428,11 +1476,27 @@ Media request tracking and analytics.
 | Cache | Redis (bundled) |
 
 **Features**:
-- Track media requests across services
+- Track streaming activity across users
+- Detect shared/abused logins
 - Analytics dashboard
-- User request history
+- User session history
+
+### Storage
+
+- Data: Docker volume `tracearr-data`
+
+### Management
+
+```bash
+# View logs
+ssh hermes-admin@192.168.40.10 "docker logs tracearr"
+
+# Update
+ssh hermes-admin@192.168.40.10 "cd /opt/tracearr && sudo docker compose pull && sudo docker compose up -d"
+```
 
 **Ansible**: `ansible-playbooks/services/deploy-tracearr.yml`
+**GitHub**: https://github.com/connorgallopo/Tracearr
 
 ---
 

@@ -172,6 +172,11 @@ See `.claude/context.md` for current structure details.
 | GitLab | https://gitlab.hrmsmrflrii.xyz |
 | Glance | https://glance.hrmsmrflrii.xyz |
 | Grafana | https://grafana.hrmsmrflrii.xyz |
+| **New Services** | |
+| Lagident | https://lagident.hrmsmrflrii.xyz |
+| Karakeep | https://karakeep.hrmsmrflrii.xyz |
+| Wizarr | https://wizarr.hrmsmrflrii.xyz |
+| Tracearr | https://tracearr.hrmsmrflrii.xyz |
 
 Full service list in `.claude/context.md`.
 

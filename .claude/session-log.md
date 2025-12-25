@@ -7,6 +7,122 @@
 
 ## 2025-12-25
 
+### 15:30 - New Services Deployment & Documentation Update
+**Status**: Completed
+**Request**: Deploy 8 new services, update Glance dashboard, update all documentation
+
+**Services Deployed** (4 of 8):
+| Service | Port | URL | Purpose |
+|---------|------|-----|---------|
+| Lagident | 9933 | https://lagident.hrmsmrflrii.xyz | Photo gallery |
+| Karakeep | 3005 | https://karakeep.hrmsmrflrii.xyz | AI bookmark manager |
+| Wizarr | 5690 | https://wizarr.hrmsmrflrii.xyz | Jellyfin invitations |
+| Tracearr | 3002 | https://tracearr.hrmsmrflrii.xyz | Media tracking |
+
+**Services Not Deployed** (4 - unsuitable):
+- Simple Photo Gallery: Static site generator, not a service
+- Stonks Dashboard: No official Docker support
+- Personal Management System: Requires separate frontend repo
+- Feeds Fun: No public Docker image (GHCR denied)
+
+**Issues Encountered & Fixes**:
+1. **Port 3001 conflict (Karakeep)**: Changed to port 3005 (Uptime Kuma uses 3001)
+2. **Feeds Fun image denied**: GHCR returned "denied" - requires building from source
+3. **Ansible docker_compose_v2 restarted param error**: Manually restarted Glance
+
+**Glance Dashboard Updates**:
+- Added "New Services" monitor with health checks for all 4 services
+- Updated bookmark icons to use walkxcode/dashboard-icons CDN
+- Icons: photoprism.png (Lagident), linkwarden.png (Karakeep), wizarr.png (Wizarr), tautulli.png (Tracearr)
+
+**Documentation Updated**:
+- docs/SERVICES.md - Added new services section with management commands
+- CHANGELOG.md - Added deployment entry with actual status
+- CLAUDE.md - Added service URLs under "New Services" section
+- GitHub Wiki (Services-Overview.md) - Added Photo & Media Tools section
+- Obsidian vault (07 - Deployed Services.md) - Added all 4 services
+
+**Files Modified**:
+- `ansible-playbooks/services/deploy-karakeep.yml` (port 3001 → 3005)
+- `ansible-playbooks/services/traefik-new-services.yml` (removed Feeds Fun)
+- `ansible-playbooks/services/update-glance-new-services.yml` (removed Feeds Fun)
+- `docs/SERVICES.md`
+- `CHANGELOG.md`
+- `CLAUDE.md`
+- `Proxmox-TerraformDeployments.wiki/Services-Overview.md`
+- `Obsidian Vault/.../07 - Deployed Services.md`
+
+---
+
+### 14:30 - Omada Network Dashboard Deployment
+**Status**: Completed
+**Request**: Create and deploy Omada Network dashboard for Glance Network tab
+
+**Components Deployed**:
+1. **Omada Exporter** - Deployed on Ansible controller (192.168.20.30:9202)
+   - Container: `ghcr.io/charlie-haley/omada_exporter`
+   - Config: `/opt/omada-exporter/docker-compose.yml`
+   - Credentials: claude-reader (viewer role)
+   - Site: "Parang Marikina"
+
+2. **Prometheus Scrape Config** - Updated on docker-vm-utilities01
+   - Target: `192.168.20.30:9202`
+   - Job: `omada-exporter`
+
+3. **Grafana Dashboard** - UID: `omada-network`
+   - Panels: Total/Wired/Wireless clients, WiFi mode distribution, Connection trend, Client list
+   - URL: https://grafana.hrmsmrflrii.xyz/d/omada-network
+
+4. **Glance Network Tab** - Updated with new dashboard
+   - Iframe height: 800px
+   - Added Speedtest widget in sidebar
+   - Added AP and switch monitors
+
+**Technical Challenges**:
+- Initial VLAN 20 VM couldn't be reached (template cloud-init issue)
+- Resolved by running exporter on existing Ansible controller
+- VLAN routing confirmed working between VLAN 40 → VLAN 20
+
+**Files Modified**:
+- `main.tf` - Removed unused docker-vm-glance definition
+- `/opt/omada-exporter/docker-compose.yml` (on ansible-controller01)
+- `/opt/monitoring/prometheus/prometheus.yml` (on docker-vm-utilities01)
+- `/opt/glance/config/glance.yml` (on docker-vm-utilities01)
+
+**Metrics Available**:
+- `omada_client_connected_total` - Client counts by connection mode and wifi mode
+- `omada_client_download_activity_bytes` - Per-client download activity
+- `omada_client_traffic_*` - Client traffic statistics
+
+---
+
+### 14:15 - Jellyfin SSO Redirect URI Fix & Container Dashboard Sorting
+**Status**: Completed
+**Request**: Fix Jellyfin SSO redirect URI error, fix Top 5 Memory panel sorting
+
+**Jellyfin SSO Issue**:
+- **Symptom**: "Redirect URI Error" when clicking "Sign in with Authentik"
+- **Root Cause**: Authentik provider had ForwardAuth redirect URIs (`/outpost.goauthentik.io/callback`) instead of SSO-Auth plugin URIs (`/sso/OID/redirect/authentik`)
+- **Fix**: Updated Authentik provider with correct redirect URIs for both HTTP and HTTPS
+
+**Container Dashboard Sorting**:
+- **Issue**: Top 5 Memory panels weren't sorting (highest memory at top)
+- **Root Cause**: Bar gauge visualization doesn't support value-based sorting
+- **Fix**: Changed from `bargauge` to `barchart` visualization with proper transformations
+
+**Documentation Added**:
+- Comprehensive troubleshooting guide explaining:
+  - OAuth2 redirect URI security mechanism
+  - ForwardAuth vs SSO-Auth Plugin differences
+  - Scheme mismatch problem with reverse proxies
+  - Diagnosis and fix procedures
+
+**Files Modified**:
+- `docs/TROUBLESHOOTING.md` - Added detailed Jellyfin SSO troubleshooting section
+- `temp-container-status-with-memory.json` - Changed to barchart visualization
+
+---
+
 ### 23:45 - New Services Batch Deployment
 **Status**: Completed (4 of 8 deployed)
 **Request**: Deploy 8 services: Lagident, Simple Photo Gallery, Stonks Dashboard, Karakeep, Wizarr, Feeds Fun, Tracearr, Personal Management System
