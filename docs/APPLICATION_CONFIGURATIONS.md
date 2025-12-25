@@ -38,9 +38,24 @@ This document provides detailed configuration guides for applications in the hom
   - [Overview](#authentik-overview)
   - [GitLab OIDC Integration](#gitlab-oidc-integration)
   - [Jellyfin SSO Integration](#jellyfin-sso-integration)
+  - [Jellyseerr SSO Integration](#jellyseerr-sso-integration)
   - [OAuth Sources](#oauth-sources)
   - [Application Dashboard Organization](#application-dashboard-organization)
   - [Troubleshooting](#authentik-troubleshooting)
+- [Project Bot - Discord-GitLab Kanban Integration](#project-bot---discord-gitlab-kanban-integration)
+  - [Overview](#overview)
+  - [Features](#features)
+  - [Prerequisites](#prerequisites)
+  - [Step 1: Create Discord Bot](#step-1-create-discord-bot)
+  - [Step 2: Create GitLab Project](#step-2-create-gitlab-project)
+  - [Step 3: Get Discord Channel ID](#step-3-get-discord-channel-id)
+  - [Step 4: Set Environment Variables](#step-4-set-environment-variables)
+  - [Step 5: Deploy with Ansible](#step-5-deploy-with-ansible)
+  - [Step 6: Configure GitLab Webhook](#step-6-configure-gitlab-webhook)
+  - [Verification](#verification)
+  - [Configuration Reference](#configuration-reference)
+  - [File Locations](#file-locations)
+  - [Troubleshooting](#project-bot-troubleshooting)
 
 ---
 
@@ -1780,6 +1795,183 @@ The provided authorization grant or refresh token is invalid...
 
 ---
 
+### Jellyseerr SSO Integration
+
+**Configured**: December 24, 2025
+**Purpose**: Allow users to log into Jellyseerr using their Authentik account for requesting movies and TV shows.
+
+#### Overview
+
+Jellyseerr is a media request management application that integrates with Radarr and Sonarr. With SSO, users can:
+- Request movies/TV shows using their existing Authentik credentials
+- Share access with family/friends through Authentik groups
+- Avoid managing separate Jellyseerr accounts
+
+#### Requirements
+
+Jellyseerr's native OIDC support is only available in the **preview-OIDC** branch, not the stable release.
+
+| Component | Requirement |
+|-----------|-------------|
+| Docker Image | `fallenbagel/jellyseerr:preview-OIDC` |
+| Configuration | Via Jellyseerr UI (Settings → Users) |
+| Authentik Provider | OAuth2 Provider with correct redirect URIs |
+
+#### Step-by-Step Configuration
+
+##### Step 1: Update Jellyseerr to preview-OIDC Image
+
+Edit `/opt/arr-stack/docker-compose.yml` on docker-vm-media01:
+
+```yaml
+jellyseerr:
+  image: fallenbagel/jellyseerr:preview-OIDC
+  container_name: jellyseerr
+  restart: unless-stopped
+  environment:
+    - PUID=1001
+    - PGID=1001
+    - TZ=Asia/Manila
+  volumes:
+    - /opt/arr-stack/jellyseerr:/app/config
+  extra_hosts:
+    - "auth.hrmsmrflrii.xyz:192.168.40.20"
+  ports:
+    - 5056:5055
+  networks:
+    - arr-network
+```
+
+Pull and recreate the container:
+
+```bash
+ssh hermes-admin@192.168.40.11 "cd /opt/arr-stack && sudo docker compose pull jellyseerr && sudo docker compose up -d jellyseerr"
+```
+
+##### Step 2: Create or Update OAuth2 Provider in Authentik
+
+The existing `jellyseerr-provider` needs redirect URIs configured for the preview-OIDC callback format.
+
+```bash
+ssh hermes-admin@192.168.40.21 "sudo docker exec authentik-server ak shell -c \"
+from authentik.providers.oauth2.models import OAuth2Provider, RedirectURI, RedirectURIMatchingMode
+
+provider = OAuth2Provider.objects.get(name='jellyseerr-provider')
+
+# Configure redirect URIs for preview-OIDC callback format
+# Note: Jellyseerr sends HTTP (not HTTPS) because it's behind a reverse proxy
+new_uris = [
+    RedirectURI(matching_mode=RedirectURIMatchingMode.REGEX, url=r'https://jellyseerr\\.hrmsmrflrii\\.xyz/login\\?provider=authentik.*'),
+    RedirectURI(matching_mode=RedirectURIMatchingMode.REGEX, url=r'http://jellyseerr\\.hrmsmrflrii\\.xyz/login\\?provider=authentik.*'),
+    RedirectURI(matching_mode=RedirectURIMatchingMode.STRICT, url='https://jellyseerr.hrmsmrflrii.xyz/outpost.goauthentik.io/callback'),
+]
+
+provider.redirect_uris = new_uris
+provider.save()
+print(f'Updated redirect URIs for {provider.name}')
+\""
+```
+
+**Why Both HTTP and HTTPS?**: Like Jellyfin, Jellyseerr behind Traefik receives HTTP requests internally. When generating redirect URIs, it uses HTTP. We add both to handle this scheme mismatch.
+
+##### Step 3: Configure OIDC Provider in Jellyseerr UI
+
+1. Go to https://jellyseerr.hrmsmrflrii.xyz
+2. Log in as admin (using Jellyfin credentials)
+3. Navigate to **Settings → Users**
+4. Enable **"Enable OpenID Connect Sign-In"**
+5. Click the cog icon to **"Add OpenID Connect Provider"**
+
+**Fill in these settings**:
+
+| Field | Value | Explanation |
+|-------|-------|-------------|
+| Provider Name | `authentik` | Display name for the login button |
+| Logo | `https://goauthentik.io/img/icon.png` | Authentik logo URL |
+| Issuer URL | `https://auth.hrmsmrflrii.xyz/application/o/jellyseerr/` | OIDC discovery URL |
+| Client ID | `dmyo2zSwhh62Xd8s7jBUCOQgizaCKaajFy2D0yZp` | From Authentik provider |
+| Client Secret | (from Authentik) | From Authentik provider |
+| Scopes | `openid email profile` | Standard OIDC scopes |
+| Allow New Users | ✓ Enabled | Auto-create users on first login |
+
+6. Click **Save**
+7. Refresh the login page
+
+#### Testing Jellyseerr SSO
+
+**What Should Happen**:
+1. Go to https://jellyseerr.hrmsmrflrii.xyz/login
+2. Click the "Authentik" button
+3. Redirected to Authentik login page
+4. Log in (Google/GitHub/password)
+5. Redirected back to Jellyseerr, logged in
+
+#### Configuration Summary
+
+**Authentik Side**:
+
+| Item | Value |
+|------|-------|
+| Provider Name | `jellyseerr-provider` |
+| Client ID | `dmyo2zSwhh62Xd8s7jBUCOQgizaCKaajFy2D0yZp` |
+| Redirect URIs | `http(s)://jellyseerr.hrmsmrflrii.xyz/login?provider=authentik...` (regex) |
+
+**Jellyseerr Side**:
+
+| Item | Value |
+|------|-------|
+| Docker Image | `fallenbagel/jellyseerr:preview-OIDC` |
+| OIDC Provider | Configured via UI (Settings → Users) |
+| extra_hosts | `auth.hrmsmrflrii.xyz:192.168.40.20` |
+
+#### Troubleshooting Jellyseerr SSO
+
+##### Issue: Redirect URI Error
+
+**Resolved**: December 24, 2025
+
+**Symptoms**: After clicking "Authentik" login button, see "Redirect URI Error" from Authentik.
+
+**Root Cause**: Jellyseerr sends `http://` in redirect URI (scheme mismatch behind reverse proxy).
+
+**Diagnosis**:
+```bash
+# Check Authentik logs for the actual redirect URI
+ssh hermes-admin@192.168.40.21 "sudo docker logs authentik-server 2>&1 | grep -i 'redirect' | tail -5"
+```
+
+**Fix**: Ensure both HTTP and HTTPS redirect URIs are configured in Authentik (see Step 2).
+
+---
+
+##### Issue: OIDC Button Not Appearing on Login Page
+
+**Symptoms**: Jellyseerr login page shows only "Login with Jellyfin" form.
+
+**Root Cause**: Either using `latest` image (doesn't support OIDC) or OIDC not configured in UI.
+
+**Fix**:
+1. Verify using `preview-OIDC` image: `docker inspect jellyseerr --format '{{.Config.Image}}'`
+2. Configure OIDC provider in Settings → Users (see Step 3)
+
+---
+
+##### Issue: "OIDC Configuration Not Found" Error
+
+**Symptoms**: Clicking OIDC button shows configuration error.
+
+**Root Cause**: Jellyseerr can't reach Authentik's OIDC discovery endpoint.
+
+**Diagnosis**:
+```bash
+# Test from inside container
+ssh hermes-admin@192.168.40.11 "docker exec jellyseerr wget -q -O - 'https://auth.hrmsmrflrii.xyz/application/o/jellyseerr/.well-known/openid-configuration' --no-check-certificate | head -5"
+```
+
+**Fix**: Add `extra_hosts` to docker-compose.yml pointing to Authentik's IP.
+
+---
+
 ### OAuth Sources
 
 OAuth sources allow users to authenticate to Authentik using external identity providers (social login).
@@ -1964,6 +2156,271 @@ curl -s -H "Authorization: Bearer TOKEN" \
 - Must be HTTPS
 - Must match exactly: `https://auth.hrmsmrflrii.xyz/source/oauth/callback/PROVIDER_SLUG/`
 - Trailing slash is required
+
+---
+
+## Project Bot - Discord-GitLab Kanban Integration
+
+**Host**: docker-vm-utilities01 (192.168.40.10)
+**Port**: 5055 (webhook)
+**Channel**: #project-management
+
+### Overview
+
+Project Bot integrates Discord with a self-hosted GitLab instance to manage homelab tasks via a Kanban board. It provides slash commands for creating and managing tasks, with bidirectional sync through GitLab webhooks.
+
+```
+┌─────────────────┐     Slash Commands      ┌──────────────────┐
+│    Discord      │ ◄─────────────────────► │   Project Bot    │
+│ #project-mgmt   │                         │  (Python/docker) │
+└─────────────────┘                         └────────┬─────────┘
+        ▲                                            │
+        │ Notifications                              │ GitLab API
+        │                                            ▼
+        │                                   ┌──────────────────┐
+        └───────────────────────────────────┤     GitLab       │
+                    Webhooks                │  homelab-tasks   │
+                                           └──────────────────┘
+```
+
+### Features
+
+| Command | Description | Example |
+|---------|-------------|---------|
+| `/todo` | Create task in "To Do" | `/todo [high] [infra] Fix DNS @friday` |
+| `/idea` | Create task in "Backlog" | `/idea Add monitoring dashboard` |
+| `/doing` | Create task in "In Progress" | `/doing Working on K8s upgrade` |
+| `/done` | Mark task as done | `/done #5` |
+| `/move` | Move task between columns | `/move #3 doing` |
+| `/list` | List tasks | `/list todo` or `/list` |
+| `/board` | Show board summary | `/board` |
+| `/search` | Search tasks | `/search prometheus` |
+
+**Task Syntax**:
+- `[high/medium/low]` - Priority label
+- `[infra/media/k8s/monitoring/automation/docs]` - Category label
+- `@tomorrow/@friday/@monday/etc` - Due date
+
+### Prerequisites
+
+Before deployment, you need:
+
+1. **Discord Bot** - Create at https://discord.com/developers/applications
+2. **Discord Channel** - Create #project-management channel
+3. **GitLab Project** - Create `homelab-tasks` project with labels
+4. **GitLab Token** - Project access token with `api` scope
+
+### Step 1: Create Discord Bot
+
+1. Go to https://discord.com/developers/applications
+2. Click "New Application" → name it "Project Bot"
+3. Go to "Bot" section → Click "Add Bot"
+4. Copy the **Token** (save securely)
+5. Enable these Privileged Gateway Intents:
+   - Message Content Intent
+6. Go to "OAuth2" → "URL Generator"
+   - Scopes: `bot`, `applications.commands`
+   - Bot Permissions: `Send Messages`, `Embed Links`, `Use Slash Commands`
+7. Copy generated URL and invite bot to your server
+
+### Step 2: Create GitLab Project
+
+1. **Create Project**:
+   ```
+   GitLab → New Project → Create blank project
+   Name: homelab-tasks
+   Visibility: Private
+   ```
+
+2. **Create Labels** (Project Settings → Labels):
+
+   **Column Labels**:
+   | Label | Color | Description |
+   |-------|-------|-------------|
+   | Backlog | #6c757d (gray) | Ideas and future tasks |
+   | To Do | #007bff (blue) | Ready to start |
+   | In Progress | #fd7e14 (orange) | Currently working |
+   | Done | #28a745 (green) | Completed |
+
+   **Priority Labels** (scoped):
+   | Label | Color |
+   |-------|-------|
+   | priority::high | #dc3545 (red) |
+   | priority::medium | #fd7e14 (orange) |
+   | priority::low | #28a745 (green) |
+
+   **Category Labels**:
+   | Label | Color |
+   |-------|-------|
+   | infra | #6610f2 (purple) |
+   | media | #e83e8c (pink) |
+   | k8s | #007bff (blue) |
+   | monitoring | #17a2b8 (cyan) |
+   | automation | #ffc107 (yellow) |
+   | docs | #6c757d (gray) |
+
+3. **Configure Board** (Project → Plan → Issue Boards):
+   - Edit board → Add lists for: Backlog, To Do, In Progress
+   - Done column shows closed issues automatically
+
+4. **Get Project ID**:
+   - Go to Project Settings → General
+   - Copy the "Project ID" number (e.g., `5`)
+
+5. **Create Access Token** (Project Settings → Access Tokens):
+   - Name: `project-bot`
+   - Role: `Maintainer`
+   - Scopes: `api`
+   - Copy the token (shown once)
+
+### Step 3: Get Discord Channel ID
+
+1. Enable Developer Mode in Discord (User Settings → Advanced → Developer Mode)
+2. Right-click #project-management channel
+3. Click "Copy Channel ID"
+
+### Step 4: Set Environment Variables
+
+On your deployment machine (Ansible controller or local):
+
+```bash
+export PROJECT_BOT_DISCORD_TOKEN="your-discord-bot-token"
+export PROJECT_BOT_CHANNEL_ID="1234567890123456789"
+export PROJECT_BOT_GITLAB_TOKEN="glpat-xxxxxxxxxxxxx"
+export PROJECT_BOT_GITLAB_PROJECT_ID="5"
+export PROJECT_BOT_WEBHOOK_SECRET="your-random-secret-string"
+```
+
+### Step 5: Deploy with Ansible
+
+```bash
+cd ~/ansible  # On Ansible controller
+ansible-playbook ansible-playbooks/project-bot/deploy-project-bot.yml
+```
+
+Or deploy from local machine:
+```bash
+ansible-playbook -i inventory ansible-playbooks/project-bot/deploy-project-bot.yml \
+  --limit docker-vm-utilities01
+```
+
+### Step 6: Configure GitLab Webhook
+
+1. Go to GitLab Project → Settings → Webhooks
+2. Add webhook:
+   - **URL**: `http://192.168.40.10:5055/webhook`
+   - **Secret token**: Same as `PROJECT_BOT_WEBHOOK_SECRET`
+   - **Trigger**: Issues events (check "Issues events")
+   - **SSL verification**: Disabled (internal network)
+3. Click "Add webhook"
+4. Test with "Test" → "Issues events"
+
+### Verification
+
+1. **Check bot is online**:
+   - Look for "Project Bot Online" message in #project-management
+   - Run `/board` command
+
+2. **Check health endpoint**:
+   ```bash
+   curl http://192.168.40.10:5055/health
+   # Expected: {"status":"healthy","service":"project-bot","gitlab_connected":true}
+   ```
+
+3. **Test commands**:
+   ```
+   /todo Test task
+   /list
+   /done #1
+   ```
+
+4. **Test webhook** (create issue in GitLab web UI):
+   - Should see notification in Discord
+
+### Configuration Reference
+
+| Environment Variable | Description | Required |
+|---------------------|-------------|----------|
+| `DISCORD_TOKEN` | Discord bot token | Yes |
+| `DISCORD_CHANNEL_ID` | Channel ID for #project-management | Yes |
+| `GITLAB_URL` | GitLab instance URL | Yes (default: https://gitlab.hrmsmrflrii.xyz) |
+| `GITLAB_TOKEN` | Project access token | Yes |
+| `GITLAB_PROJECT_ID` | Numeric project ID | Yes |
+| `WEBHOOK_PORT` | Port for webhook server | No (default: 5055) |
+| `WEBHOOK_SECRET` | Shared secret for verification | Recommended |
+| `DAILY_DIGEST_HOUR` | Hour for daily summary (0-23) | No (default: 9) |
+| `TZ` | Timezone | No (default: Asia/Manila) |
+
+### File Locations
+
+| File | Location |
+|------|----------|
+| Bot code | `/opt/project-bot/project-bot.py` |
+| Docker Compose | `/opt/project-bot/docker-compose.yml` |
+| Ansible playbook | `ansible-playbooks/project-bot/deploy-project-bot.yml` |
+
+### Troubleshooting
+
+#### Issue: Bot Not Responding to Commands
+
+**Symptoms**: Slash commands don't appear or don't respond.
+
+**Diagnosis**:
+```bash
+# Check container logs
+ssh hermes-admin@192.168.40.10 "docker logs project-bot --tail 50"
+
+# Check if commands synced
+# Look for "Synced X slash commands" in logs
+```
+
+**Fix**:
+1. Ensure bot has `applications.commands` scope
+2. Wait up to 1 hour for global command sync
+3. Try kicking and re-inviting bot
+
+#### Issue: GitLab Connection Failed
+
+**Symptoms**: "Failed to create task" error.
+
+**Diagnosis**:
+```bash
+# Check health endpoint
+curl http://192.168.40.10:5055/health
+# Look for "gitlab_connected": false
+```
+
+**Fix**:
+1. Verify `GITLAB_TOKEN` is valid
+2. Check `GITLAB_PROJECT_ID` is correct
+3. Ensure token has `api` scope
+
+#### Issue: Webhook Not Working
+
+**Symptoms**: GitLab changes don't appear in Discord.
+
+**Diagnosis**:
+```bash
+# Check webhook delivery in GitLab
+# Project → Settings → Webhooks → Recent Deliveries
+
+# Check bot logs for webhook requests
+ssh hermes-admin@192.168.40.10 "docker logs project-bot | grep webhook"
+```
+
+**Fix**:
+1. Verify webhook URL is correct: `http://192.168.40.10:5055/webhook`
+2. Check secret token matches
+3. Ensure "Issues events" trigger is enabled
+
+#### Issue: Daily Digest Not Sending
+
+**Symptoms**: No morning summary message.
+
+**Fix**:
+1. Verify `DAILY_DIGEST_HOUR` is set correctly
+2. Check timezone with `TZ` environment variable
+3. Ensure bot has send message permissions in channel
 
 ---
 

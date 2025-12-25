@@ -26,6 +26,26 @@ When starting a task, add an entry here:
 
 ## Recently Completed (Last 24 Hours)
 
+## Synology NAS Storage Dashboard - Protected
+**Completed**: 2025-12-25 20:45
+**Changes**:
+- Created modern Synology NAS dashboard for Storage page
+- 6 disk health stat tiles (4 HDDs green, 2 M.2 SSDs purple)
+- Summary stats: Uptime, Total/Used Storage, CPU %, Memory %
+- Disk temperatures bargauge with gradient coloring
+- CPU and Memory time series charts
+- Storage Consumption Over Time (7-day window)
+- Fixed memory unit display (changed from `deckbytes` to `kbytes`)
+- Iframe height: 1350px
+- **PROTECTED** - Do not modify without explicit user permission
+**Files Modified**:
+- temp-synology-nas-dashboard.json
+- ansible-playbooks/monitoring/deploy-synology-nas-dashboard.yml
+**Documentation Updated**:
+- .claude/context.md, .claude/conventions.md, docs/GLANCE.md, claude.md, CHANGELOG.md, session-log.md
+- GitHub Wiki: Glance-Dashboard.md
+- Obsidian: 23 - Glance Dashboard.md
+
 ## Container Status Dashboard - Protected
 **Completed**: 2025-12-25 16:30
 **Changes**:
@@ -91,4 +111,5 @@ Leave notes here for future sessions:
 
 - User prefers documentation updates to happen incrementally, not at the end
 - Multiple Claude instances may run in parallel - always check active-tasks first
-- Glance Home, Media, and Compute pages are protected - don't modify without permission
+- Glance Home, Media, Compute, and Storage pages are protected - don't modify without permission
+- Synology NAS Storage dashboard is protected - UID: `synology-nas-modern`, height: 1350px

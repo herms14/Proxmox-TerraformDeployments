@@ -16,6 +16,8 @@ All services deployed via Docker Compose, managed by Ansible automation from `an
 | Media | docker-vm-media01 | Arr Stack (12 services), Download Monitor |
 | Dashboard | docker-vm-utilities01 | Glance, Life Progress API, Reddit Manager |
 | Utilities | docker-vm-utilities01 | n8n, Paperless, Speedtest Tracker |
+| Productivity | docker-vm-utilities01 | BentoPDF, Reactive Resume |
+| Network Tools | docker-vm-utilities01 | Edgeshark (container network inspector) |
 | Update Management | docker-vm-utilities01 | Watchtower, Update Manager (Discord bot) |
 | Discord Bots | docker-vm-utilities01 | Argus SysAdmin Bot |
 | Container Metrics | Both Docker hosts | Docker Stats Exporter |
@@ -980,6 +982,145 @@ ssh hermes-admin@192.168.40.10 "cd /opt/update-manager && sudo docker compose bu
 ```
 
 **Full Guide**: [WATCHTOWER.md](./WATCHTOWER.md)
+
+---
+
+## BentoPDF
+
+**Host**: docker-vm-utilities01 (192.168.40.10)
+**Status**: Deployed December 24, 2025
+
+| Port | URL | Purpose |
+|------|-----|---------|
+| 5055 | http://192.168.40.10:5055 | Web interface |
+| 443 | https://bentopdf.hrmsmrflrii.xyz | Via Traefik |
+
+### Purpose
+
+Privacy-first PDF toolkit for document manipulation without uploading to cloud services. All processing happens locally within your infrastructure.
+
+### Features
+
+- PDF merging, splitting, and conversion
+- Document compression
+- Page extraction and reordering
+- Watermarking and annotation
+- No data leaves your server
+
+### Storage
+
+- Docker Compose: `/opt/bentopdf/docker-compose.yml`
+
+### Management
+
+```bash
+# View logs
+ssh hermes-admin@192.168.40.10 "docker logs bentopdf"
+
+# Update
+ssh hermes-admin@192.168.40.10 "cd /opt/bentopdf && sudo docker compose pull && sudo docker compose up -d"
+```
+
+**Docker Image**: `bentopdf/bentopdf:latest`
+
+---
+
+## Edgeshark
+
+**Host**: docker-vm-utilities01 (192.168.40.10)
+**Status**: Deployed December 24, 2025
+
+| Port | URL | Purpose |
+|------|-----|---------|
+| 5056 | http://192.168.40.10:5056 | Web interface |
+| 443 | https://edgeshark.hrmsmrflrii.xyz | Via Traefik |
+
+### Purpose
+
+Docker container network inspector by Siemens. Visualizes container network connections, namespaces, and packet flows. Useful for debugging container networking issues.
+
+### Components
+
+| Container | Image | Purpose |
+|-----------|-------|---------|
+| ghostwire | ghcr.io/siemens/ghostwire | Network discovery engine |
+| edgeshark | ghcr.io/siemens/packetflix | Web UI and packet capture |
+
+### Features
+
+- Container network namespace visualization
+- Live packet capture (Wireshark compatible)
+- Cross-container connection mapping
+- Network namespace inspection
+- Docker socket monitoring
+
+### Storage
+
+- Docker Compose: `/opt/edgeshark/docker-compose.yml`
+
+### Management
+
+```bash
+# View logs
+ssh hermes-admin@192.168.40.10 "docker logs edgeshark && docker logs ghostwire"
+
+# Update
+ssh hermes-admin@192.168.40.10 "cd /opt/edgeshark && sudo docker compose pull && sudo docker compose up -d"
+```
+
+**GitHub**: https://github.com/siemens/edgeshark
+
+---
+
+## Reactive Resume
+
+**Host**: docker-vm-utilities01 (192.168.40.10)
+**Status**: Deployed December 24, 2025
+
+| Port | URL | Purpose |
+|------|-----|---------|
+| 5057 | http://192.168.40.10:5057 | Web interface |
+| 443 | https://resume.hrmsmrflrii.xyz | Via Traefik |
+
+### Purpose
+
+Self-hosted resume builder with modern templates and real-time preview. Create professional resumes and export to PDF without relying on third-party services.
+
+### Components
+
+| Container | Image | Purpose |
+|-----------|-------|---------|
+| reactive-resume | amruthpillai/reactive-resume | Main application |
+| reactive-resume-db | postgres:16-alpine | PostgreSQL database |
+| reactive-resume-minio | minio/minio | Object storage for files |
+| reactive-resume-chrome | ghcr.io/browserless/chromium | PDF generation |
+
+### Features
+
+- Multiple professional templates
+- Real-time preview
+- JSON resume import/export
+- PDF export via headless Chrome
+- Multi-language support
+- Dark mode interface
+
+### Storage
+
+- Docker Compose: `/opt/reactive-resume/docker-compose.yml`
+- PostgreSQL Data: Docker volume `postgres_data`
+- MinIO Storage: Docker volume `minio_data`
+
+### Management
+
+```bash
+# View logs
+ssh hermes-admin@192.168.40.10 "docker logs reactive-resume"
+
+# Update
+ssh hermes-admin@192.168.40.10 "cd /opt/reactive-resume && sudo docker compose pull && sudo docker compose up -d"
+```
+
+**GitHub**: https://github.com/AmruthPillai/Reactive-Resume (30k+ stars)
 
 ---
 

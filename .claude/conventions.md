@@ -169,6 +169,7 @@ tf-proxmox/
 
 - **Home** - Service monitors, bookmarks, markets
 - **Compute** - Proxmox cluster + Container Status History dashboard
+- **Storage** - Synology NAS Storage dashboard
 - **Media** - Media stats, downloads, queue
 
 ### Protected Grafana Dashboards (DO NOT MODIFY)
@@ -177,6 +178,12 @@ tf-proxmox/
   - Iframe height: 1250px
   - Dashboard JSON: `temp-container-status-fixed.json`
   - Ansible: `ansible-playbooks/monitoring/deploy-container-status-dashboard.yml`
+
+- **Synology NAS Storage** (`synology-nas-modern`) - NAS disk health, storage, CPU/memory
+  - Iframe height: 1350px
+  - Dashboard JSON: `temp-synology-nas-dashboard.json`
+  - Ansible: `ansible-playbooks/monitoring/deploy-synology-nas-dashboard.yml`
+  - Panels: 6 disk health tiles, temperatures, storage consumption timeline
 
 ### Configuration Scripts
 

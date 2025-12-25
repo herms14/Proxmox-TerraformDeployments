@@ -145,7 +145,7 @@ ssh hermes-admin@192.168.20.30
 ### Container Status History Dashboard (PROTECTED)
 
 **Grafana UID**: `container-status`
-**Glance Iframe Height**: 1250px
+**Glance Iframe Height**: 1500px
 
 **Layout:**
 ```
@@ -154,12 +154,22 @@ ssh hermes-admin@192.168.20.30
 ├─────────────────────────────────────────────────────────────────────────┤
 │ [Utilities VM]  [Utilities Stable] [Media VM]      [Media Stable]       │  Row 2: h=3
 ├──────────────────────────────────┬──────────────────────────────────────┤
-│ State Timeline - Utilities VM    │ State Timeline - Media VM            │  Row 3: h=14
+│  Top 5 Memory - Utilities VM     │    Top 5 Memory - Media VM           │  Row 3: h=8
+│  (bar gauge, Blue-Purple)        │    (bar gauge, Green-Yellow-Red)     │
+├──────────────────────────────────┼──────────────────────────────────────┤
+│ State Timeline - Utilities VM    │ State Timeline - Media VM            │  Row 4: h=14
 │ (container uptime, 1h window)    │ (container uptime, 1h window)        │
 ├──────────────────────────────────┴──────────────────────────────────────┤
-│ Container Issues (Last 15 min) - Table of stopped/restarted containers  │  Row 4: h=8
+│ Container Issues (Last 15 min) - Table of stopped/restarted containers  │  Row 5: h=8
 └─────────────────────────────────────────────────────────────────────────┘
 ```
+
+**Top 5 Memory Panels:**
+- Type: `bargauge` with horizontal orientation
+- Utilities VM: `continuous-BlPu` color scheme
+- Media VM: `continuous-GrYlRd` color scheme
+- Query: `topk(5, docker_container_memory_percent{job="docker-stats-..."})`
+- Unit: percent, max: 100
 
 **Key Configuration:**
 - Visualization: `state-timeline` (not status-history)
@@ -170,8 +180,53 @@ ssh hermes-admin@192.168.20.30
 - mergeValues: `true`
 
 **Files:**
-- Dashboard JSON: `temp-container-status-fixed.json`
+- Dashboard JSON: `temp-container-status-with-memory.json`
 - Ansible Playbook: `ansible-playbooks/monitoring/deploy-container-status-dashboard.yml`
+
+### Storage Tab Structure (PROTECTED)
+
+**DO NOT MODIFY without explicit user permission.**
+
+**Grafana Dashboard**: `synology-nas-modern` (UID)
+**Glance Iframe Height**: 1350px
+**URL**: `https://grafana.hrmsmrflrii.xyz/d/synology-nas-modern/synology-nas-storage?orgId=1&kiosk&theme=transparent&refresh=30s`
+**Time Range**: 7 days (for storage consumption trends)
+
+**Layout:**
+```
+┌─────────────────────────────────────────────────────────────────────────┐
+│ [Uptime]  [Total Storage]  [Used Storage]  [Storage %]  [CPU %] [Mem %] │  Row 1: h=4
+├─────────────────────────────────────────────────────────────────────────┤
+│ [Drive 1 HDD] [Drive 2 HDD] [Drive 3 HDD] [Drive 4 HDD] [M.2 1] [M.2 2] │  Row 2: h=4
+├──────────────────────────────────┬──────────────────────────────────────┤
+│ Disk Temperatures (bargauge)     │ [Sys Temp] [Healthy] [Total RAM]    │  Row 3: h=6
+│ All 6 drives with gradient       │ [CPU Cores] [Free]   [Avail RAM]    │
+├──────────────────────────────────┼──────────────────────────────────────┤
+│ CPU Usage Over Time (4 cores)    │ Memory Usage Over Time              │  Row 4: h=7
+├──────────────────────────────────┴──────────────────────────────────────┤
+│ Storage Consumption Over Time (Used/Free/Total, 7-day window)           │  Row 5: h=8
+└─────────────────────────────────────────────────────────────────────────┘
+```
+
+**Disk Configuration (6 drives):**
+- Drive 1: Seagate 8TB HDD (ST8000VN004)
+- Drive 2: Seagate 4TB HDD (ST4000VN006)
+- Drive 3: Seagate 12TB HDD (ST12000VN0008)
+- Drive 4: Seagate 10TB HDD (ST10000VN000)
+- M.2 SSD 1: Kingston 1TB NVMe (SNV2S1000G)
+- M.2 SSD 2: Crucial 1TB NVMe (CT1000P2SSD8)
+
+**Color Scheme:**
+- HDDs: Green when healthy (#22c55e)
+- SSDs: Purple when healthy (#8b5cf6)
+- Failed: Red (#ef4444)
+- Storage Timeline: Used (amber #f59e0b), Free (green #22c55e), Total (blue dashed #3b82f6)
+
+**Memory Units**: `kbytes` (memTotalReal/memAvailReal are in KB)
+
+**Files:**
+- Dashboard JSON: `temp-synology-nas-dashboard.json`
+- Ansible Playbook: `ansible-playbooks/monitoring/deploy-synology-nas-dashboard.yml`
 
 ### Tab Order
 Home | Compute | Storage | Network | Media | Web | Reddit

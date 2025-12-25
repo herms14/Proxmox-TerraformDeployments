@@ -682,7 +682,7 @@ The Glance dashboard has 7 tabs in this order:
 |-----|---------|-----------|
 | **Home** | Service monitors, bookmarks, markets | YES |
 | **Compute** | Proxmox cluster + Container monitoring | YES |
-| **Storage** | Synology NAS Grafana dashboard | No |
+| **Storage** | Synology NAS Grafana dashboard | YES |
 | **Network** | Network overview + Speedtest | No |
 | **Media** | Media stats, downloads, queue | YES |
 | **Web** | Tech news, AI/ML, stocks, NBA | No |
@@ -712,8 +712,8 @@ Displays Proxmox cluster metrics and container monitoring via two embedded Grafa
 
 **Grafana Dashboard**: `container-status` (UID)
 - URL: `https://grafana.hrmsmrflrii.xyz/d/container-status/container-status-history?kiosk&theme=transparent&refresh=30s`
-- Iframe Height: 1250px
-- Dashboard JSON: `temp-container-status-fixed.json`
+- Iframe Height: 1500px
+- Dashboard JSON: `temp-container-status-with-memory.json`
 - Ansible Playbook: `ansible-playbooks/monitoring/deploy-container-status-dashboard.yml`
 
 ```
@@ -722,10 +722,13 @@ Displays Proxmox cluster metrics and container monitoring via two embedded Grafa
 ├─────────────────────────────────────────────────────────────────────────┤
 │ [Utilities VM]  [Utilities Stable] [Media VM]      [Media Stable]       │  Row 2: h=3
 ├──────────────────────────────────┬──────────────────────────────────────┤
-│ State Timeline - Utilities VM    │ State Timeline - Media VM            │  Row 3: h=14
+│  Top 5 Memory - Utilities VM     │    Top 5 Memory - Media VM           │  Row 3: h=8
+│  (bar gauge, Blue-Purple)        │    (bar gauge, Green-Yellow-Red)     │
+├──────────────────────────────────┼──────────────────────────────────────┤
+│ State Timeline - Utilities VM    │ State Timeline - Media VM            │  Row 4: h=14
 │ (container uptime, 1h window)    │ (container uptime, 1h window)        │
 ├──────────────────────────────────┴──────────────────────────────────────┤
-│ Container Issues (Last 15 min) - Table of stopped/restarted containers  │  Row 4: h=8
+│ Container Issues (Last 15 min) - Table of stopped/restarted containers  │  Row 5: h=8
 └─────────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -745,7 +748,17 @@ Displays Proxmox cluster metrics and container monitoring via two embedded Grafa
 | Media VM | Pink (#ec4899) | `count(docker_container_running{job="docker-stats-media"})` |
 | Media: Stable (>1h) | Green (#22c55e) | `count(docker_container_uptime_seconds{job="docker-stats-media"} > 3600) or vector(0)` |
 
-**Row 3: State Timeline Panels** (y=7, h=14)
+**Row 3: Top 5 Memory Panels** (y=7, h=8)
+| Panel | Color Scheme | Query |
+|-------|--------------|-------|
+| Top 5 Memory - Utilities VM | `continuous-BlPu` (Blue-Purple) | `topk(5, docker_container_memory_percent{job="docker-stats-utilities"})` |
+| Top 5 Memory - Media VM | `continuous-GrYlRd` (Green-Yellow-Red) | `topk(5, docker_container_memory_percent{job="docker-stats-media"})` |
+
+- Type: `bargauge` with horizontal orientation
+- Unit: percent, max: 100
+- Display mode: gradient with unfilled area shown
+
+**Row 4: State Timeline Panels** (y=15, h=14)
 - State Timeline - Utilities VM: `docker_container_running{job="docker-stats-utilities"}`
 - State Timeline - Media VM: `docker_container_running{job="docker-stats-media"}`
 - Visualization: `state-timeline` (not status-history)
@@ -755,7 +768,7 @@ Displays Proxmox cluster metrics and container monitoring via two embedded Grafa
 - Row height: `0.9`
 - mergeValues: `true`
 
-**Row 4: Container Issues Table** (y=21, h=8)
+**Row 5: Container Issues Table** (y=29, h=8)
 - Shows containers that are stopped or recently restarted (uptime < 15 min)
 - Query A: `docker_container_running == 0` (stopped containers)
 - Query B: `docker_container_uptime_seconds < 900 and docker_container_running == 1` (recently restarted)
@@ -885,11 +898,64 @@ ssh hermes-admin@192.168.40.10 "sudo python3 /tmp/temp-glance-update.py && cd /o
 | temp-glance-update.py | Repository root | Glance config update script |
 | temp-enhanced-container-dashboard.py | Repository root | Dashboard generation script |
 
-### Storage Tab
+### Storage Tab (PROTECTED)
 
-**Grafana Dashboard**: `synology-storage` (UID)
-- URL: `https://grafana.hrmsmrflrii.xyz/d/synology-storage/synology-nas?kiosk&refresh=30s`
-- Iframe Height: 500px
+**DO NOT MODIFY without explicit user permission.**
+
+**Grafana Dashboard**: `synology-nas-modern` (UID)
+- URL: `https://grafana.hrmsmrflrii.xyz/d/synology-nas-modern/synology-nas-storage?orgId=1&kiosk&theme=transparent&refresh=30s`
+- Iframe Height: 1350px
+- Dashboard JSON: `temp-synology-nas-dashboard.json`
+- Ansible Playbook: `ansible-playbooks/monitoring/deploy-synology-nas-dashboard.yml`
+- Time Range: 7 days (for storage consumption trends)
+
+**Layout:**
+```
+┌─────────────────────────────────────────────────────────────────────────┐
+│ [Uptime]  [Total Storage]  [Used Storage]  [Storage %]  [CPU %] [Mem %] │  Row 1: h=4
+├─────────────────────────────────────────────────────────────────────────┤
+│ [Drive 1 HDD] [Drive 2 HDD] [Drive 3 HDD] [Drive 4 HDD] [M.2 1] [M.2 2] │  Row 2: h=4
+├──────────────────────────────────┬──────────────────────────────────────┤
+│ Disk Temperatures (bargauge)     │ [Sys Temp] [Healthy] [Total RAM]    │  Row 3: h=6
+│ All 6 drives with gradient       │ [CPU Cores] [Free]   [Avail RAM]    │
+├──────────────────────────────────┼──────────────────────────────────────┤
+│ CPU Usage Over Time (4 cores)    │ Memory Usage Over Time              │  Row 4: h=7
+├──────────────────────────────────┴──────────────────────────────────────┤
+│ Storage Consumption Over Time (Used/Free/Total, 7-day window)           │  Row 5: h=8
+└─────────────────────────────────────────────────────────────────────────┘
+```
+
+**Disk Configuration (6 drives):**
+| Slot | Drive | Model | Type |
+|------|-------|-------|------|
+| 1 | Seagate 8TB | ST8000VN004-3CP101 | HDD |
+| 2 | Seagate 4TB | ST4000VN006-3CW104 | HDD |
+| 3 | Seagate 12TB | ST12000VN0008-2YS101 | HDD |
+| 4 | Seagate 10TB | ST10000VN000-3AK101 | HDD |
+| M.2 1 | Kingston 1TB | SNV2S1000G | NVMe SSD |
+| M.2 2 | Crucial 1TB | CT1000P2SSD8 | NVMe SSD |
+
+**Color Scheme:**
+- HDDs: Green when healthy (#22c55e)
+- SSDs: Purple when healthy (#8b5cf6)
+- Failed: Red (#ef4444)
+- Storage Timeline: Used (amber #f59e0b), Free (green #22c55e), Total (blue dashed #3b82f6)
+- Thresholds on gauges: Green < 70%, Amber 70-90%, Red > 90%
+
+**Memory Units**: `kbytes` (memTotalReal/memAvailReal are in KB)
+
+**Prometheus Metrics (SNMP):**
+| Metric | Description |
+|--------|-------------|
+| `synologyDiskHealthStatus` | Disk health (1=healthy, 0=failed) |
+| `synologyDiskTemperature` | Disk temperature in Celsius |
+| `synologyRaidTotalSize` | Total RAID volume size in bytes |
+| `synologyRaidFreeSize` | Free RAID space in bytes |
+| `synologySystemTemperature` | System temperature |
+| `hrProcessorLoad` | CPU load per core |
+| `memTotalReal` | Total RAM in KB |
+| `memAvailReal` | Available RAM in KB |
+| `sysUpTime` | System uptime in centiseconds |
 
 ### Network Tab
 

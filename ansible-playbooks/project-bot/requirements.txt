@@ -1,0 +1,14 @@
+# Discord bot framework with slash command support
+discord.py>=2.3.0
+
+# Async HTTP client (required by discord.py)
+aiohttp>=3.9.0
+
+# GitLab API client
+python-gitlab>=4.0.0
+
+# Webhook server
+flask>=3.0.0
+
+# HTTP requests library (for GitLab API fallback)
+requests>=2.31.0

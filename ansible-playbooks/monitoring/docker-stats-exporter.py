@@ -2,10 +2,12 @@
 """
 Docker Stats Prometheus Exporter
 Exposes container metrics with proper container names.
+Includes uptime and start time metrics.
 """
 
 import os
 import time
+from datetime import datetime, timezone
 import docker
 from prometheus_client import start_http_server, Gauge, Info
 from prometheus_client.core import GaugeMetricFamily, REGISTRY
@@ -77,6 +79,24 @@ host_containers_running = Gauge(
     ['host']
 )
 
+host_uptime_seconds = Gauge(
+    'docker_host_uptime_seconds',
+    'Host VM uptime in seconds',
+    ['host']
+)
+
+container_uptime_seconds = Gauge(
+    'docker_container_uptime_seconds',
+    'Container uptime in seconds',
+    ['name', 'id', 'image']
+)
+
+container_started_at = Gauge(
+    'docker_container_started_at',
+    'Container start time as Unix timestamp',
+    ['name', 'id', 'image']
+)
+
 
 def calculate_cpu_percent(stats):
     """Calculate CPU usage percentage from Docker stats."""
@@ -115,6 +135,14 @@ def collect_metrics():
         host_containers_total.labels(host=hostname).set(info.get('Containers', 0))
         host_containers_running.labels(host=hostname).set(info.get('ContainersRunning', 0))
 
+        # Host uptime from /proc/uptime
+        try:
+            with open('/proc/uptime', 'r') as f:
+                uptime_seconds = float(f.read().split()[0])
+                host_uptime_seconds.labels(host=hostname).set(uptime_seconds)
+        except Exception as e:
+            print(f"Error reading host uptime: {e}")
+
         # Container stats
         containers = client.containers.list(all=True)
 
@@ -127,6 +155,30 @@ def collect_metrics():
             # Status metric
             is_running = 1 if status == 'running' else 0
             container_status.labels(name=name, id=cid, image=image, status=status).set(is_running)
+
+            # Uptime metrics (only for running containers)
+            if status == 'running':
+                try:
+                    started_at_str = container.attrs['State'].get('StartedAt', '')
+                    if started_at_str:
+                        # Parse ISO 8601 timestamp (e.g., "2024-12-21T08:00:00.123456789Z")
+                        # Handle nanoseconds by truncating to microseconds
+                        if '.' in started_at_str:
+                            base, frac = started_at_str.rsplit('.', 1)
+                            # Remove 'Z' and truncate to 6 digits for microseconds
+                            frac = frac.rstrip('Z')[:6]
+                            started_at_str = f"{base}.{frac}+00:00"
+                        else:
+                            started_at_str = started_at_str.replace('Z', '+00:00')
+
+                        start_time = datetime.fromisoformat(started_at_str)
+                        now = datetime.now(timezone.utc)
+                        uptime = (now - start_time).total_seconds()
+
+                        container_uptime_seconds.labels(name=name, id=cid, image=image).set(uptime)
+                        container_started_at.labels(name=name, id=cid, image=image).set(start_time.timestamp())
+                except Exception as e:
+                    print(f"Error getting uptime for {name}: {e}")
 
             if status == 'running':
                 try:

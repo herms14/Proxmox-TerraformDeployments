@@ -1,0 +1,185 @@
+---
+# Deploy Project Bot - Discord-GitLab Kanban Integration
+#
+# This playbook deploys the project-bot Discord bot that integrates with GitLab
+# for task management via a Kanban board.
+#
+# Prerequisites:
+#   1. Create Discord bot at https://discord.com/developers/applications
+#   2. Create GitLab project 'homelab-tasks' with labels (see setup instructions)
+#   3. Generate GitLab project access token with 'api' scope
+#   4. Get Discord channel ID for #project-management
+#
+# Usage:
+#   ansible-playbook deploy-project-bot.yml
+#
+# Environment variables required:
+#   - PROJECT_BOT_DISCORD_TOKEN: Discord bot token
+#   - PROJECT_BOT_CHANNEL_ID: Discord channel ID for #project-management
+#   - PROJECT_BOT_GITLAB_TOKEN: GitLab project access token
+#   - PROJECT_BOT_GITLAB_PROJECT_ID: GitLab project numeric ID
+#   - PROJECT_BOT_WEBHOOK_SECRET: Shared secret for GitLab webhook verification
+
+- name: Deploy Project Bot
+  hosts: docker-vm-utilities01
+  become: true
+  vars:
+    bot_path: /opt/project-bot
+    webhook_port: 5055
+    daily_digest_hour: 9
+    timezone: "Asia/Manila"
+    reminder_days_before: 2
+    stale_days_threshold: 7
+
+    # Environment variable lookups with defaults
+    discord_token: "{{ lookup('env', 'PROJECT_BOT_DISCORD_TOKEN') }}"
+    discord_channel_id: "{{ lookup('env', 'PROJECT_BOT_CHANNEL_ID') }}"
+    gitlab_url: "https://gitlab.hrmsmrflrii.xyz"
+    gitlab_token: "{{ lookup('env', 'PROJECT_BOT_GITLAB_TOKEN') }}"
+    gitlab_project_id: "{{ lookup('env', 'PROJECT_BOT_GITLAB_PROJECT_ID') }}"
+    webhook_secret: "{{ lookup('env', 'PROJECT_BOT_WEBHOOK_SECRET') | default('') }}"
+
+    # Host entries for internal services (accessed via Traefik)
+    extra_hosts:
+      gitlab.hrmsmrflrii.xyz: "192.168.40.20"
+
+  tasks:
+    # === Validation ===
+    - name: Validate required environment variables
+      assert:
+        that:
+          - discord_token | length > 0
+          - discord_channel_id | length > 0
+          - gitlab_token | length > 0
+          - gitlab_project_id | length > 0
+        fail_msg: |
+          Missing required environment variables. Please set:
+            - PROJECT_BOT_DISCORD_TOKEN
+            - PROJECT_BOT_CHANNEL_ID
+            - PROJECT_BOT_GITLAB_TOKEN
+            - PROJECT_BOT_GITLAB_PROJECT_ID
+
+    # === Directory Setup ===
+    - name: Create bot directory
+      file:
+        path: "{{ bot_path }}"
+        state: directory
+        mode: '0755'
+
+    # === Copy Bot Files ===
+    - name: Copy bot source code
+      copy:
+        src: project-bot.py
+        dest: "{{ bot_path }}/project-bot.py"
+        mode: '0644'
+      notify: Rebuild and restart bot
+
+    - name: Copy requirements file
+      copy:
+        src: requirements.txt
+        dest: "{{ bot_path }}/requirements.txt"
+        mode: '0644'
+      notify: Rebuild and restart bot
+
+    - name: Copy Dockerfile
+      copy:
+        src: Dockerfile
+        dest: "{{ bot_path }}/Dockerfile"
+        mode: '0644'
+      notify: Rebuild and restart bot
+
+    # === Add hosts entry for GitLab ===
+    - name: Ensure GitLab hosts entry exists
+      lineinfile:
+        path: /etc/hosts
+        line: "{{ extra_hosts['gitlab.hrmsmrflrii.xyz'] }} gitlab.hrmsmrflrii.xyz"
+        state: present
+
+    # === Docker Compose Configuration ===
+    - name: Create Docker Compose file
+      copy:
+        dest: "{{ bot_path }}/docker-compose.yml"
+        mode: '0644'
+        content: |
+          services:
+            project-bot:
+              build: .
+              container_name: project-bot
+              restart: unless-stopped
+              network_mode: host
+              environment:
+                # Discord Configuration
+                - DISCORD_TOKEN={{ discord_token }}
+                - DISCORD_CHANNEL_ID={{ discord_channel_id }}
+
+                # GitLab Configuration
+                - GITLAB_URL={{ gitlab_url }}
+                - GITLAB_TOKEN={{ gitlab_token }}
+                - GITLAB_PROJECT_ID={{ gitlab_project_id }}
+
+                # Webhook Configuration
+                - WEBHOOK_PORT=5055
+                - WEBHOOK_SECRET={{ webhook_secret }}
+
+                # Schedule Configuration
+                - DAILY_DIGEST_HOUR={{ daily_digest_hour }}
+                - TZ={{ timezone }}
+
+                # Notification Configuration
+                - REMINDER_DAYS_BEFORE={{ reminder_days_before }}
+                - STALE_DAYS_THRESHOLD={{ stale_days_threshold }}
+              healthcheck:
+                test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:5055/health')"]
+                interval: 30s
+                timeout: 10s
+                retries: 3
+                start_period: 10s
+      notify: Restart bot
+
+    # === Deploy Container ===
+    - name: Build and deploy project-bot
+      community.docker.docker_compose_v2:
+        project_src: "{{ bot_path }}"
+        state: present
+        build: always
+      register: deploy_result
+
+    # === Verification ===
+    - name: Wait for bot to be healthy
+      uri:
+        url: "http://localhost:{{ webhook_port }}/health"
+        method: GET
+        status_code: 200
+      register: health_check
+      until: health_check.status == 200
+      retries: 30
+      delay: 2
+
+    - name: Display deployment status
+      debug:
+        msg: |
+          Project Bot deployed successfully!
+
+          Container: project-bot
+          Webhook Port: {{ webhook_port }}
+          Health Check: http://localhost:{{ webhook_port }}/health
+
+          GitLab Webhook URL: http://192.168.40.10:{{ webhook_port }}/webhook
+          (Configure this in GitLab project settings)
+
+          Next Steps:
+          1. Verify bot is online in Discord #project-management channel
+          2. Configure GitLab webhook (see docs/APPLICATION_CONFIGURATIONS.md)
+          3. Test with /todo command in Discord
+
+  handlers:
+    - name: Rebuild and restart bot
+      community.docker.docker_compose_v2:
+        project_src: "{{ bot_path }}"
+        state: present
+        build: always
+
+    - name: Restart bot
+      community.docker.docker_compose_v2:
+        project_src: "{{ bot_path }}"
+        state: restarted

@@ -7,6 +7,93 @@
 
 ## 2025-12-25
 
+### 20:45 - Synology NAS Storage Dashboard (PROTECTED)
+**Status**: Completed
+**Request**: Create modern Synology NAS dashboard for Storage page with disk health, storage consumption, CPU/memory
+**Changes Made**:
+1. Created Grafana dashboard (`synology-nas-modern`) with:
+   - 6 disk health stat tiles (HDDs green, M.2 SSDs purple when healthy)
+   - Summary stats: Uptime, Total/Used/Free Storage, CPU %, Memory %
+   - Disk temperatures bargauge with gradient coloring
+   - CPU and Memory time series charts
+   - Storage Consumption Over Time (7-day window)
+2. Fixed memory unit display (changed from `deckbytes` to `kbytes`)
+3. Deployed to Grafana as version 3
+4. Updated Glance Storage tab iframe height to 1350px
+5. Protected dashboard and updated all documentation
+
+**Prometheus Metrics Used**:
+- `synologyDiskHealthStatus`, `synologyDiskTemperature`
+- `synologyRaidTotalSize`, `synologyRaidFreeSize`
+- `hrProcessorLoad`, `memTotalReal`, `memAvailReal`, `sysUpTime`
+
+**Files Modified**:
+- `temp-synology-nas-dashboard.json` (dashboard JSON)
+- `ansible-playbooks/monitoring/deploy-synology-nas-dashboard.yml` (Ansible playbook)
+
+**Documentation Updated**:
+- `.claude/context.md`, `.claude/conventions.md`
+- `docs/GLANCE.md`, `claude.md`, `CHANGELOG.md`
+- GitHub Wiki, Obsidian vault
+
+---
+
+### 21:30 - Add Top 5 Memory Usage Panels to Container Status Dashboard
+**Status**: Completed
+**Request**: Add memory usage visualization showing top 5 most memory-hungry containers per VM
+**Changes Made**:
+1. Added two bar gauge panels (Top 5 Memory - Utilities VM, Top 5 Memory - Media VM)
+2. Used `topk(5, docker_container_memory_percent)` query for each VM
+3. Utilities VM uses Blue-Purple gradient (`continuous-BlPu`)
+4. Media VM uses Green-Yellow-Red gradient (`continuous-GrYlRd`)
+5. Updated Glance iframe height from 1250px to 1500px
+6. Dashboard version updated to 8
+
+**Files Modified**:
+- `temp-container-status-with-memory.json` (new dashboard JSON)
+- `.claude/context.md`
+- `docs/GLANCE.md`
+- `CHANGELOG.md`
+
+**Note**: Initially tried Treemap visualization but Grafana plugin not installed; switched to bar gauge
+
+---
+
+### 20:30 - Project Bot Discord-GitLab Integration
+**Status**: Completed
+**Request**: Continue project-bot development for Discord-GitLab Kanban integration
+**Issues Found**:
+1. Container was in restart loop due to DNS resolution failure
+2. Message Content Intent was requested but not enabled in Discord Developer Portal
+3. GitLab hostname couldn't be resolved (internal DNS issue)
+
+**Fixes Applied**:
+1. Changed to `network_mode: host` for proper DNS resolution
+2. Removed `intents.message_content = True` (not needed for slash commands)
+3. Added `/etc/hosts` entry for `gitlab.hrmsmrflrii.xyz -> 192.168.40.20` (Traefik)
+
+**Features Added**:
+1. **Due Date Reminders** - Notifies 2 days before task due date (runs every 6h)
+2. **Stale Task Monitor** - Alerts when high-priority tasks inactive for 7+ days (runs every 12h)
+3. **`/details <id>`** - Shows detailed task info with activity log, dates, inactive days
+
+**Bot Commands** (9 total):
+- `/todo`, `/idea`, `/doing` - Create tasks in different columns
+- `/done <id>`, `/move <id> <col>` - Manage task status
+- `/list [column]`, `/board`, `/search <query>` - View tasks
+- `/details <id>` - Detailed task info (NEW)
+
+**Files Modified**:
+- `ansible-playbooks/project-bot/project-bot.py` (added reminder features)
+- `ansible-playbooks/project-bot/deploy-project-bot.yml` (host network mode, hosts entry)
+
+**Deployed**:
+- Container: project-bot on docker-vm-utilities01
+- Discord: Chronos#7476 in #project-management
+- GitLab: Project ID 2 (Homelab Project)
+
+---
+
 ### 16:30 - Container Status Dashboard Protection & Documentation
 **Status**: Completed
 **Request**: Protect Container Status History dashboard, update all documentation

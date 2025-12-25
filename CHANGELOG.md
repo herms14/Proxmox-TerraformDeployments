@@ -7,8 +7,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added - Synology NAS Storage Dashboard (PROTECTED)
+- **Synology NAS Storage** Grafana dashboard (`synology-nas-modern`):
+  - 6 disk health stat tiles (4 HDDs green, 2 M.2 SSDs purple when healthy)
+  - Summary stats: Uptime, Total/Used/Free Storage, CPU %, Memory %
+  - Disk temperatures bargauge with gradient coloring
+  - CPU Usage Over Time (4 cores)
+  - Memory Usage Over Time (Used/Available)
+  - Storage Consumption Over Time (7-day window) showing Used/Free/Total trends
+  - Prometheus SNMP metrics: synologyDiskHealthStatus, synologyRaidTotalSize, hrProcessorLoad, memTotalReal
+- Dashboard JSON: `temp-synology-nas-dashboard.json`
+- Ansible playbook: `ansible-playbooks/monitoring/deploy-synology-nas-dashboard.yml`
+- Glance Storage tab iframe height: 1350px
+- **PROTECTED**: Do not modify without explicit user permission
+
 ### Added - Container Status History Dashboard (PROTECTED)
 - **Container Status History** Grafana dashboard (`container-status`):
+  - **Top 5 Memory Usage panels**: Side-by-side bar gauge panels showing top 5 memory-hungry containers per VM
+    - Utilities VM: Blue-Purple gradient (`continuous-BlPu`)
+    - Media VM: Green-Yellow-Red gradient (`continuous-GrYlRd`)
+    - Query: `topk(5, docker_container_memory_percent{job="..."})`
   - State timeline visualization showing container uptime over 1 hour window
   - Summary stats: Total/Running containers, Memory, CPU gauge
   - VM stats: Container counts and stable counts (>1h uptime) per VM
@@ -16,9 +34,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Key fix: Uses `state-timeline` instead of `status-history` to handle data volume
   - Query interval: `1m` to prevent "Too many points" errors
   - Stable query: `> 3600` (1h threshold) with `or vector(0)` fallback
-- Dashboard JSON: `temp-container-status-fixed.json`
+- Dashboard JSON: `temp-container-status-with-memory.json`
 - Ansible playbook: `ansible-playbooks/monitoring/deploy-container-status-dashboard.yml`
-- Glance iframe height: 1250px
+- Glance iframe height: 1500px
 - **PROTECTED**: Do not modify without explicit user permission
 
 ### Added - Tailscale Remote Access Documentation

@@ -145,12 +145,18 @@ C:\Users\herms\OneDrive\Obsidian Vault\Hermes's Life Knowledge Base\07 HomeLab T
 - Glance Home page layout
 - Glance Media page layout
 - Glance Compute tab layout
+- Glance Storage tab layout
 
 ### Grafana Dashboards
 - **Container Status History** (`container-status`)
   - Iframe height: 1250px
   - Dashboard JSON: `temp-container-status-fixed.json`
   - Ansible: `ansible-playbooks/monitoring/deploy-container-status-dashboard.yml`
+
+- **Synology NAS Storage** (`synology-nas-modern`)
+  - Iframe height: 1350px
+  - Dashboard JSON: `temp-synology-nas-dashboard.json`
+  - Ansible: `ansible-playbooks/monitoring/deploy-synology-nas-dashboard.yml`
 
 See `.claude/context.md` for current structure details.
 
