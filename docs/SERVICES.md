@@ -10,16 +10,18 @@ All services deployed via Docker Compose, managed by Ansible automation from `an
 |----------|------|----------|
 | Reverse Proxy | traefik-vm01 | Traefik |
 | Identity | authentik-vm01 | Authentik |
-| Photos | immich-vm01 | Immich |
+| Photos | immich-vm01, docker-vm-utilities01 | Immich, Lagident |
 | DevOps | gitlab-vm01 | GitLab CE |
 | CI/CD | gitlab-runner-vm01 | GitLab Runner, Ansible |
 | Media | docker-vm-media01 | Arr Stack (12 services), Download Monitor |
+| Media Tools | docker-vm-utilities01 | Wizarr (invites), Tracearr (tracking) |
 | Dashboard | docker-vm-utilities01 | Glance, Life Progress API, Reddit Manager |
 | Utilities | docker-vm-utilities01 | n8n, Paperless, Speedtest Tracker |
-| Productivity | docker-vm-utilities01 | BentoPDF, Reactive Resume |
+| Productivity | docker-vm-utilities01 | BentoPDF, Reactive Resume, Karakeep |
+| RSS & News | docker-vm-utilities01 | Feeds Fun (AI RSS Reader) |
 | Network Tools | docker-vm-utilities01 | Edgeshark (container network inspector) |
 | Update Management | docker-vm-utilities01 | Watchtower, Update Manager (Discord bot) |
-| Discord Bots | docker-vm-utilities01 | Argus SysAdmin Bot |
+| Discord Bots | docker-vm-utilities01 | Argus SysAdmin Bot, Project Bot |
 | Container Metrics | Both Docker hosts | Docker Stats Exporter |
 
 ## Traefik Reverse Proxy
@@ -1312,6 +1314,125 @@ Container metrics displayed in Grafana at:
 - Refresh: 30s
 
 **Ansible**: Deployed with monitoring stack
+
+---
+
+## New Services (December 2025)
+
+### Lagident - Photo Gallery
+
+**Host**: docker-vm-utilities01 (192.168.40.10)
+**Port**: 9933
+**URL**: https://lagident.hrmsmrflrii.xyz
+**Status**: Pending Deployment
+
+Simple, elegant photo gallery with SQLite backend.
+
+| Feature | Description |
+|---------|-------------|
+| Database | SQLite (lightweight) |
+| Platform | Go + Node.js |
+| Architecture | amd64, arm64 |
+
+**Ansible**: `ansible-playbooks/services/deploy-lagident.yml`
+
+---
+
+### Karakeep - Bookmark Manager
+
+**Host**: docker-vm-utilities01 (192.168.40.10)
+**Port**: 3001
+**URL**: https://karakeep.hrmsmrflrii.xyz
+**Status**: Pending Deployment
+
+AI-powered bookmark and content manager (formerly Hoarder).
+
+| Component | Port | Purpose |
+|-----------|------|---------|
+| Karakeep | 3001 | Main application |
+| Meilisearch | 7700 | Full-text search |
+| Chrome | 9222 | Screenshot capture |
+
+**Features**:
+- Automatic content tagging (with OpenAI API)
+- Full-text search via Meilisearch
+- Screenshot capture for bookmarks
+- Browser extension support
+
+**Ansible**: `ansible-playbooks/services/deploy-karakeep.yml`
+
+---
+
+### Wizarr - Jellyfin Invitation System
+
+**Host**: docker-vm-utilities01 (192.168.40.10)
+**Port**: 5690
+**URL**: https://wizarr.hrmsmrflrii.xyz
+**Status**: Pending Deployment
+
+User invitation and onboarding system for Jellyfin.
+
+| Feature | Description |
+|---------|-------------|
+| Integration | Jellyfin, Plex, Emby, AudiobookShelf |
+| Invitations | Generate shareable invite links |
+| Onboarding | Guided setup wizard for new users |
+
+**Jellyfin Configuration**:
+1. Get API key from Jellyfin Admin > API Keys
+2. Configure Wizarr with Jellyfin URL: http://192.168.40.11:8096
+3. Create invitation links to share
+
+**Ansible**: `ansible-playbooks/services/deploy-wizarr.yml`
+
+---
+
+### Feeds Fun - AI RSS Reader
+
+**Host**: docker-vm-utilities01 (192.168.40.10)
+**Port**: 8001
+**URL**: https://feeds.hrmsmrflrii.xyz
+**Status**: Pending Deployment
+
+Self-hosted RSS reader with AI-powered tagging.
+
+| Component | Port | Purpose |
+|-----------|------|---------|
+| API Server | 8001 | Main application |
+| Worker | - | Feed processing |
+| PostgreSQL | 5432 | Database |
+
+**Features**:
+- AI-powered content tagging (OpenAI/Ollama)
+- Full-text search
+- Single-user mode (simplified auth)
+- Background feed processing
+
+**Ansible**: `ansible-playbooks/services/deploy-feedsfun.yml`
+
+---
+
+### Tracearr - Media Request Tracking
+
+**Host**: docker-vm-utilities01 (192.168.40.10)
+**Port**: 3002
+**URL**: https://tracearr.hrmsmrflrii.xyz
+**Status**: Pending Deployment
+
+Media request tracking and analytics.
+
+| Component | Notes |
+|-----------|-------|
+| Image | Supervised (all-in-one) |
+| Database | TimescaleDB (bundled) |
+| Cache | Redis (bundled) |
+
+**Features**:
+- Track media requests across services
+- Analytics dashboard
+- User request history
+
+**Ansible**: `ansible-playbooks/services/deploy-tracearr.yml`
 
 ---
 

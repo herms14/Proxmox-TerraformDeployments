@@ -1,0 +1,89 @@
+---
+# Deploy Wizarr - Jellyfin/Plex Invitation System
+# Host: docker-vm-utilities01 (192.168.40.10)
+# Port: 5690
+# URL: https://wizarr.hrmsmrflrii.xyz
+# Integrates with: Jellyfin at https://jellyfin.hrmsmrflrii.xyz
+
+- name: Deploy Wizarr Invitation System
+  hosts: docker-vm-utilities01
+  become: yes
+  vars:
+    service_name: wizarr
+    service_port: 5690
+    install_dir: /opt/wizarr
+
+  tasks:
+    - name: Create installation directory
+      file:
+        path: "{{ install_dir }}"
+        state: directory
+        owner: hermes-admin
+        group: hermes-admin
+        mode: '0755'
+
+    - name: Create data directory
+      file:
+        path: "{{ install_dir }}/data"
+        state: directory
+        owner: "1000"
+        group: "1000"
+        mode: '0755'
+
+    - name: Create Docker Compose file
+      copy:
+        dest: "{{ install_dir }}/docker-compose.yml"
+        content: |
+          services:
+            wizarr:
+              image: ghcr.io/wizarrrr/wizarr:latest
+              container_name: wizarr
+              restart: unless-stopped
+              ports:
+                - "{{ service_port }}:5690"
+              environment:
+                - PUID=1000
+                - PGID=1000
+                - TZ=Asia/Manila
+                # Set to true if using Authentik for auth
+                - DISABLE_BUILTIN_AUTH=false
+              volumes:
+                - ./data:/data
+              healthcheck:
+                test: ["CMD", "wget", "-q", "--spider", "http://localhost:5690"]
+                interval: 30s
+                timeout: 10s
+                retries: 3
+
+        owner: hermes-admin
+        group: hermes-admin
+        mode: '0644'
+
+    - name: Pull and start Wizarr
+      community.docker.docker_compose_v2:
+        project_src: "{{ install_dir }}"
+        state: present
+        pull: always
+
+    - name: Wait for service to be healthy
+      uri:
+        url: "http://localhost:{{ service_port }}"
+        status_code: [200, 302]
+      register: result
+      until: result.status in [200, 302]
+      retries: 30
+      delay: 5
+
+    - name: Display deployment info
+      debug:
+        msg: |
+          Wizarr deployed successfully!
+          - Internal URL: http://192.168.40.10:{{ service_port }}
+          - External URL: https://wizarr.hrmsmrflrii.xyz
+
+          Jellyfin Configuration:
+          1. Go to Wizarr settings
+          2. Add Jellyfin server:
+             - Server URL: http://192.168.40.11:8096
+             - API Key: Get from Jellyfin Admin > API Keys
+          3. Create invitation link to share with users

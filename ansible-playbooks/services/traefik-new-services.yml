@@ -1,0 +1,108 @@
+---
+# Add Traefik routes for new services
+# Run on traefik-vm01 (192.168.40.20)
+
+- name: Configure Traefik routes for new services
+  hosts: traefik-vm01
+  become: yes
+  vars:
+    traefik_dynamic_dir: /opt/traefik/config/dynamic
+    utilities_host: 192.168.40.10
+
+  tasks:
+    - name: Add new services to Traefik dynamic config
+      copy:
+        dest: "{{ traefik_dynamic_dir }}/new-services.yml"
+        content: |
+          http:
+            routers:
+              # Lagident - Photo Gallery
+              lagident:
+                rule: "Host(`lagident.hrmsmrflrii.xyz`)"
+                entryPoints:
+                  - websecure
+                service: lagident
+                tls:
+                  certResolver: letsencrypt
+
+              # Karakeep - Bookmark Manager
+              karakeep:
+                rule: "Host(`karakeep.hrmsmrflrii.xyz`)"
+                entryPoints:
+                  - websecure
+                service: karakeep
+                tls:
+                  certResolver: letsencrypt
+
+              # Wizarr - Jellyfin Invitations
+              wizarr:
+                rule: "Host(`wizarr.hrmsmrflrii.xyz`)"
+                entryPoints:
+                  - websecure
+                service: wizarr
+                tls:
+                  certResolver: letsencrypt
+
+              # Feeds Fun - RSS Reader
+              feedsfun:
+                rule: "Host(`feeds.hrmsmrflrii.xyz`)"
+                entryPoints:
+                  - websecure
+                service: feedsfun
+                tls:
+                  certResolver: letsencrypt
+
+              # Tracearr - Media Tracking
+              tracearr:
+                rule: "Host(`tracearr.hrmsmrflrii.xyz`)"
+                entryPoints:
+                  - websecure
+                service: tracearr
+                tls:
+                  certResolver: letsencrypt
+
+            services:
+              lagident:
+                loadBalancer:
+                  servers:
+                    - url: "http://{{ utilities_host }}:9933"
+
+              karakeep:
+                loadBalancer:
+                  servers:
+                    - url: "http://{{ utilities_host }}:3001"
+
+              wizarr:
+                loadBalancer:
+                  servers:
+                    - url: "http://{{ utilities_host }}:5690"
+
+              feedsfun:
+                loadBalancer:
+                  servers:
+                    - url: "http://{{ utilities_host }}:8001"
+
+              tracearr:
+                loadBalancer:
+                  servers:
+                    - url: "http://{{ utilities_host }}:3002"
+        owner: root
+        group: root
+        mode: '0644'
+
+    - name: Verify Traefik config syntax
+      command: docker exec traefik traefik healthcheck
+      register: traefik_health
+      changed_when: false
+      failed_when: false
+
+    - name: Display Traefik status
+      debug:
+        msg: |
+          Traefik routes configured!
+          New services:
+          - https://lagident.hrmsmrflrii.xyz -> {{ utilities_host }}:9933
+          - https://karakeep.hrmsmrflrii.xyz -> {{ utilities_host }}:3001
+          - https://wizarr.hrmsmrflrii.xyz -> {{ utilities_host }}:5690
+          - https://feeds.hrmsmrflrii.xyz -> {{ utilities_host }}:8001
+          - https://tracearr.hrmsmrflrii.xyz -> {{ utilities_host }}:3002

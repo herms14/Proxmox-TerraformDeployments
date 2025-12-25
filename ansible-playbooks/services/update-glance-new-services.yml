@@ -1,0 +1,167 @@
+---
+# Update Glance Home page with new services
+# Run on docker-vm-utilities01 (192.168.40.10)
+
+- name: Update Glance Dashboard with New Services
+  hosts: docker-vm-utilities01
+  become: yes
+  vars:
+    glance_config_dir: /opt/glance/config
+
+  tasks:
+    - name: Read current Glance config
+      slurp:
+        src: "{{ glance_config_dir }}/glance.yml"
+      register: current_config
+
+    - name: Create Python script to update Glance config
+      copy:
+        dest: /tmp/update-glance-services.py
+        content: |
+          #!/usr/bin/env python3
+          import yaml
+          import sys
+
+          # Load current config
+          with open('{{ glance_config_dir }}/glance.yml', 'r') as f:
+              config = yaml.safe_load(f)
+
+          # New services to add to bookmarks
+          new_productivity_services = [
+              {
+                  'title': 'Karakeep',
+                  'url': 'https://karakeep.hrmsmrflrii.xyz',
+                  'icon': 'si:bookstack',  # Bookmark icon
+                  'description': 'Bookmark Manager'
+              },
+              {
+                  'title': 'Feeds Fun',
+                  'url': 'https://feeds.hrmsmrflrii.xyz',
+                  'icon': 'si:rss',  # RSS icon
+                  'description': 'AI RSS Reader'
+              }
+          ]
+
+          new_media_services = [
+              {
+                  'title': 'Wizarr',
+                  'url': 'https://wizarr.hrmsmrflrii.xyz',
+                  'icon': 'si:jellyfin',  # Jellyfin related
+                  'description': 'User Invitations'
+              },
+              {
+                  'title': 'Tracearr',
+                  'url': 'https://tracearr.hrmsmrflrii.xyz',
+                  'icon': 'si:radarr',  # Media tracking
+                  'description': 'Media Tracking'
+              }
+          ]
+
+          new_photo_services = [
+              {
+                  'title': 'Lagident',
+                  'url': 'https://lagident.hrmsmrflrii.xyz',
+                  'icon': 'si:googlephotos',  # Photo gallery
+                  'description': 'Photo Gallery'
+              }
+          ]
+
+          # New monitors to add
+          new_monitors = [
+              {
+                  'title': 'Lagident',
+                  'url': 'https://lagident.hrmsmrflrii.xyz',
+                  'icon': 'si:googlephotos'
+              },
+              {
+                  'title': 'Karakeep',
+                  'url': 'https://karakeep.hrmsmrflrii.xyz',
+                  'icon': 'si:bookstack'
+              },
+              {
+                  'title': 'Wizarr',
+                  'url': 'https://wizarr.hrmsmrflrii.xyz',
+                  'icon': 'si:jellyfin'
+              },
+              {
+                  'title': 'Feeds Fun',
+                  'url': 'https://feeds.hrmsmrflrii.xyz',
+                  'icon': 'si:rss'
+              },
+              {
+                  'title': 'Tracearr',
+                  'url': 'https://tracearr.hrmsmrflrii.xyz',
+                  'icon': 'si:radarr'
+              }
+          ]
+
+          # Find Home page and add services
+          for page in config.get('pages', []):
+              if page.get('name') == 'Home':
+                  for column in page.get('columns', []):
+                      for widget in column.get('widgets', []):
+                          # Add to Services bookmarks
+                          if widget.get('type') == 'bookmarks' and widget.get('title') == 'Services':
+                              for group in widget.get('groups', []):
+                                  if group.get('title') == 'Productivity':
+                                      existing_titles = [l.get('title') for l in group.get('links', [])]
+                                      for svc in new_productivity_services:
+                                          if svc['title'] not in existing_titles:
+                                              group['links'].append(svc)
+                                  elif group.get('title') == 'Media':
+                                      existing_titles = [l.get('title') for l in group.get('links', [])]
+                                      for svc in new_media_services:
+                                          if svc['title'] not in existing_titles:
+                                              group['links'].append(svc)
+
+                              # Add Photos group if not exists
+                              group_titles = [g.get('title') for g in widget.get('groups', [])]
+                              if 'Photos' not in group_titles:
+                                  widget['groups'].append({
+                                      'title': 'Photos',
+                                      'links': new_photo_services
+                                  })
+
+                          # Add to Utility Services monitor
+                          if widget.get('type') == 'monitor' and 'Utility' in widget.get('title', ''):
+                              existing_titles = [s.get('title') for s in widget.get('sites', [])]
+                              for mon in new_monitors:
+                                  if mon['title'] not in existing_titles:
+                                      widget['sites'].append(mon)
+
+          # Write updated config
+          with open('{{ glance_config_dir }}/glance.yml', 'w') as f:
+              yaml.dump(config, f, default_flow_style=False, allow_unicode=True, sort_keys=False)
+
+          print("Glance config updated successfully!")
+        mode: '0755'
+
+    - name: Run update script
+      command: python3 /tmp/update-glance-services.py
+      register: update_result
+
+    - name: Restart Glance to apply changes
+      community.docker.docker_compose_v2:
+        project_src: /opt/glance
+        state: present
+        restarted: yes
+
+    - name: Wait for Glance to be healthy
+      uri:
+        url: "http://localhost:8080"
+        status_code: 200
+      register: result
+      until: result.status == 200
+      retries: 10
+      delay: 3
+
+    - name: Display result
+      debug:
+        msg: |
+          Glance dashboard updated!
+          New services added:
+          - Lagident (Photos group)
+          - Karakeep (Productivity)
+          - Wizarr (Media)
+          - Feeds Fun (Productivity)
+          - Tracearr (Media)

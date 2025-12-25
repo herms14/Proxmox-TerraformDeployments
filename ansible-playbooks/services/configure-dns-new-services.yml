@@ -1,0 +1,53 @@
+---
+# Configure DNS entries in OPNsense for new services
+# All services point to Traefik (192.168.40.20)
+
+- name: Configure DNS for New Services
+  hosts: localhost
+  gather_facts: no
+  vars:
+    opnsense_host: 192.168.91.30
+    traefik_ip: 192.168.40.20
+    new_hostnames:
+      - lagident
+      - karakeep
+      - wizarr
+      - feeds
+      - tracearr
+
+  tasks:
+    - name: Display DNS configuration instructions
+      debug:
+        msg: |
+          ================================================
+          DNS Configuration Required in OPNsense
+          ================================================
+
+          Add the following Host Overrides in:
+          Services > Unbound DNS > Host Overrides
+
+          {% for hostname in new_hostnames %}
+          Host: {{ hostname }}
+          Domain: hrmsmrflrii.xyz
+          Type: A
+          IP: {{ traefik_ip }}
+          Description: {{ hostname | title }} Service
+
+          {% endfor %}
+
+          Alternative: Run these commands via SSH to OPNsense:
+          -----------------------------------------------
+          {% for hostname in new_hostnames %}
+          # Add {{ hostname }}.hrmsmrflrii.xyz -> {{ traefik_ip }}
+          configctl unbound host add {{ hostname }} hrmsmrflrii.xyz {{ traefik_ip }}
+          {% endfor %}
+
+          # Apply changes
+          configctl unbound reload
+
+    - name: Pause for manual DNS configuration
+      pause:
+        prompt: |
+          Please configure DNS entries in OPNsense.
+          Press ENTER when done, or Ctrl+C to skip.
+      when: false  # Set to true for interactive mode

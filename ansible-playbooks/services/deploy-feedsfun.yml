@@ -1,0 +1,137 @@
+---
+# Deploy Feeds Fun - AI-powered RSS Reader
+# Host: docker-vm-utilities01 (192.168.40.10)
+# Port: 8001 (changed from 8000 to avoid conflicts)
+# URL: https://feeds.hrmsmrflrii.xyz
+
+- name: Deploy Feeds Fun RSS Reader
+  hosts: docker-vm-utilities01
+  become: yes
+  vars:
+    service_name: feedsfun
+    service_port: 8001
+    install_dir: /opt/feedsfun
+    secret_key: "{{ lookup('password', '/dev/null length=64 chars=ascii_letters,digits') }}"
+    postgres_password: "{{ lookup('password', '/dev/null length=32 chars=ascii_letters,digits') }}"
+
+  tasks:
+    - name: Create installation directory
+      file:
+        path: "{{ install_dir }}"
+        state: directory
+        owner: hermes-admin
+        group: hermes-admin
+        mode: '0755'
+
+    - name: Create .env file
+      copy:
+        dest: "{{ install_dir }}/.env"
+        content: |
+          FFUN_ENVIRONMENT=prod
+          FFUN_APP_DOMAIN=feeds.hrmsmrflrii.xyz
+          FFUN_ENABLE_API_SPA=True
+          FFUN_USER_SETTINGS_SECRET_KEY={{ secret_key }}
+
+          # Database
+          FFUN_POSTGRESQL__HOST=postgres
+          FFUN_POSTGRESQL__USER=feedsfun
+          FFUN_POSTGRESQL__PASSWORD={{ postgres_password }}
+          FFUN_POSTGRESQL__DATABASE=feedsfun
+
+          # Single-user mode (simpler setup)
+          FFUN_AUTH_FORCE_EXTERNAL_USER_ID=admin
+          FFUN_AUTH_FORCE_EXTERNAL_IDENTITY_PROVIDER_ID=single_user
+
+          # Optional: OpenAI for AI tagging (leave empty to disable)
+          # FFUN_LIBRARIAN_OPENAI_GENERAL_PROCESSOR__ENABLED=True
+          # FFUN_OPENAI_API_KEY=your-api-key
+        owner: hermes-admin
+        group: hermes-admin
+        mode: '0600'
+
+    - name: Create Docker Compose file
+      copy:
+        dest: "{{ install_dir }}/docker-compose.yml"
+        content: |
+          services:
+            feedsfun:
+              image: ghcr.io/tiendil/feeds.fun:latest
+              container_name: feedsfun
+              restart: unless-stopped
+              ports:
+                - "{{ service_port }}:8000"
+              env_file:
+                - .env
+              environment:
+                - TZ=Asia/Manila
+              depends_on:
+                postgres:
+                  condition: service_healthy
+              command: >
+                sh -c "ffun migrate && ffun api --host 0.0.0.0 --port 8000"
+              healthcheck:
+                test: ["CMD", "wget", "-q", "--spider", "http://localhost:8000"]
+                interval: 30s
+                timeout: 10s
+                retries: 3
+
+            feedsfun-worker:
+              image: ghcr.io/tiendil/feeds.fun:latest
+              container_name: feedsfun-worker
+              restart: unless-stopped
+              env_file:
+                - .env
+              environment:
+                - TZ=Asia/Manila
+              depends_on:
+                postgres:
+                  condition: service_healthy
+                feedsfun:
+                  condition: service_healthy
+              command: ffun workers --librarian --loader
+
+            postgres:
+              image: postgres:16-alpine
+              container_name: feedsfun-postgres
+              restart: unless-stopped
+              environment:
+                - POSTGRES_USER=feedsfun
+                - POSTGRES_PASSWORD={{ postgres_password }}
+                - POSTGRES_DB=feedsfun
+              volumes:
+                - postgres-data:/var/lib/postgresql/data
+              healthcheck:
+                test: ["CMD-SHELL", "pg_isready -U feedsfun"]
+                interval: 10s
+                timeout: 5s
+                retries: 5
+
+          volumes:
+            postgres-data:
+        owner: hermes-admin
+        group: hermes-admin
+        mode: '0644'
+
+    - name: Pull and start Feeds Fun
+      community.docker.docker_compose_v2:
+        project_src: "{{ install_dir }}"
+        state: present
+        pull: always
+
+    - name: Wait for service to be healthy
+      uri:
+        url: "http://localhost:{{ service_port }}"
+        status_code: [200, 302]
+      register: result
+      until: result.status in [200, 302]
+      retries: 60
+      delay: 10
+
+    - name: Display deployment info
+      debug:
+        msg: |
+          Feeds Fun deployed successfully!
+          - Internal URL: http://192.168.40.10:{{ service_port }}
+          - External URL: https://feeds.hrmsmrflrii.xyz
+          - Mode: Single-user (auto-login as 'admin')
+          - Note: Add OpenAI API key in .env for AI tagging

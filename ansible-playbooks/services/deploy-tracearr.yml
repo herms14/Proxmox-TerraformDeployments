@@ -1,0 +1,86 @@
+---
+# Deploy Tracearr - Media Request Tracking
+# Host: docker-vm-utilities01 (192.168.40.10)
+# Port: 3002 (changed from 3000 to avoid conflicts)
+# URL: https://tracearr.hrmsmrflrii.xyz
+
+- name: Deploy Tracearr Media Tracking
+  hosts: docker-vm-utilities01
+  become: yes
+  vars:
+    service_name: tracearr
+    service_port: 3002
+    install_dir: /opt/tracearr
+    jwt_secret: "{{ lookup('password', '/dev/null length=64 chars=ascii_letters,digits') }}"
+    cookie_secret: "{{ lookup('password', '/dev/null length=64 chars=ascii_letters,digits') }}"
+
+  tasks:
+    - name: Create installation directory
+      file:
+        path: "{{ install_dir }}"
+        state: directory
+        owner: hermes-admin
+        group: hermes-admin
+        mode: '0755'
+
+    - name: Create .env file
+      copy:
+        dest: "{{ install_dir }}/.env"
+        content: |
+          JWT_SECRET={{ jwt_secret }}
+          COOKIE_SECRET={{ cookie_secret }}
+          NODE_ENV=production
+          TZ=Asia/Manila
+        owner: hermes-admin
+        group: hermes-admin
+        mode: '0600'
+
+    - name: Create Docker Compose file
+      copy:
+        dest: "{{ install_dir }}/docker-compose.yml"
+        content: |
+          services:
+            tracearr:
+              image: ghcr.io/connorgallopo/tracearr:supervised
+              container_name: tracearr
+              restart: unless-stopped
+              ports:
+                - "{{ service_port }}:3000"
+              env_file:
+                - .env
+              volumes:
+                - tracearr-data:/data
+              healthcheck:
+                test: ["CMD", "wget", "-q", "--spider", "http://localhost:3000"]
+                interval: 30s
+                timeout: 10s
+                retries: 3
+
+          volumes:
+            tracearr-data:
+        owner: hermes-admin
+        group: hermes-admin
+        mode: '0644'
+
+    - name: Pull and start Tracearr
+      community.docker.docker_compose_v2:
+        project_src: "{{ install_dir }}"
+        state: present
+        pull: always
+
+    - name: Wait for service to be healthy
+      uri:
+        url: "http://localhost:{{ service_port }}"
+        status_code: [200, 302]
+      register: result
+      until: result.status in [200, 302]
+      retries: 60
+      delay: 5
+
+    - name: Display deployment info
+      debug:
+        msg: |
+          Tracearr deployed successfully!
+          - Internal URL: http://192.168.40.10:{{ service_port }}
+          - External URL: https://tracearr.hrmsmrflrii.xyz
+          - Uses supervised image (includes TimescaleDB + Redis)

@@ -7,6 +7,49 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added - New Services Batch Deployment (December 2025)
+- **5 New Services** prepared for deployment on docker-vm-utilities01:
+  - **Lagident** (Port 9933) - Simple photo gallery with SQLite backend
+  - **Karakeep** (Port 3001) - AI-powered bookmark manager (formerly Hoarder)
+  - **Wizarr** (Port 5690) - Jellyfin/Plex user invitation system
+  - **Feeds Fun** (Port 8001) - AI-powered RSS reader with tagging
+  - **Tracearr** (Port 3002) - Media request tracking and analytics
+- Ansible playbooks created for all services:
+  - `ansible-playbooks/services/deploy-lagident.yml`
+  - `ansible-playbooks/services/deploy-karakeep.yml`
+  - `ansible-playbooks/services/deploy-wizarr.yml`
+  - `ansible-playbooks/services/deploy-feedsfun.yml`
+  - `ansible-playbooks/services/deploy-tracearr.yml`
+  - `ansible-playbooks/services/deploy-all-new-services.yml` (master playbook)
+- Traefik configuration: `ansible-playbooks/services/traefik-new-services.yml`
+- Glance dashboard update: `ansible-playbooks/services/update-glance-new-services.yml`
+- DNS configuration guide: `ansible-playbooks/services/configure-dns-new-services.yml`
+- Services skipped (not suitable for containerization):
+  - Simple Photo Gallery (static site generator, not a service)
+  - Stonks Dashboard (no official Docker support)
+  - Personal Management System (requires separate frontend repo)
+
+### Added - Omada Network Dashboard
+- **Omada Network Overview** Grafana dashboard (`omada-network`):
+  - Device summary: Total devices, Gateway, Switches (3), APs (3)
+  - Client stats: Total/Wired/Wireless clients, Total traffic
+  - Gateway utilization: CPU/Memory gauges + time series
+  - Client connection trend over time
+  - Speedtest integration: Download/Upload/Ping/Jitter stats
+  - WAN traffic (from OPNsense)
+  - Switch traffic (Top 5) and PoE power usage
+  - Top APs by client count and traffic
+  - Clients by SSID distribution (pie chart)
+  - OPNsense firewall: Gateway status, services, blocked packets, firewall rates
+  - DNS stats: Queries and blocked (30m window)
+- Omada Exporter deployment: `ansible-playbooks/monitoring/deploy-omada-exporter.yml`
+- Dashboard playbook: `ansible-playbooks/monitoring/deploy-omada-network-dashboard.yml`
+- Prometheus scrape config: `ansible-playbooks/monitoring/prometheus-omada-scrape.yml`
+- Glance Network tab update: `temp-update-network-tab.py`
+- Documentation: `docs/OMADA_NETWORK_DASHBOARD.md`
+- Glance iframe height: 1600px
+- Limitations: ISP Load, Gateway Alerts, and DPI/Application data not available via Omada API
+
 ### Added - Synology NAS Storage Dashboard (PROTECTED)
 - **Synology NAS Storage** Grafana dashboard (`synology-nas-modern`):
   - 6 disk health stat tiles (4 HDDs green, 2 M.2 SSDs purple when healthy)

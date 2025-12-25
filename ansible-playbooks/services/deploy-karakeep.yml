@@ -1,0 +1,117 @@
+---
+# Deploy Karakeep - Bookmark Manager (formerly Hoarder)
+# Host: docker-vm-utilities01 (192.168.40.10)
+# Port: 3001 (changed from 3000 to avoid conflicts)
+# URL: https://karakeep.hrmsmrflrii.xyz
+
+- name: Deploy Karakeep Bookmark Manager
+  hosts: docker-vm-utilities01
+  become: yes
+  vars:
+    service_name: karakeep
+    service_port: 3001
+    install_dir: /opt/karakeep
+    nextauth_secret: "{{ lookup('password', '/dev/null length=32 chars=ascii_letters,digits') }}"
+    meili_master_key: "{{ lookup('password', '/dev/null length=32 chars=ascii_letters,digits') }}"
+
+  tasks:
+    - name: Create installation directory
+      file:
+        path: "{{ install_dir }}"
+        state: directory
+        owner: hermes-admin
+        group: hermes-admin
+        mode: '0755'
+
+    - name: Create .env file
+      copy:
+        dest: "{{ install_dir }}/.env"
+        content: |
+          KARAKEEP_VERSION=release
+          NEXTAUTH_SECRET={{ nextauth_secret }}
+          MEILISEARCH_MASTER_KEY={{ meili_master_key }}
+          NEXTAUTH_URL=https://karakeep.hrmsmrflrii.xyz
+          DATA_DIR=/data
+        owner: hermes-admin
+        group: hermes-admin
+        mode: '0600'
+
+    - name: Create Docker Compose file
+      copy:
+        dest: "{{ install_dir }}/docker-compose.yml"
+        content: |
+          services:
+            karakeep:
+              image: ghcr.io/karakeep-app/karakeep:${KARAKEEP_VERSION:-release}
+              container_name: karakeep
+              restart: unless-stopped
+              ports:
+                - "{{ service_port }}:3000"
+              env_file:
+                - .env
+              environment:
+                - MEILI_ADDR=http://meilisearch:7700
+                - BROWSER_WEB_URL=http://chrome:9222
+                - TZ=Asia/Manila
+              volumes:
+                - karakeep-data:/data
+              depends_on:
+                - meilisearch
+                - chrome
+              healthcheck:
+                test: ["CMD", "wget", "-q", "--spider", "http://localhost:3000"]
+                interval: 30s
+                timeout: 10s
+                retries: 3
+
+            meilisearch:
+              image: getmeili/meilisearch:v1.11
+              container_name: karakeep-meilisearch
+              restart: unless-stopped
+              environment:
+                - MEILI_MASTER_KEY=${MEILISEARCH_MASTER_KEY}
+                - MEILI_NO_ANALYTICS=true
+              volumes:
+                - meilisearch-data:/meili_data
+
+            chrome:
+              image: gcr.io/zenika-hub/alpine-chrome:123
+              container_name: karakeep-chrome
+              restart: unless-stopped
+              command:
+                - --no-sandbox
+                - --disable-gpu
+                - --disable-dev-shm-usage
+                - --remote-debugging-address=0.0.0.0
+                - --remote-debugging-port=9222
+                - --hide-scrollbars
+
+          volumes:
+            karakeep-data:
+            meilisearch-data:
+        owner: hermes-admin
+        group: hermes-admin
+        mode: '0644'
+
+    - name: Pull and start Karakeep
+      community.docker.docker_compose_v2:
+        project_src: "{{ install_dir }}"
+        state: present
+        pull: always
+
+    - name: Wait for service to be healthy
+      uri:
+        url: "http://localhost:{{ service_port }}"
+        status_code: [200, 302]
+      register: result
+      until: result.status in [200, 302]
+      retries: 60
+      delay: 5
+
+    - name: Display deployment info
+      debug:
+        msg: |
+          Karakeep deployed successfully!
+          - Internal URL: http://192.168.40.10:{{ service_port }}
+          - External URL: https://karakeep.hrmsmrflrii.xyz
+          - Create your first account on first visit

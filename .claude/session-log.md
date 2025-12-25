@@ -7,6 +7,103 @@
 
 ## 2025-12-25
 
+### 23:45 - New Services Batch Deployment
+**Status**: Playbooks Ready (deployment pending network access)
+**Request**: Deploy 8 services: Lagident, Simple Photo Gallery, Stonks Dashboard, Karakeep, Wizarr, Feeds Fun, Tracearr, Personal Management System
+
+**Services Deployed** (5 of 8):
+| Service | Port | URL | Purpose |
+|---------|------|-----|---------|
+| Lagident | 9933 | https://lagident.hrmsmrflrii.xyz | Simple photo gallery |
+| Karakeep | 3001 | https://karakeep.hrmsmrflrii.xyz | AI bookmark manager |
+| Wizarr | 5690 | https://wizarr.hrmsmrflrii.xyz | Jellyfin invitations |
+| Feeds Fun | 8001 | https://feeds.hrmsmrflrii.xyz | AI RSS reader |
+| Tracearr | 3002 | https://tracearr.hrmsmrflrii.xyz | Media tracking |
+
+**Services Skipped** (3 - not suitable):
+- Simple Photo Gallery: Static site generator, not a service
+- Stonks Dashboard: No official Docker support
+- Personal Management System: Requires separate frontend repo
+
+**Files Created**:
+- `ansible-playbooks/services/deploy-lagident.yml`
+- `ansible-playbooks/services/deploy-karakeep.yml`
+- `ansible-playbooks/services/deploy-wizarr.yml`
+- `ansible-playbooks/services/deploy-feedsfun.yml`
+- `ansible-playbooks/services/deploy-tracearr.yml`
+- `ansible-playbooks/services/deploy-all-new-services.yml` (master)
+- `ansible-playbooks/services/traefik-new-services.yml`
+- `ansible-playbooks/services/update-glance-new-services.yml`
+- `ansible-playbooks/services/configure-dns-new-services.yml`
+
+**Deployment Instructions**:
+```bash
+# From Ansible controller
+cd ~/ansible
+ansible-playbook ansible-playbooks/services/deploy-all-new-services.yml
+```
+
+**Post-Deployment Tasks**:
+1. Add DNS entries in OPNsense for all new hostnames
+2. Configure Wizarr with Jellyfin API key
+3. Update Glance Home page with new services
+
+---
+
+### 23:00 - Omada Network Dashboard
+**Status**: Completed (deployment pending)
+**Request**: Create comprehensive network dashboard for Glance Network tab with Omada, OPNsense, and Speedtest metrics
+
+**Components Created**:
+1. **Omada Exporter Deployment** (`ansible-playbooks/monitoring/deploy-omada-exporter.yml`)
+   - Docker container: `ghcr.io/charlie-haley/omada_exporter`
+   - Port: 9202
+   - Credentials: claude-reader (viewer role)
+
+2. **Omada Network Grafana Dashboard** (`ansible-playbooks/monitoring/deploy-omada-network-dashboard.yml`)
+   - Dashboard UID: `omada-network`
+   - Iframe height: 1600px
+   - Combines Omada, OPNsense, and Speedtest metrics
+
+3. **Glance Network Tab Update** (`temp-update-network-tab.py`)
+   - New unified dashboard
+   - Individual AP and switch monitoring
+   - Speedtest widget in sidebar
+
+**Dashboard Panels**:
+- Row 1: Device Summary (Total, Gateway, Switches, APs, Clients)
+- Row 2: Gateway CPU/Memory gauges + utilization chart
+- Row 3: Client Connection Trend + Speedtest stats
+- Row 4: WAN Traffic + Switch Traffic + PoE Power
+- Row 5: Top APs (by clients/traffic) + Clients by SSID pie chart
+- Row 6: OPNsense (Gateway, Services, Firewall, DNS)
+
+**Metrics Sources**:
+- Omada exporter (port 9202): Devices, clients, traffic, PoE
+- OPNsense exporter (port 9198): Gateway, firewall, Unbound
+- Speedtest Tracker (port 3000): Download, upload, ping, jitter
+
+**Files Created**:
+- `ansible-playbooks/monitoring/deploy-omada-exporter.yml`
+- `ansible-playbooks/monitoring/deploy-omada-network-dashboard.yml`
+- `ansible-playbooks/monitoring/prometheus-omada-scrape.yml`
+- `temp-update-network-tab.py`
+- `docs/OMADA_NETWORK_DASHBOARD.md`
+
+**Limitations** (Omada API restrictions):
+- ISP Load (latency/throughput) - not available
+- Gateway Alerts - not available
+- DPI/Application categories - not available
+
+**Deployment Steps** (for user to run):
+1. Create Omada viewer user (claude-reader)
+2. Run: `ansible-playbook monitoring/deploy-omada-exporter.yml`
+3. Update Prometheus scrape config
+4. Run: `ansible-playbook monitoring/deploy-omada-network-dashboard.yml`
+5. Run: `python3 temp-update-network-tab.py`
+
+---
+
 ### 20:45 - Synology NAS Storage Dashboard (PROTECTED)
 **Status**: Completed
 **Request**: Create modern Synology NAS dashboard for Storage page with disk health, storage consumption, CPU/memory

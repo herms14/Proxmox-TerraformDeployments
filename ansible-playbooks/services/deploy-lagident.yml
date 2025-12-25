@@ -1,0 +1,83 @@
+---
+# Deploy Lagident - Simple Photo Gallery
+# Host: docker-vm-utilities01 (192.168.40.10)
+# Port: 9933
+# URL: https://lagident.hrmsmrflrii.xyz
+
+- name: Deploy Lagident Photo Gallery
+  hosts: docker-vm-utilities01
+  become: yes
+  vars:
+    service_name: lagident
+    service_port: 9933
+    install_dir: /opt/lagident
+
+  tasks:
+    - name: Create installation directory
+      file:
+        path: "{{ install_dir }}"
+        state: directory
+        owner: hermes-admin
+        group: hermes-admin
+        mode: '0755'
+
+    - name: Create Docker Compose file
+      copy:
+        dest: "{{ install_dir }}/docker-compose.yml"
+        content: |
+          services:
+            lagident:
+              image: nook24/lagident:latest
+              container_name: lagident
+              restart: unless-stopped
+              ports:
+                - "{{ service_port }}:8080"
+              environment:
+                - DB_TYPE=sqlite
+                - PROFILE=prod
+                - TZ=Asia/Manila
+              volumes:
+                - lagident-data:/data
+                - ./photos:/app/public/photos
+              healthcheck:
+                test: ["CMD", "wget", "-q", "--spider", "http://localhost:8080"]
+                interval: 30s
+                timeout: 10s
+                retries: 3
+
+          volumes:
+            lagident-data:
+        owner: hermes-admin
+        group: hermes-admin
+        mode: '0644'
+
+    - name: Create photos directory
+      file:
+        path: "{{ install_dir }}/photos"
+        state: directory
+        owner: hermes-admin
+        group: hermes-admin
+        mode: '0755'
+
+    - name: Pull and start Lagident
+      community.docker.docker_compose_v2:
+        project_src: "{{ install_dir }}"
+        state: present
+        pull: always
+
+    - name: Wait for service to be healthy
+      uri:
+        url: "http://localhost:{{ service_port }}"
+        status_code: 200
+      register: result
+      until: result.status == 200
+      retries: 30
+      delay: 5
+
+    - name: Display deployment info
+      debug:
+        msg: |
+          Lagident deployed successfully!
+          - Internal URL: http://192.168.40.10:{{ service_port }}
+          - External URL: https://lagident.hrmsmrflrii.xyz
+          - Photos directory: {{ install_dir }}/photos

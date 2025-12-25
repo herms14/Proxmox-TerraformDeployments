@@ -1,0 +1,52 @@
+---
+# Master playbook to deploy all new services
+# Run from Ansible controller: ansible-playbook services/deploy-all-new-services.yml
+
+- name: Deploy All New Services
+  hosts: localhost
+  gather_facts: no
+  tasks:
+    - name: Display deployment plan
+      debug:
+        msg: |
+          Deploying 5 new services to docker-vm-utilities01:
+          1. Lagident (Photo Gallery) - Port 9933
+          2. Karakeep (Bookmark Manager) - Port 3001
+          3. Wizarr (Jellyfin Invites) - Port 5690
+          4. Feeds Fun (RSS Reader) - Port 8001
+          5. Tracearr (Media Tracking) - Port 3002
+
+# Deploy services to docker-vm-utilities01
+- import_playbook: deploy-lagident.yml
+- import_playbook: deploy-karakeep.yml
+- import_playbook: deploy-wizarr.yml
+- import_playbook: deploy-feedsfun.yml
+- import_playbook: deploy-tracearr.yml
+
+# Configure Traefik routes
+- import_playbook: traefik-new-services.yml
+
+# Final summary
+- name: Deployment Summary
+  hosts: localhost
+  gather_facts: no
+  tasks:
+    - name: Display completion summary
+      debug:
+        msg: |
+          ====================================
+          ALL SERVICES DEPLOYED SUCCESSFULLY!
+          ====================================
+
+          Service URLs:
+          - https://lagident.hrmsmrflrii.xyz (Photo Gallery)
+          - https://karakeep.hrmsmrflrii.xyz (Bookmark Manager)
+          - https://wizarr.hrmsmrflrii.xyz (Jellyfin Invites)
+          - https://feeds.hrmsmrflrii.xyz (RSS Reader)
+          - https://tracearr.hrmsmrflrii.xyz (Media Tracking)
+
+          Next Steps:
+          1. Add DNS entries in OPNsense for all new hostnames
+          2. Configure Authentik protection (optional)
+          3. Set up Wizarr with your Jellyfin API key
+          4. Update Glance dashboard with new services
