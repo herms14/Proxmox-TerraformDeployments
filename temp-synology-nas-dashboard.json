@@ -122,7 +122,7 @@
         "overrides": []
       },
       "options": {"orientation": "auto", "reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false}, "showThresholdLabels": false, "showThresholdMarkers": true, "minVizHeight": 75, "minVizWidth": 75},
-      "targets": [{"datasource": {"type": "prometheus", "uid": "PBFA97CFB590B2093"}, "expr": "(1 - (memAvailReal{job=\"synology\"} / memTotalReal{job=\"synology\"})) * 100", "refId": "A"}]
+      "targets": [{"datasource": {"type": "prometheus", "uid": "PBFA97CFB590B2093"}, "expr": "((memTotalReal{job=\"synology\"} - memAvailReal{job=\"synology\"} - memBuffer{job=\"synology\"} - memCached{job=\"synology\"}) / memTotalReal{job=\"synology\"}) * 100", "refId": "A"}]
     },
     {
       "type": "stat",
@@ -468,14 +468,16 @@
           "unit": "kbytes"
         },
         "overrides": [
-          {"matcher": {"id": "byName", "options": "Used"}, "properties": [{"id": "color", "value": {"fixedColor": "#f59e0b", "mode": "fixed"}}]},
-          {"matcher": {"id": "byName", "options": "Available"}, "properties": [{"id": "color", "value": {"fixedColor": "#22c55e", "mode": "fixed"}}]}
+          {"matcher": {"id": "byName", "options": "Used (Real)"}, "properties": [{"id": "color", "value": {"fixedColor": "#ef4444", "mode": "fixed"}}]},
+          {"matcher": {"id": "byName", "options": "Cache/Buffers"}, "properties": [{"id": "color", "value": {"fixedColor": "#f59e0b", "mode": "fixed"}}]},
+          {"matcher": {"id": "byName", "options": "Free"}, "properties": [{"id": "color", "value": {"fixedColor": "#22c55e", "mode": "fixed"}}]}
         ]
       },
       "options": {"legend": {"calcs": ["mean", "lastNotNull"], "displayMode": "table", "placement": "bottom", "showLegend": true}, "tooltip": {"mode": "multi", "sort": "desc"}},
       "targets": [
-        {"datasource": {"type": "prometheus", "uid": "PBFA97CFB590B2093"}, "expr": "memTotalReal{job=\"synology\"} - memAvailReal{job=\"synology\"}", "legendFormat": "Used", "refId": "A"},
-        {"datasource": {"type": "prometheus", "uid": "PBFA97CFB590B2093"}, "expr": "memAvailReal{job=\"synology\"}", "legendFormat": "Available", "refId": "B"}
+        {"datasource": {"type": "prometheus", "uid": "PBFA97CFB590B2093"}, "expr": "memTotalReal{job=\"synology\"} - memAvailReal{job=\"synology\"} - memBuffer{job=\"synology\"} - memCached{job=\"synology\"}", "legendFormat": "Used (Real)", "refId": "A"},
+        {"datasource": {"type": "prometheus", "uid": "PBFA97CFB590B2093"}, "expr": "memCached{job=\"synology\"} + memBuffer{job=\"synology\"}", "legendFormat": "Cache/Buffers", "refId": "B"},
+        {"datasource": {"type": "prometheus", "uid": "PBFA97CFB590B2093"}, "expr": "memAvailReal{job=\"synology\"}", "legendFormat": "Free", "refId": "C"}
       ]
     },
     {
