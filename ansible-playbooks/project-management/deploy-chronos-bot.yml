@@ -23,7 +23,7 @@
     discord_token: "{{ lookup('env', 'CHRONOS_DISCORD_TOKEN') }}"
     gitlab_token: "{{ lookup('env', 'GITLAB_TOKEN') }}"
     gitlab_url: "https://gitlab.hrmsmrflrii.xyz"
-    gitlab_project_id: "{{ lookup('env', 'GITLAB_PROJECT_ID') | default('homelab/tasks', true) }}"
+    gitlab_project_id: "{{ lookup('env', 'GITLAB_PROJECT_ID') | default('2', true) }}"
     allowed_channels: "project-management"
 
   tasks:

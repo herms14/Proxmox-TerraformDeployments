@@ -13,6 +13,19 @@
 
 ## Recently Completed (Last 24 Hours)
 
+## Discord Bot Fixes
+**Completed**: 2025-12-27 ~10:30
+**Session**: MacBook via Tailscale
+**Changes**:
+- Fixed Mnemosyne bot: Added missing API keys (RADARR_API_KEY, SONARR_API_KEY were empty)
+- Fixed Chronos bot: Changed GITLAB_PROJECT_ID from `homelab/tasks` to `2` (Homelab Project)
+- Added GitLab hosts entry to docker-utilities (`192.168.40.20 gitlab.hrmsmrflrii.xyz`)
+**Files Modified**:
+- `/opt/mnemosyne-bot/docker-compose.yml` (docker-media)
+- `/opt/chronos-bot/docker-compose.yml` (docker-utilities)
+- `ansible-playbooks/project-management/deploy-chronos-bot.yml` (local)
+- `docs/DISCORD_BOTS.md` (local)
+
 ## Discord Bot Reorganization
 **Completed**: 2025-12-26 ~22:00
 **Session**: MacBook via Tailscale

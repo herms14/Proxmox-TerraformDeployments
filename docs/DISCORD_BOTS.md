@@ -140,7 +140,7 @@ When creating tasks with `/todo`, you can set priority:
 
 ### GitLab Setup
 
-1. Create a GitLab project for tasks (e.g., `homelab/tasks`)
+1. Create a GitLab project for tasks (default: Homelab Project, ID: 2)
 2. Create labels: `todo`, `priority::high`, `priority::medium`, `priority::low`
 3. Optionally create a board with lists for workflow
 
@@ -150,7 +150,7 @@ When creating tasks with `/todo`, you can set priority:
 # Set environment variables
 export CHRONOS_DISCORD_TOKEN=your_token
 export GITLAB_TOKEN=your_gitlab_pat
-export GITLAB_PROJECT_ID=homelab/tasks  # Optional
+export GITLAB_PROJECT_ID=2  # Optional, defaults to 2
 
 # Deploy via Ansible
 cd ~/ansible
