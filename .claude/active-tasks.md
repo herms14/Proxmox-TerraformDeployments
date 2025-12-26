@@ -7,24 +7,37 @@
 
 ## Currently In Progress
 
-<!--
-When starting a task, add an entry here:
-
-## [Task Name]
-**Started**: YYYY-MM-DD HH:MM
-**Session**: [brief identifier]
-**Status**: In Progress
-**Working On**: [current step]
-**Files Being Modified**:
-- file1.md
-- file2.yml
--->
-
 *No active tasks*
 
 ---
 
 ## Recently Completed (Last 24 Hours)
+
+## NBA Stats API + Yahoo Fantasy Integration
+**Completed**: 2025-12-26 ~14:00
+**Session**: MacBook via Tailscale
+**Changes**:
+- Deployed NBA Stats API to docker-utilities:5060 (fixed port conflict from 5055)
+- Fixed ESPN standings URL (v2 endpoint)
+- Implemented Yahoo Fantasy OAuth headless flow
+- Fixed Yahoo Fantasy API (game ID 466, league key `466.l.12095`)
+- Added `/fantasy/matchups` endpoint for weekly matchups
+- Added `/fantasy/recommendations` endpoint for player pickup analysis
+- Added NBA team logos to games and standings widgets (ESPN CDN)
+- Added Sports tab to Glance (8 pages now)
+- Created docs/DOCKER_SERVICES.md - comprehensive Docker services inventory
+**API Endpoints**:
+- `http://192.168.40.10:5060/games` - NBA games with logos
+- `http://192.168.40.10:5060/standings` - NBA standings with logos
+- `http://192.168.40.10:5060/fantasy` - Fantasy league standings
+- `http://192.168.40.10:5060/fantasy/matchups` - Current week matchups
+- `http://192.168.40.10:5060/fantasy/recommendations` - Player pickup recommendations
+**Files on Server**:
+- /opt/nba-stats-api/nba-stats-api.py
+- /opt/nba-stats-api/yahoo_fantasy.py
+- /opt/nba-stats-api/fantasy_recommendations.py
+- /opt/nba-stats-api/data/yahoo_token.json
+- /opt/glance/config/glance.yml (Sports tab)
 
 ## Synology NAS Storage Dashboard - Protected
 **Completed**: 2025-12-25 20:45
@@ -111,5 +124,6 @@ Leave notes here for future sessions:
 
 - User prefers documentation updates to happen incrementally, not at the end
 - Multiple Claude instances may run in parallel - always check active-tasks first
-- Glance Home, Media, Compute, and Storage pages are protected - don't modify without permission
+- Glance Home, Media, Compute, Storage, Network, and Sports pages are protected - don't modify without permission
 - Synology NAS Storage dashboard is protected - UID: `synology-nas-modern`, height: 1350px
+- Yahoo Fantasy OAuth token stored at `/opt/nba-stats-api/data/yahoo_token.json` - auto-refreshes

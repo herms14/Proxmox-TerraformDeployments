@@ -676,17 +676,18 @@ ssh hermes-admin@192.168.40.10 "sudo python3 /tmp/temp-home-fix.py && cd /opt/gl
 
 ## Glance Dashboard Tab Structure
 
-The Glance dashboard has 7 tabs in this order:
+The Glance dashboard has 8 tabs in this order:
 
 | Tab | Purpose | Protected |
 |-----|---------|-----------|
 | **Home** | Service monitors, bookmarks, markets | YES |
 | **Compute** | Proxmox cluster + Container monitoring | YES |
 | **Storage** | Synology NAS Grafana dashboard | YES |
-| **Network** | Network overview + Speedtest | No |
+| **Network** | Network overview + Speedtest | YES |
 | **Media** | Media stats, downloads, queue | YES |
-| **Web** | Tech news, AI/ML, stocks, NBA | No |
+| **Web** | Tech news, AI/ML, stocks, crypto | No |
 | **Reddit** | Dynamic Reddit feed | No |
+| **Sports** | NBA games, standings, Yahoo Fantasy | YES |
 
 ### Compute Tab
 
@@ -985,6 +986,74 @@ This shows ~7% actual usage instead of ~95% (which incorrectly treated cache as 
 - Iframe Height: 750px
 
 **Speedtest Widget**: Custom API showing Download/Upload/Ping from Speedtest Tracker
+
+### Sports Tab (PROTECTED)
+
+**DO NOT MODIFY without explicit user permission.**
+
+The Sports tab displays NBA data and Yahoo Fantasy league information using the NBA Stats API.
+
+**API Location**: docker-vm-utilities01:5060 (`/opt/nba-stats-api/`)
+
+**Layout (3 columns)**:
+```
+┌──────────────────┬───────────────────────────────────┬──────────────────┐
+│  TODAY'S GAMES   │         NBA STANDINGS             │  FANTASY LEAGUE  │
+│  (small column)  │         (full column)             │  (small column)  │
+│                  │                                   │                  │
+│  5 games today   │  Eastern      │     Western       │  League Standings│
+│  with logos      │  Conference   │     Conference    │  W-L Records     │
+│  and scores      │  15 teams     │     15 teams      ├──────────────────┤
+│                  │               │                   │  WEEK MATCHUPS   │
+│                  │  Green = Playoff (1-6)            │  Current week    │
+│                  │  Yellow = Play-in (7-10)          │  matchup scores  │
+│                  │                                   ├──────────────────┤
+│                  │                                   │  HOT PICKUPS     │
+│                  │                                   │  Top 10 available│
+│                  │                                   │  free agents     │
+└──────────────────┴───────────────────────────────────┴──────────────────┘
+```
+
+**Widgets**:
+
+| Widget | API Endpoint | Cache | Description |
+|--------|--------------|-------|-------------|
+| Today's NBA Games | `/games` | 2m | Live scores with team logos from ESPN CDN |
+| NBA Standings | `/standings` | 15m | East/West conferences with playoff indicators |
+| Fantasy League | `/fantasy` | 15m | Yahoo Fantasy league standings |
+| Week Matchups | `/fantasy/matchups` | 5m | Current week H2H matchups with scores |
+| Hot Pickups | `/fantasy/recommendations` | 30m | Top 10 available free agents by value |
+
+**NBA Stats API Endpoints**:
+
+| Endpoint | Description | Data Source |
+|----------|-------------|-------------|
+| `/health` | Health check | - |
+| `/games` | Today's NBA games with scores | ESPN API |
+| `/standings` | NBA standings (East/West) | ESPN API |
+| `/fantasy` | Fantasy league standings | Yahoo Fantasy API |
+| `/fantasy/matchups` | Current week matchups | Yahoo Fantasy API |
+| `/fantasy/recommendations` | Player pickup recommendations | Yahoo Fantasy API |
+| `/fantasy/refresh` | Force refresh fantasy data | Yahoo Fantasy API |
+
+**Yahoo Fantasy Configuration**:
+- League ID: `466.l.12095` (2024-25 NBA season)
+- OAuth Token: `/opt/nba-stats-api/data/yahoo_token.json` (auto-refreshes)
+- Update Schedule: Daily at 2pm (Asia/Manila timezone)
+- League Type: Head-to-Head Categories
+
+**Team Logos**: Pulled dynamically from ESPN CDN (not stored locally)
+
+**Files on Server**:
+| File | Location | Purpose |
+|------|----------|---------|
+| nba-stats-api.py | `/opt/nba-stats-api/` | Main Flask API |
+| yahoo_fantasy.py | `/opt/nba-stats-api/` | Yahoo Fantasy API module |
+| fantasy_recommendations.py | `/opt/nba-stats-api/` | Player recommendations |
+| yahoo_token.json | `/opt/nba-stats-api/data/` | OAuth token storage |
+| docker-compose.yml | `/opt/nba-stats-api/` | Container config |
+
+**Ansible Playbook**: `ansible-playbooks/glance/deploy-nba-stats-api.yml`
 
 ### Prometheus Exporters
 

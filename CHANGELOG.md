@@ -7,6 +7,40 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added - Glance Sports Tab with NBA Stats API (December 26, 2025)
+- **NBA Stats API** deployed on docker-utilities (192.168.40.10:5060)
+  - `/games` - Today's NBA games with live scores and team logos (ESPN API)
+  - `/standings` - Current NBA standings with team logos (East/West conferences)
+  - `/fantasy` - Yahoo Fantasy NBA league standings (cached, updates 2pm daily)
+  - `/fantasy/matchups` - Current week H2H matchups with scores
+  - `/fantasy/recommendations` - Player pickup recommendations (top available free agents)
+  - `/health` - Health check endpoint
+- **Glance Sports Tab** added with 5 widgets in 3-column layout:
+  - Column 1 (small): Today's NBA Games with team logos
+  - Column 2 (full): NBA Standings (East/West) with playoff/play-in indicators
+  - Column 3 (small): Fantasy League + Week Matchups + Hot Pickups (stacked)
+- **Yahoo Fantasy Integration**:
+  - League ID: `466.l.12095` (2024-25 NBA season)
+  - OAuth2 authentication with headless token generation flow
+  - Auto token refresh (stored in `/opt/nba-stats-api/data/yahoo_token.json`)
+  - H2H Categories league support
+- **Team Logos**: Pulled dynamically from ESPN CDN (not stored locally)
+- **Files Created**:
+  - `ansible-playbooks/glance/deploy-nba-stats-api.yml` - Deployment playbook
+  - `/opt/nba-stats-api/nba-stats-api.py` - Main Flask API (on server)
+  - `/opt/nba-stats-api/yahoo_fantasy.py` - Yahoo Fantasy API module (on server)
+  - `/opt/nba-stats-api/fantasy_recommendations.py` - Player recommendations (on server)
+- **Sports Tab Protected**: Do not modify without explicit user permission
+
+### Added - Docker Services Documentation (December 26, 2025)
+- **New Documentation**: `docs/DOCKER_SERVICES.md`
+  - Comprehensive inventory of all Docker services across both hosts
+  - docker-vm-utilities01 (192.168.40.10): 35+ containers
+  - docker-vm-media01 (192.168.40.11): 15+ containers
+  - Port allocation summary and reserved ports
+  - Quick access URLs (local and external)
+  - Maintenance instructions
+
 ### Added - Comprehensive Omada Network Dashboard (December 26, 2025)
 - **Dashboard JSON**: `temp-omada-full-dashboard.json` with 7 row sections and 28 panels (Version 3)
 - **Sections**:

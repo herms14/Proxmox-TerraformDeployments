@@ -7,6 +7,43 @@
 
 ## 2025-12-26
 
+### 11:10 - NBA Stats API & Glance Sports Tab Deployment
+**Status**: Completed
+**Request**: Create Sports tab on Glance with NBA scores, standings, and Yahoo Fantasy integration
+
+**Files Created**:
+- `ansible-playbooks/glance/deploy-nba-stats-api.yml` - Deployment playbook
+- `docs/DOCKER_SERVICES.md` - Comprehensive Docker services inventory
+- `/opt/nba-stats-api/nba-stats-api.py` - Main Flask API (on server)
+- `/opt/nba-stats-api/yahoo_fantasy.py` - Yahoo Fantasy API module (on server)
+- `/opt/nba-stats-api/fantasy_recommendations.py` - Player recommendations (on server)
+
+**Deployed Services**:
+- NBA Stats API container on port 5060 (192.168.40.10:5060)
+- Glance Sports tab with 5 widgets in 3-column layout:
+  - Column 1 (small): Today's NBA Games with team logos
+  - Column 2 (full): NBA Standings (East/West) with playoff/play-in indicators
+  - Column 3 (small): Fantasy League + Week Matchups + Hot Pickups (stacked)
+
+**Technical Details**:
+- ESPN API (free, no auth): `/games`, `/standings` - includes team logos from ESPN CDN
+- Yahoo Fantasy API with OAuth2: `/fantasy`, `/fantasy/matchups`, `/fantasy/recommendations`
+- League ID: `466.l.12095` (2024-25 NBA season)
+- OAuth token stored in `/opt/nba-stats-api/data/yahoo_token.json` (auto-refreshes)
+- Port changed from 5055 to 5060 (5055 used by bentopdf)
+
+**API Endpoints**:
+- http://192.168.40.10:5060/games - Today's games with team logos
+- http://192.168.40.10:5060/standings - Current standings with team logos
+- http://192.168.40.10:5060/fantasy - Fantasy league standings
+- http://192.168.40.10:5060/fantasy/matchups - Current week H2H matchups
+- http://192.168.40.10:5060/fantasy/recommendations - Top available free agents
+- http://192.168.40.10:5060/health - Health check
+
+**Protected Status**: Sports tab is protected - do not modify without permission
+
+---
+
 ### 22:30 - Jellyfin SSO Redirect URI Fix (Recurring Issue)
 **Status**: Completed
 **Request**: Fix Jellyfin Authentik SSO redirect URI error when accessing from MacBook via Tailscale

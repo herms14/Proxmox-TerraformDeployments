@@ -23,14 +23,14 @@
   become: yes
   vars:
     api_path: /opt/nba-stats-api
-    api_port: 5055
+    api_port: 5060
     container_name: nba-stats-api
 
     # Yahoo Fantasy Configuration (optional)
     # Get credentials from: https://developer.yahoo.com/apps/
-    yahoo_client_id: ""  # Your Yahoo app Client ID
-    yahoo_client_secret: ""  # Your Yahoo app Client Secret
-    yahoo_league_id: ""  # e.g., "418.l.123456" (find in your league URL)
+    yahoo_client_id: "dj0yJmk9TVpPYkl1ODk1ZTZSJmQ9WVdrOU5WZGxTM04wUVdRbWNHbzlNQT09JnM9Y29uc3VtZXJzZWNyZXQmc3Y9MCZ4PTVm"
+    yahoo_client_secret: "4577ab705b5378f2f2e6a42e3dda6a0c1b84e90c"
+    yahoo_league_id: "418.l.12095"  # Hermes's Fantasy NBA League
 
     # Update schedule
     fantasy_update_hour: 14  # 2pm daily
@@ -90,7 +90,7 @@
 
           # ESPN API endpoints (free, no auth required)
           ESPN_SCOREBOARD = "https://site.api.espn.com/apis/site/v2/sports/basketball/nba/scoreboard"
-          ESPN_STANDINGS = "https://site.api.espn.com/apis/site/v2/sports/basketball/nba/standings"
+          ESPN_STANDINGS = "https://site.api.espn.com/apis/v2/sports/basketball/nba/standings"
 
           # Timezone
           TIMEZONE = os.getenv('TIMEZONE', 'Asia/Manila')
@@ -305,7 +305,7 @@
 
 
           if __name__ == '__main__':
-              port = int(os.getenv('PORT', 5055))
+              port = int(os.getenv('PORT', 5060))
               debug = os.getenv('DEBUG', 'false').lower() == 'true'
               app.run(host='0.0.0.0', port=port, debug=debug)
 
@@ -337,7 +337,7 @@
           # Create data directory for Yahoo token storage
           RUN mkdir -p /data
 
-          EXPOSE 5055
+          EXPOSE 5060
 
           CMD ["python", "nba-stats-api.py"]
 
@@ -345,17 +345,15 @@
       copy:
         dest: "{{ api_path }}/docker-compose.yml"
         content: |
-          version: '3.8'
-
           services:
             nba-stats-api:
               build: .
               container_name: {{ container_name }}
               restart: unless-stopped
               ports:
-                - "{{ api_port }}:5055"
+                - "{{ api_port }}:5060"
               environment:
-                - PORT=5055
+                - PORT=5060
                 - TIMEZONE={{ timezone }}
                 - FANTASY_UPDATE_HOUR={{ fantasy_update_hour }}
                 - YAHOO_CLIENT_ID={{ yahoo_client_id }}
@@ -367,7 +365,7 @@
               labels:
                 - "com.centurylinklabs.watchtower.enable=false"
               healthcheck:
-                test: ["CMD", "curl", "-f", "http://localhost:5055/health"]
+                test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:5060/health')"]
                 interval: 30s
                 timeout: 10s
                 retries: 3
