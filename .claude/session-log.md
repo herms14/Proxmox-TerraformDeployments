@@ -7,6 +7,42 @@
 
 ## 2025-12-26
 
+### 13:30 - Sports Tab Enhancement: Injuries & News Widgets
+**Status**: Completed
+**Request**: Add Injury Report with player photos, NBA News, fix Hot Pickups stats showing as None
+
+**Fixes Applied**:
+1. **Hot Pickups stats fixed** - Stats were nested under `stats` object but template expected top-level. Changed `fantasy_recommendations.py` to put pts, ast, reb at top level
+2. **Dockerfile fixed** - Changed from `COPY nba-stats-api.py .` to `COPY *.py .` to include all Python modules
+
+**New Features Added**:
+1. **Injury Report widget** (`/injuries` endpoint):
+   - Player headshots from ESPN CDN
+   - Team abbreviations via TEAM_ABBRS mapping dictionary
+   - Status colors: Red for "Out", Yellow for "Day-To-Day"
+   - Shows injury type (Surgery, Knee, etc.)
+
+2. **NBA News widget** (`/news` endpoint):
+   - Article headlines with images
+   - 6 latest articles from ESPN
+
+**Sports Tab Layout** (7 widgets in 3 columns):
+- Column 1 (small): Today's NBA Games + Injury Report
+- Column 2 (full): NBA Standings + NBA News
+- Column 3 (small): Fantasy League + Week Matchups + Hot Pickups
+
+**Files Modified on Server**:
+- `/opt/nba-stats-api/nba-stats-api.py` - Added injuries, news endpoints, TEAM_ABBRS mapping
+- `/opt/nba-stats-api/fantasy_recommendations.py` - Fixed stats at top level
+- `/opt/nba-stats-api/Dockerfile` - Changed to copy all Python files
+
+**API Status Verified**:
+- Injuries: 104 players tracked
+- News: 6 current articles
+- Hot Pickups: Stats now showing correctly (e.g., "Kevin Love - 27.0 PTS")
+
+---
+
 ### 11:10 - NBA Stats API & Glance Sports Tab Deployment
 **Status**: Completed
 **Request**: Create Sports tab on Glance with NBA scores, standings, and Yahoo Fantasy integration

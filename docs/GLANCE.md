@@ -995,22 +995,22 @@ The Sports tab displays NBA data and Yahoo Fantasy league information using the 
 
 **API Location**: docker-vm-utilities01:5060 (`/opt/nba-stats-api/`)
 
-**Layout (3 columns)**:
+**Layout (3 columns, 7 widgets)**:
 ```
 ┌──────────────────┬───────────────────────────────────┬──────────────────┐
 │  TODAY'S GAMES   │         NBA STANDINGS             │  FANTASY LEAGUE  │
 │  (small column)  │         (full column)             │  (small column)  │
 │                  │                                   │                  │
-│  5 games today   │  Eastern      │     Western       │  League Standings│
+│  Live scores     │  Eastern      │     Western       │  League Standings│
 │  with logos      │  Conference   │     Conference    │  W-L Records     │
-│  and scores      │  15 teams     │     15 teams      ├──────────────────┤
-│                  │               │                   │  WEEK MATCHUPS   │
-│                  │  Green = Playoff (1-6)            │  Current week    │
-│                  │  Yellow = Play-in (7-10)          │  matchup scores  │
-│                  │                                   ├──────────────────┤
-│                  │                                   │  HOT PICKUPS     │
-│                  │                                   │  Top 10 available│
-│                  │                                   │  free agents     │
+├──────────────────┤  15 teams     │     15 teams      ├──────────────────┤
+│  INJURY REPORT   │               │                   │  WEEK MATCHUPS   │
+│  Player photos   │  Green = Playoff (1-6)            │  Current week    │
+│  Status colors   │  Yellow = Play-in (7-10)          │  matchup scores  │
+│  Out/Day-to-Day  ├───────────────────────────────────┼──────────────────┤
+│                  │         NBA NEWS                  │  HOT PICKUPS     │
+│                  │  Headlines with images            │  Top 10 available│
+│                  │  6 latest articles                │  PTS/AST/REB     │
 └──────────────────┴───────────────────────────────────┴──────────────────┘
 ```
 
@@ -1019,10 +1019,12 @@ The Sports tab displays NBA data and Yahoo Fantasy league information using the 
 | Widget | API Endpoint | Cache | Description |
 |--------|--------------|-------|-------------|
 | Today's NBA Games | `/games` | 2m | Live scores with team logos from ESPN CDN |
+| Injury Report | `/injuries` | 15m | Player injuries with headshots, status colors (red=Out, yellow=Day-to-Day) |
 | NBA Standings | `/standings` | 15m | East/West conferences with playoff indicators |
+| NBA News | `/news` | 15m | Latest headlines with article images |
 | Fantasy League | `/fantasy` | 15m | Yahoo Fantasy league standings |
 | Week Matchups | `/fantasy/matchups` | 5m | Current week H2H matchups with scores |
-| Hot Pickups | `/fantasy/recommendations` | 30m | Top 10 available free agents by value |
+| Hot Pickups | `/fantasy/recommendations` | 30m | Top 10 available free agents with stats (PTS/AST/REB) |
 
 **NBA Stats API Endpoints**:
 
@@ -1031,6 +1033,8 @@ The Sports tab displays NBA data and Yahoo Fantasy league information using the 
 | `/health` | Health check | - |
 | `/games` | Today's NBA games with scores | ESPN API |
 | `/standings` | NBA standings (East/West) | ESPN API |
+| `/injuries` | NBA injury report with player headshots | ESPN API |
+| `/news` | NBA news headlines with images | ESPN API |
 | `/fantasy` | Fantasy league standings | Yahoo Fantasy API |
 | `/fantasy/matchups` | Current week matchups | Yahoo Fantasy API |
 | `/fantasy/recommendations` | Player pickup recommendations | Yahoo Fantasy API |

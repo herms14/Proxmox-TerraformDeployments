@@ -7,17 +7,32 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Enhanced - Glance Sports Tab with Injuries & News (December 26, 2025)
+- **New API Endpoints**:
+  - `/injuries` - NBA injury report with player headshots from ESPN CDN
+  - `/news` - NBA news headlines with article images
+- **Sports Tab expanded to 7 widgets** (was 5):
+  - Column 1: Today's NBA Games + **Injury Report** (with player photos, status colors)
+  - Column 2: NBA Standings + **NBA News** (with article images)
+  - Column 3: Fantasy League + Week Matchups + Hot Pickups
+- **Hot Pickups Fixed**: Stats now display correctly (PTS/AST/REB instead of "None")
+- **Player Headshots**: ESPN CDN format: `https://a.espncdn.com/i/headshots/nba/players/full/{id}.png`
+- **Injury Status Colors**: Red for "Out", Yellow for "Day-To-Day"
+- **Dockerfile Fix**: Changed to `COPY *.py .` to include all Python modules
+
 ### Added - Glance Sports Tab with NBA Stats API (December 26, 2025)
 - **NBA Stats API** deployed on docker-utilities (192.168.40.10:5060)
   - `/games` - Today's NBA games with live scores and team logos (ESPN API)
   - `/standings` - Current NBA standings with team logos (East/West conferences)
+  - `/injuries` - NBA injury report with player headshots (ESPN API)
+  - `/news` - NBA news headlines with images (ESPN API)
   - `/fantasy` - Yahoo Fantasy NBA league standings (cached, updates 2pm daily)
   - `/fantasy/matchups` - Current week H2H matchups with scores
   - `/fantasy/recommendations` - Player pickup recommendations (top available free agents)
   - `/health` - Health check endpoint
-- **Glance Sports Tab** added with 5 widgets in 3-column layout:
-  - Column 1 (small): Today's NBA Games with team logos
-  - Column 2 (full): NBA Standings (East/West) with playoff/play-in indicators
+- **Glance Sports Tab** added with 7 widgets in 3-column layout:
+  - Column 1 (small): Today's NBA Games + Injury Report
+  - Column 2 (full): NBA Standings (East/West) + NBA News
   - Column 3 (small): Fantasy League + Week Matchups + Hot Pickups (stacked)
 - **Yahoo Fantasy Integration**:
   - League ID: `466.l.12095` (2024-25 NBA season)
