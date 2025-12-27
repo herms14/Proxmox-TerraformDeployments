@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed - Grafana Iframe Embedding (December 27, 2025)
+- **Fixed Traefik services.yml structure** - middlewares were incorrectly placed under serversTransports
+- **Removed Authentik auth from Grafana route** - allows anonymous read-only access for iframe embedding
+- **Updated Grafana ROOT_URL** to HTTPS (grafana.hrmsmrflrii.xyz)
+- **Changed Glance iframe URLs** from HTTP to HTTPS to fix mixed content blocking
+- **Fixed empty Host() rule** for open-notebook route (was matching all traffic)
+
 ### Fixed - Monitoring Stack Rebuild (December 27, 2025)
 - **Rebuilt Prometheus configuration** on new core-utilities VM (192.168.40.13)
   - Added targets: cadvisor, cadvisor-media, docker-stats-media, traefik, omada, synology, proxmox

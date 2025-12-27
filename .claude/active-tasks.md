@@ -13,6 +13,20 @@
 
 ## Recently Completed (Last 24 Hours)
 
+## Grafana Iframe Fix for Glance Dashboard
+**Completed**: 2025-12-27 ~17:40 UTC+8
+**Session**: MacBook via Tailscale
+**Changes**:
+- Fixed Traefik services.yml structure (middlewares were incorrectly under serversTransports)
+- Removed Authentik auth from Grafana route to allow iframe embedding
+- Updated Grafana ROOT_URL to HTTPS (grafana.hrmsmrflrii.xyz)
+- Changed Glance iframe URLs from HTTP to HTTPS to fix mixed content blocking
+- Fixed empty Host() rule for open-notebook route (was matching all traffic)
+**Root Cause**: YAML structure error in Traefik config - middlewares section was under serversTransports instead of http.middlewares
+**Files Modified**:
+- `/opt/traefik/config/dynamic/services.yml` (Traefik VM @ 192.168.40.20)
+- `/opt/monitoring/docker-compose.yml` (Core Utilities VM @ 192.168.40.13)
+
 ## Grafana Dashboards & API Fixes
 **Completed**: 2025-12-27 ~17:00 UTC+8
 **Session**: MacBook via Tailscale
@@ -304,3 +318,5 @@ Leave notes here for future sessions:
 - docker-utilities VM (192.168.40.10) has been decommissioned
 - Docker in LXC requires `--security-opt apparmor=unconfined` flag
 - Docker builds fail in LXC - use pre-built images with volume mounts instead
+- **NEW**: Grafana has no Authentik protection (allows anonymous read-only access for iframe embedding)
+- **NEW**: Grafana uses HTTPS via grafana.hrmsmrflrii.xyz for iframe embedding in Glance
