@@ -331,9 +331,10 @@ ssh hermes-admin@192.168.20.30
 
 **Pi-hole Stats API:**
 - URL: `http://172.17.0.1:5055/api/pihole/stats`
-- Authenticates with Pi-hole v6 API (password: `glance-api-2024`)
+- Authenticates with Pi-hole v6 API (password stored in Obsidian Credentials)
 - Caches stats for 60 seconds
 - Displays: Queries, Blocked, Block Rate, Active Clients, Blocklist Domains, Cached
+- Config file: `/opt/pihole-stats-api/pihole-stats-api.py` (on LXC 200)
 
 **Files:**
 - Dashboard JSON: `temp-omada-full-dashboard.json`

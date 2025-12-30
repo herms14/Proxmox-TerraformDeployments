@@ -20,7 +20,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Handles Pi-hole v6 session-based authentication
   - Displays: Queries Today, Blocked, Block Rate %, Active Clients, Blocklist Domains, Cached
   - API runs on port 5055 with 60-second cache
-  - Set Pi-hole password for API access: `glance-api-2024`
+  - Pi-hole password stored in Obsidian Credentials (11 - Credentials.md)
+- **Fixed Pi-hole DNS records** - Added missing entries and corrected pihole.hrmsmrflrii.xyz IP
+  - Added: `paperless.hrmsmrflrii.xyz`, `notebook.hrmsmrflrii.xyz`
+  - Fixed: `pihole.hrmsmrflrii.xyz` now points to Traefik (192.168.40.20)
+  - Updated Pi-hole v6 TOML config (`/etc/pihole/pihole.toml` hosts array)
 
 ### Added - New Node Onboarding Guide (December 30, 2025)
 - **Comprehensive checklist** for adding new Proxmox nodes to `docs/PROXMOX.md`
