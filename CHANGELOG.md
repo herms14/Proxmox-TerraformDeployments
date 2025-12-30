@@ -7,6 +7,32 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed - Repository Cleanup & Reorganization (December 30, 2025)
+- **Deleted 30+ temporary files** from root directory
+  - Removed all `temp-*.py` development scripts (one-time use artifacts)
+  - Removed most `temp-*.json` dashboard drafts
+  - Removed `temp-*.yml` config files
+  - Removed empty `Service Configuration.md`
+- **Created `dashboards/` directory** for Grafana dashboard definitions
+  - Moved and renamed: `temp-container-status-fixed.json` → `dashboards/container-status.json`
+  - Moved and renamed: `temp-omada-full-dashboard.json` → `dashboards/omada-network.json`
+  - Moved and renamed: `temp-synology-nas-dashboard.json` → `dashboards/synology-nas.json`
+  - Added `dashboards/README.md` with deployment instructions
+- **Moved documentation to proper locations**
+  - `TAILSCALE_SETUP.md` → `docs/TAILSCALE_SETUP.md`
+- **Cleaned up terraform artifacts**
+  - Removed `memory-upgrade.tfplan`, `tfplan`
+  - Removed `terraform.tfstate.*.backup` files
+- **Removed duplicate directories**
+  - Deleted `wiki/` (duplicate of `Proxmox-TerraformDeployments.wiki/`)
+- **Removed sensitive file** - `CREDENTIALS.md` (should never be in repo)
+- **Updated `.gitignore`** with comprehensive exclusions
+  - Organized into sections: Terraform, Sensitive Files, Development Artifacts, etc.
+  - Added IDE/OS files (.vscode, .idea, .DS_Store, Thumbs.db)
+  - Added Python artifacts (__pycache__, .env, venv/)
+  - Added log file exclusions
+- **Updated CLAUDE.md** - Dashboard paths now reference `dashboards/` directory
+
 ### Fixed - Glance Homepage Configuration (December 30, 2025)
 - **Removed Kubernetes monitors** from Home page (VLAN routing prevents access from VLAN 40 to VLAN 20)
   - Removed: Kubernetes Control Plane monitor, Kubernetes Workers monitor

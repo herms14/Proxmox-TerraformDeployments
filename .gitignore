@@ -1,7 +1,11 @@
+# ===========================================
+# Terraform
+# ===========================================
+
 # Local .terraform directories
 **/.terraform/*
 
-# .tfstate files
+# .tfstate files (contain sensitive infrastructure state)
 *.tfstate
 *.tfstate.*
 *.tfstate.backup
@@ -10,66 +14,105 @@
 crash.log
 crash.*.log
 
-# Exclude all .tfvars files, which are likely to contain sensitive data
+# Exclude all .tfvars files (contain sensitive data)
 *.tfvars
 *.tfvars.json
 
-# Ignore override files as they are usually used to override resources locally and so
-# are not checked in
+# But include example tfvars for reference
+!*.tfvars.example
+!env/*.tfvars
+
+# Ignore override files
 override.tf
 override.tf.json
 *_override.tf
 *_override.tf.json
 
-# Include override files you do wish to add to version control using negated pattern
-# !example_override.tf
-
-# Include tfplan files to ignore the plan output of command: terraform plan -out=tfplan
+# Terraform plan files
 *tfplan*
 
-# Ignore CLI configuration files
+# Terraform CLI configuration
 .terraformrc
 terraform.rc
 
-# Exclude terraform.tfvars (local only)
-terraform.tfvars
+# ===========================================
+# Sensitive Files
+# ===========================================
 
-# But include env/*.tfvars (shared configurations)
-!env/*.tfvars
-
-# Credentials file (contains sensitive API tokens and keys)
+# Credentials and secrets
 CREDENTIALS.md
+**/credentials.json
+**/*.secret
+**/*.key
 
-# Sensitive network configuration (contains passwords)
+# Sensitive network configuration
 docs/legacy/2026-Omada-Network-Configuration.md
 
-# Obsidian vault (internal documentation with credentials)
-# The Obsidian vault is stored separately and should not be committed
+# ===========================================
+# Development Artifacts
+# ===========================================
+
+# Temp files (development artifacts)
+temp-*.py
+temp-*.json
+temp-*.yml
+temp-*.yaml
 
 # Test files that may contain credentials
 test_*.py
 configure_*.py
 
-# Backup directories that may contain secrets
+# Backup directories
 glance-backup/
+*-backup/
 
-# Temp files - often contain hardcoded values during development
-temp-*.py
-temp-*.json
-temp-*.yml
+# ===========================================
+# Nested Git Repositories
+# ===========================================
 
-# Keep specific temp dashboards that are committed intentionally
-!temp-omada-full-dashboard.json
-!temp-synology-nas-dashboard.json
-!temp-container-status-fixed.json
-
-# Nested git repositories (managed separately)
+# These are managed separately
 gitlab-repo/
 homelab-services/
 Proxmox-TerraformDeployments.wiki/
 
-# PC-specific Claude config files
-CLAUDE-*.md
+# ===========================================
+# IDE and OS
+# ===========================================
 
-# Empty/temporary configuration files
-Service Configuration.md
+# VS Code
+.vscode/
+*.code-workspace
+
+# JetBrains
+.idea/
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# Windows
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+
+# ===========================================
+# Python
+# ===========================================
+
+__pycache__/
+*.py[cod]
+*$py.class
+.Python
+*.so
+.env
+.venv
+venv/
+ENV/
+
+# ===========================================
+# Logs
+# ===========================================
+
+*.log
+logs/

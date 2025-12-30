@@ -151,17 +151,17 @@ C:\Users\herms\OneDrive\Obsidian Vault\Hermes's Life Knowledge Base\07 HomeLab T
 ### Grafana Dashboards
 - **Container Status History** (`container-status`)
   - Iframe height: 1250px
-  - Dashboard JSON: `temp-container-status-fixed.json`
+  - Dashboard JSON: `dashboards/container-status.json`
   - Ansible: `ansible-playbooks/monitoring/deploy-container-status-dashboard.yml`
 
 - **Synology NAS Storage** (`synology-nas-modern`)
   - Iframe height: 1350px
-  - Dashboard JSON: `temp-synology-nas-dashboard.json`
+  - Dashboard JSON: `dashboards/synology-nas.json`
   - Ansible: `ansible-playbooks/monitoring/deploy-synology-nas-dashboard.yml`
 
 - **Omada Network Overview** (`omada-network`)
   - Iframe height: 2200px
-  - Dashboard JSON: `temp-omada-full-dashboard.json`
+  - Dashboard JSON: `dashboards/omada-network.json`
   - Ansible: `ansible-playbooks/monitoring/deploy-omada-full-dashboard.yml`
 
 See `.claude/context.md` for current structure details.
