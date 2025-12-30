@@ -62,3 +62,14 @@ temp-*.yml
 !temp-omada-full-dashboard.json
 !temp-synology-nas-dashboard.json
 !temp-container-status-fixed.json
+
+# Nested git repositories (managed separately)
+gitlab-repo/
+homelab-services/
+Proxmox-TerraformDeployments.wiki/
+
+# PC-specific Claude config files
+CLAUDE-*.md
+
+# Empty/temporary configuration files
+Service Configuration.md

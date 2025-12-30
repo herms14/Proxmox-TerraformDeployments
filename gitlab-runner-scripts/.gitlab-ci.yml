@@ -1,0 +1,231 @@
+# .gitlab-ci.yml - Service Onboarding Pipeline
+# Copy this file to your service repository root
+#
+# Required files:
+#   - service.yml (service definition)
+#   - .gitlab-ci.yml (this file)
+#
+# Required CI/CD Variables (Settings > CI/CD > Variables):
+#   - DISCORD_WEBHOOK_URL (optional, for notifications)
+#   - OPNSENSE_API_KEY (optional, for DNS automation)
+#   - OPNSENSE_API_SECRET (optional, for DNS automation)
+#   - AUTHENTIK_TOKEN (optional, for SSO automation)
+
+stages:
+  - validate
+  - deploy
+  - configure_traefik
+  - configure_dns
+  - register_watchtower
+  - configure_sso
+  - notify
+  - rollback
+
+variables:
+  ANSIBLE_HOST_KEY_CHECKING: "False"
+  ANSIBLE_FORCE_COLOR: "true"
+  SERVICE_DEFINITION: "service.yml"
+  SCRIPTS_DIR: "/opt/gitlab-runner/scripts"
+  SSH_KEY_PATH: "/home/gitlab-runner/.ssh/homelab_ed25519"
+
+# Default settings for all jobs
+default:
+  tags:
+    - homelab-runner
+  before_script:
+    - export SSH_KEY_PATH="${SSH_KEY_PATH}"
+
+# =============================================================================
+# Stage 1: Validate Service Definition
+# =============================================================================
+validate:
+  stage: validate
+  script:
+    - echo "Validating service definition..."
+    - python3 ${SCRIPTS_DIR}/validate_service.py "${CI_PROJECT_DIR}/${SERVICE_DEFINITION}"
+  artifacts:
+    paths:
+      - service_parsed.json
+    expire_in: 1 hour
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "main"'
+      when: always
+    - if: '$CI_MERGE_REQUEST_ID'
+      when: always
+
+# =============================================================================
+# Stage 2: Deploy Container via Ansible
+# =============================================================================
+deploy_container:
+  stage: deploy
+  script:
+    - echo "Generating deployment playbook..."
+    - python3 ${SCRIPTS_DIR}/generate_playbook.py "${CI_PROJECT_DIR}/${SERVICE_DEFINITION}" "/tmp/deploy-${CI_JOB_ID}.yml"
+    - echo "Deploying container..."
+    - cd /home/gitlab-runner && ansible-playbook "/tmp/deploy-${CI_JOB_ID}.yml" -i "localhost,"
+  artifacts:
+    paths:
+      - deploy.log
+    expire_in: 1 hour
+  dependencies:
+    - validate
+  needs:
+    - validate
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "main"'
+      when: on_success
+
+# =============================================================================
+# Stage 3: Configure Traefik Reverse Proxy
+# =============================================================================
+configure_traefik:
+  stage: configure_traefik
+  script:
+    - echo "Configuring Traefik reverse proxy..."
+    - python3 ${SCRIPTS_DIR}/configure_traefik.py "${CI_PROJECT_DIR}/${SERVICE_DEFINITION}"
+  artifacts:
+    paths:
+      - traefik_backup.yml
+    expire_in: 1 week
+  dependencies:
+    - validate
+    - deploy_container
+  needs:
+    - validate
+    - deploy_container
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "main"'
+      when: on_success
+
+# =============================================================================
+# Stage 4: Configure DNS (OPNsense)
+# =============================================================================
+configure_dns:
+  stage: configure_dns
+  script:
+    - echo "Configuring DNS record in OPNsense..."
+    - python3 ${SCRIPTS_DIR}/configure_dns.py "${CI_PROJECT_DIR}/${SERVICE_DEFINITION}"
+  dependencies:
+    - validate
+    - configure_traefik
+  needs:
+    - validate
+    - configure_traefik
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "main"'
+      when: on_success
+  allow_failure: true  # DNS can be configured manually
+
+# =============================================================================
+# Stage 5: Register with Watchtower/Update Manager
+# =============================================================================
+register_watchtower:
+  stage: register_watchtower
+  script:
+    - echo "Registering service with Update Manager..."
+    - python3 ${SCRIPTS_DIR}/register_watchtower.py "${CI_PROJECT_DIR}/${SERVICE_DEFINITION}"
+  dependencies:
+    - validate
+    - deploy_container
+  needs:
+    - validate
+    - deploy_container
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "main"'
+      when: on_success
+  allow_failure: true  # Watchtower registration is optional
+
+# =============================================================================
+# Stage 6: Configure Authentik SSO (Optional)
+# =============================================================================
+configure_sso:
+  stage: configure_sso
+  script:
+    - echo "Configuring Authentik SSO..."
+    - python3 ${SCRIPTS_DIR}/configure_authentik.py "${CI_PROJECT_DIR}/${SERVICE_DEFINITION}"
+  dependencies:
+    - validate
+    - configure_traefik
+  needs:
+    - validate
+    - configure_traefik
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "main"'
+      when: on_success
+  allow_failure: true  # SSO is optional
+
+# =============================================================================
+# Stage 7: Send Discord Notification (Success)
+# =============================================================================
+notify_success:
+  stage: notify
+  script:
+    - |
+      python3 ${SCRIPTS_DIR}/notify_discord.py \
+        --service-file "${CI_PROJECT_DIR}/${SERVICE_DEFINITION}" \
+        --status "success" \
+        --pipeline-url "${CI_PIPELINE_URL}" \
+        --commit "${CI_COMMIT_SHA}" \
+        --author "${CI_COMMIT_AUTHOR}"
+  dependencies:
+    - validate
+    - deploy_container
+    - configure_traefik
+  needs:
+    - validate
+    - deploy_container
+    - configure_traefik
+    - job: configure_dns
+      optional: true
+    - job: register_watchtower
+      optional: true
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "main"'
+      when: on_success
+
+notify_failure:
+  stage: notify
+  script:
+    - |
+      python3 ${SCRIPTS_DIR}/notify_discord.py \
+        --service-file "${CI_PROJECT_DIR}/${SERVICE_DEFINITION}" \
+        --status "failure" \
+        --pipeline-url "${CI_PIPELINE_URL}" \
+        --commit "${CI_COMMIT_SHA}" \
+        --author "${CI_COMMIT_AUTHOR}" \
+        --failed-job "${CI_JOB_NAME}"
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "main"'
+      when: on_failure
+
+# =============================================================================
+# Rollback Jobs (Manual Trigger)
+# =============================================================================
+rollback_traefik:
+  stage: rollback
+  script:
+    - echo "Rolling back Traefik configuration..."
+    - |
+      if [ -f "traefik_backup.yml" ]; then
+        python3 ${SCRIPTS_DIR}/rollback_traefik.py traefik_backup.yml
+      else
+        echo "No backup file found"
+      fi
+  dependencies:
+    - configure_traefik
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "main"'
+      when: manual
+  allow_failure: true
+
+rollback_container:
+  stage: rollback
+  script:
+    - echo "Removing deployed container..."
+    - python3 ${SCRIPTS_DIR}/rollback_container.py "${CI_PROJECT_DIR}/${SERVICE_DEFINITION}"
+  dependencies:
+    - deploy_container
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "main"'
+      when: manual
+  allow_failure: true

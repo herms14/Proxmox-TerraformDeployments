@@ -79,8 +79,6 @@ Before tokens exhaust, write a handoff:
 | node01 | 192.168.20.20 | 100.89.33.5 | Primary VM Host (K8s, LXCs, Core Services) |
 | node02 | 192.168.20.21 | 100.96.195.27 | Service Host (Traefik, Authentik, GitLab, Immich) |
 
-> **Note**: node03 was removed from cluster on 2025-12-30. All workloads now run on node01/node02.
-
 ### Remote Access (Tailscale)
 
 When outside the local network:
@@ -297,11 +295,6 @@ Host node02
     User root
     IdentityFile ~/.ssh/homelab_ed25519
 
-Host node03
-    HostName 192.168.20.22
-    User root
-    IdentityFile ~/.ssh/homelab_ed25519
-
 # Homelab - Ansible Controller
 Host ansible
     HostName 192.168.20.30
@@ -398,7 +391,6 @@ ssh docker-utilities "cd /opt/myservice && docker compose up -d"
 | `authentik` | 192.168.40.21 | hermes-admin | SSO/Authentication |
 | `node01` | 192.168.20.20 | root | Proxmox node (subnet router) |
 | `node02` | 192.168.20.21 | root | Proxmox node |
-| `node03` | 192.168.20.22 | root | Proxmox node |
 
 ### Common Deployment Commands
 

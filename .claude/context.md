@@ -12,8 +12,6 @@
 | node01 | 192.168.20.20 | 100.89.33.5 | Primary VM Host (K8s, LXCs, Core Services) |
 | node02 | 192.168.20.21 | 100.96.195.27 | Service Host (Traefik, Authentik, GitLab, Immich) |
 
-**Note**: node03 (192.168.20.22) was removed from the cluster on 2025-12-30. All workloads migrated to node01/node02.
-
 ### Wake-on-LAN
 
 | Node | MAC Address | Status |

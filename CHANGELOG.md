@@ -7,6 +7,40 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed - Glance Homepage Configuration (December 30, 2025)
+- **Removed Kubernetes monitors** from Home page (VLAN routing prevents access from VLAN 40 to VLAN 20)
+  - Removed: Kubernetes Control Plane monitor, Kubernetes Workers monitor
+  - Root cause: Glance on LXC 200 (192.168.40.12) cannot reach K8s nodes on 192.168.20.x
+- **Updated Daily Note widget** - Changed hardcoded date to current date (2025-12-30)
+- **Reorganized new services into proper categories**:
+  - Moved Wizarr and Tracearr to Media Services monitor
+  - Moved Karakeep and Lagident to Core Services monitor
+  - Removed standalone "New Services" monitor section
+- **Fixed Glance LXC container startup** - Added `security_opt: apparmor=unconfined` to docker-compose.yml
+  - Required for Docker containers running inside Proxmox LXC
+- **Updated documentation** - docs/GLANCE.md now reflects LXC 200 location and updated service categories
+
+### Added - Comprehensive Documentation Wiki (December 30, 2025)
+- **Created HOMELAB_MASTER_WIKI.md** - Complete technical wiki/encyclopedia for the entire homelab
+  - Infrastructure overview with architecture diagrams
+  - Network architecture with full VLAN and IP allocation tables
+  - Compute infrastructure (Proxmox cluster, VMs, LXCs, Kubernetes)
+  - Storage architecture (Synology NAS, NFS exports)
+  - Complete tech stack reference
+  - Services catalog with all URLs and authentication methods
+  - Automation & DevOps (Terraform, Ansible, GitLab CI/CD)
+  - Monitoring & Observability stack reference
+  - Security & access documentation
+  - Operations reference with command cheatsheet
+- **Documentation structure**:
+  - `docs/HOMELAB_MASTER_WIKI.md` - Authoritative technical wiki (public)
+  - `Book - The Complete Homelab Guide` (Obsidian) - Step-by-step tutorial
+  - `docs/*.md` - Detailed technical reference for specific topics
+- **Cleaned up all node03 references** across documentation:
+  - CLAUDE.md, context.md, PROXMOX.md, INVENTORY.md
+  - Obsidian files (02 - Proxmox Cluster.md, 00 - Homelab Index.md)
+  - Updated infrastructure metrics to reflect 2-node cluster
+
 ### Fixed - Network Dashboard & Pi-hole Integration (December 30, 2025)
 - **Fixed Glance YAML corruption** - Paperless/Pi-hole bookmark entries were malformed at line 261
   - Fixed YAML syntax error preventing Glance from loading

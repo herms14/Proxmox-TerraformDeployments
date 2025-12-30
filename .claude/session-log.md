@@ -7,6 +7,34 @@
 
 ## 2025-12-30
 
+### 16:00 - Glance Homepage Fix and Service Reorganization
+**Status**: Completed
+**Request**: Fix Glance homepage (K8s timeout errors, daily note widget, reorganize new services)
+
+**Changes Made**:
+- **Removed Kubernetes monitors** - VLAN routing prevents Glance (VLAN 40) from reaching K8s nodes (VLAN 20)
+  - Removed: Kubernetes Control Plane monitor, Kubernetes Workers monitor
+  - Ping test confirmed 100% packet loss from 192.168.40.12 to 192.168.20.32
+- **Updated Daily Note widget** - Changed hardcoded date to 2025-12-30
+- **Reorganized new services into proper categories**:
+  - Wizarr, Tracearr → Media Services monitor
+  - Karakeep, Lagident → Core Services monitor
+  - Removed standalone "New Services" monitor section
+- **Fixed Glance LXC container startup** - Added `security_opt: apparmor=unconfined` to docker-compose.yml
+  - Required for Docker in Proxmox LXC environments
+
+**Documentation Updated**:
+- `docs/GLANCE.md` - Updated location (LXC 200), removed K8s, updated service categories
+- `CHANGELOG.md` - Added Glance homepage fix entry
+- Obsidian `23 - Glance Dashboard.md` - Same updates as docs/GLANCE.md
+
+**Technical Details**:
+- Glance runs on LXC 200 (192.168.40.12), not docker-vm-utilities01
+- Used Python with PyYAML to update config (heredoc failed due to quote escaping)
+- Config path: `/opt/glance/config/glance.yml` (v0.7.0+ uses /app/config mount)
+
+---
+
 ### 13:30 - Pi-hole Migration to VLAN 90 (Management Network)
 **Status**: Completed
 **Request**: Move Pi-hole from VLAN 20 (192.168.20.53) to VLAN 90 (192.168.90.53)

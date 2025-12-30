@@ -11,8 +11,6 @@
 | **node01** | 192.168.20.20 | Primary VM Host | K8s cluster, LXCs, Core Services |
 | **node02** | 192.168.20.21 | Service Host | Traefik, Authentik, GitLab, Immich |
 
-> **Note**: node03 (192.168.20.22) was removed from the cluster on 2025-12-30. All workloads migrated to node01/node02.
-
 ## Wake-on-LAN
 
 Both nodes have Wake-on-LAN enabled and configured to persist across reboots.
@@ -92,7 +90,6 @@ If using a centralized PVE exporter, add the new node to `/opt/monitoring/promet
     - targets:
       - 192.168.20.20:9221  # node01
       - 192.168.20.21:9221  # node02
-      - 192.168.20.22:9221  # node03 (NEW)
 ```
 
 Restart Prometheus:
@@ -117,11 +114,6 @@ Edit `/opt/glance/config/glance.yml` on the Glance LXC (192.168.40.12):
         allow-insecure: true
       - title: Node 02
         url: https://192.168.20.21:8006
-        icon: si:proxmox
-        allow-insecure: true
-      # Add new node:
-      - title: Node 03
-        url: https://192.168.20.22:8006
         icon: si:proxmox
         allow-insecure: true
 ```
@@ -153,7 +145,7 @@ Update `scripts/wake-nodes.py` with the new MAC address.
 
 Add DNS record in OPNsense (192.168.91.30):
 - **Services → Unbound DNS → Host Overrides**
-- Add: `node03.hrmsmrflrii.xyz` → `192.168.20.22`
+- Add: `<hostname>.hrmsmrflrii.xyz` → `<node_ip>`
 
 ### Step 6: Install Tailscale (Optional)
 
@@ -194,7 +186,7 @@ curl -s http://192.168.40.13:9090/api/v1/targets | jq '.data.activeTargets[] | s
 # Visit: https://grafana.hrmsmrflrii.xyz/d/proxmox-compute
 
 # Test WoL (after shutting down node)
-python3 scripts/wake-nodes.py node03
+python3 scripts/wake-nodes.py <nodename>
 ```
 
 ## Proxmox Version

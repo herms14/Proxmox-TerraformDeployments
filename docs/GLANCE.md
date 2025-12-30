@@ -8,8 +8,10 @@ Glance is a self-hosted dashboard that provides a central view of all homelab se
 |-----------|-------------|
 | **Glance** | Main dashboard application |
 | **Media Stats API** | Custom API that combines Radarr/Sonarr data |
-| **Location** | docker-vm-utilities01 (192.168.40.10) |
+| **Location** | LXC 200 (192.168.40.12) |
 | **URL** | https://glance.hrmsmrflrii.xyz |
+
+> **Note**: Glance runs on an LXC container with Docker. The docker-compose.yml requires `security_opt: apparmor=unconfined` due to AppArmor restrictions in LXC environments.
 
 ## Architecture
 
@@ -602,15 +604,15 @@ The Home page has been carefully configured and should be preserved as-is.
 ├──────────────────┼──────────────────────────────────────────┼──────────────────┤
 │ Clock            │ Life Progress Widget                      │ Chess.com Stats  │
 │ Weather          │ GitHub Contributions (green, dark mode)   │ Crypto Markets   │
-│ Sun Times        │ Proxmox Cluster Monitor                   │ Stock Markets    │
+│ Sun Times        │ Proxmox Cluster Monitor (2 nodes)         │ Stock Markets    │
 │ Calendar         │ Storage Monitor                           │ Tech News RSS    │
 │ Daily Note       │ Core Services Monitor                     │                  │
 │ Infrastructure   │ Media Services Monitor                    │                  │
 │ Services         │ Monitoring Stack Monitor                  │                  │
-│                  │ Kubernetes Control Plane Monitor          │                  │
-│                  │ Kubernetes Workers Monitor                │                  │
 └──────────────────┴──────────────────────────────────────────┴──────────────────┘
 ```
+
+> **Note**: Kubernetes monitors were removed because Glance (VLAN 40) cannot reach K8s nodes (VLAN 20) due to firewall/routing rules.
 
 ### Widget Details
 
@@ -635,15 +637,13 @@ The Home page has been carefully configured and should be preserved as-is.
 #### Center Column (Full)
 | Widget | Type | Endpoint |
 |--------|------|----------|
-| Life Progress | custom-api | http://192.168.40.10:5051/progress |
+| Life Progress | custom-api | http://192.168.40.13:5051/progress |
 | GitHub Contributions | custom-api | https://api.github.com/users/herms14 |
-| Proxmox Cluster | monitor | Node 01-03 on port 8006 |
+| Proxmox Cluster | monitor | Node 01-02 on port 8006 |
 | Storage | monitor | Synology NAS on VLAN 10 & 20, port 5001 |
-| Core Services | monitor | Traefik, Authentik, GitLab, Immich, n8n, Paperless |
-| Media Services | monitor | Jellyfin, Radarr, Sonarr, Lidarr, Prowlarr, Bazarr, Jellyseerr, Tdarr, Deluge, SABnzbd |
+| Core Services | monitor | Traefik, Authentik, GitLab, Immich, n8n, Paperless, Pi-hole, Karakeep, Lagident |
+| Media Services | monitor | Jellyfin, Radarr, Sonarr, Lidarr, Prowlarr, Bazarr, Jellyseerr, Tdarr, Deluge, SABnzbd, Wizarr, Tracearr |
 | Monitoring Stack | monitor | Uptime Kuma, Prometheus, Grafana, Jaeger, Glance, Speedtest |
-| K8s Control Plane | monitor | Controllers 1-3 via API (port 6443) |
-| K8s Workers | monitor | Workers 1-6 via kubelet (port 10248) |
 
 #### Right Column (Small)
 | Widget | Configuration |
@@ -672,10 +672,8 @@ The contribution graph uses:
 
 | Service | Endpoint | Port |
 |---------|----------|------|
-| Proxmox Nodes | / | 8006 (HTTPS, allow-insecure) |
+| Proxmox Nodes (2) | / | 8006 (HTTPS, allow-insecure) |
 | Synology NAS | / | 5001 (HTTPS, allow-insecure) |
-| K8s Control Plane | /healthz | 6443 (HTTPS, allow-insecure) |
-| K8s Workers | /healthz | 10248 (HTTP) |
 | Traefik | /ping | 8082 |
 | Authentik | /-/health/ready/ | 9000 |
 | Prometheus | /-/healthy | 9090 |

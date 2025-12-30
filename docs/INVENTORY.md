@@ -16,8 +16,6 @@
 
 *Last updated: December 30, 2025*
 
-> **Note**: node03 was removed from cluster on 2025-12-30. All workloads now run on node01/node02.
-
 ## VLAN 20 - Infrastructure (192.168.20.0/24)
 
 ### Automation & Management
