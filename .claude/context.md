@@ -220,7 +220,7 @@ ssh hermes-admin@192.168.20.30
 - mergeValues: `true`
 
 **Files:**
-- Dashboard JSON: `temp-container-status-with-memory.json`
+- Dashboard JSON: `dashboards/container-status.json`
 - Ansible Playbook: `ansible-playbooks/monitoring/deploy-container-status-dashboard.yml`
 
 ### Storage Tab Structure (PROTECTED)
@@ -274,7 +274,7 @@ ssh hermes-admin@192.168.20.30
 - **Units**: `kbytes` (memTotalReal/memAvailReal/memBuffer/memCached are in KB)
 
 **Files:**
-- Dashboard JSON: `temp-synology-nas-dashboard.json`
+- Dashboard JSON: `dashboards/synology-nas.json`
 - Ansible Playbook: `ansible-playbooks/monitoring/deploy-synology-nas-dashboard.yml`
 
 ### Network Tab Structure (PROTECTED)
@@ -335,7 +335,7 @@ ssh hermes-admin@192.168.20.30
 - Config file: `/opt/pihole-stats-api/pihole-stats-api.py` (on LXC 200)
 
 **Files:**
-- Dashboard JSON: `temp-omada-full-dashboard.json`
+- Dashboard JSON: `dashboards/omada-network.json`
 - Ansible Playbook: `ansible-playbooks/monitoring/deploy-omada-full-dashboard.yml`
 - Glance Update: `ansible-playbooks/monitoring/update-glance-network-tab.yml`
 - Documentation: `docs/OMADA_NETWORK_DASHBOARD.md`
@@ -377,6 +377,33 @@ Home | Compute | Storage | Network | Media | Web | Reddit
 |---------|------|
 | Traefik Config | `/opt/traefik/config/` |
 | Traefik Dynamic | `/opt/traefik/config/dynamic/services.yml` |
+
+---
+
+## Infrastructure as Code Tools
+
+| Tool | Location | Purpose |
+|------|----------|---------|
+| **Terraform** | Local (this repo) | VM/LXC provisioning on Proxmox |
+| **Ansible** | 192.168.20.30 (`~/ansible/`) | Configuration management |
+| **Packer** | 192.168.20.30 (`~/packer/`) | VM template creation |
+
+### Packer Configuration
+
+| Item | Details |
+|------|---------|
+| **Version** | 1.14.3 |
+| **Working Directory** | `/home/hermes-admin/packer/` |
+| **Example Template** | `proxmox-ubuntu-template.pkr.hcl` |
+| **Credentials** | `credentials.pkrvars.hcl` (not in git) |
+
+**Quick Start:**
+```bash
+ssh ansible
+cd ~/packer
+packer init proxmox-ubuntu-template.pkr.hcl
+packer build -var-file=credentials.pkrvars.hcl proxmox-ubuntu-template.pkr.hcl
+```
 
 ---
 

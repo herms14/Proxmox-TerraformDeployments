@@ -22,7 +22,12 @@
 
 | Hostname | Node | IP | Cores | RAM | Disk | Purpose |
 |----------|------|----|-------|-----|------|---------|
-| ansible-controller01 | node01 | 192.168.20.30 | 2 | 8GB | 20GB | Ansible automation |
+| ansible-controller01 | node01 | 192.168.20.30 | 2 | 8GB | 20GB | Ansible + Packer |
+
+**Installed Tools:**
+- **Ansible** - Configuration management (`~/ansible/`)
+- **Packer v1.14.3** - VM template creation (`~/packer/`)
+- **Omada Exporter** - Network metrics (port 9202)
 
 ### Kubernetes Cluster (9 nodes)
 

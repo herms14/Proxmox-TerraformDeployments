@@ -7,6 +7,64 @@
 
 ## 2025-12-30
 
+### 22:55 - HashiCorp Packer Installation
+**Status**: Completed
+**Request**: Deploy Packer for VM template creation, update documentation
+
+**Changes Made**:
+1. **Installed Packer v1.14.3** on Ansible Controller (192.168.20.30)
+   - Used official HashiCorp APT repository
+   - Created working directory at `/home/hermes-admin/packer/`
+2. **Created Ansible playbook** `ansible-playbooks/infrastructure/install-packer.yml`
+   - Automated installation with HashiCorp GPG key and repo
+   - Fixed Jinja2 escaping for Packer template syntax
+3. **Created example Proxmox template** `proxmox-ubuntu-template.pkr.hcl`
+   - Ubuntu 24.04 Server with cloud-init
+   - VM ID 9000, 2 cores, 2GB RAM, 20GB disk
+   - Uses existing Terraform API credentials
+4. **Created comprehensive documentation** `docs/PACKER.md`
+   - Quick start guide, command reference
+   - Integration examples with Terraform and Ansible
+   - Troubleshooting section
+
+**Files Created**:
+- `ansible-playbooks/infrastructure/install-packer.yml`
+- `docs/PACKER.md`
+- `/home/hermes-admin/packer/proxmox-ubuntu-template.pkr.hcl` (on server)
+- `/home/hermes-admin/packer/credentials.pkrvars.hcl.example` (on server)
+
+**Files Modified**:
+- `CLAUDE.md` - Added Packer to Quick Reference
+- `CHANGELOG.md` - Added Packer installation entry
+- `.claude/context.md` - Added IaC Tools section with Packer
+
+---
+
+### 22:45 - Repository Cleanup & Reorganization
+**Status**: Completed
+**Request**: Clean up project repo, organize according to best practices, delete unnecessary files
+
+**Changes Made**:
+1. **Deleted 30+ temporary files** from root directory
+   - All `temp-*.py` development scripts
+   - Non-essential `temp-*.json` dashboard drafts
+   - `temp-*.yml` config files
+2. **Created `dashboards/` directory** for Grafana dashboards
+   - Renamed files to proper names (container-status.json, omada-network.json, synology-nas.json)
+   - Added README.md with deployment instructions
+3. **Moved documentation to proper locations**
+   - `TAILSCALE_SETUP.md` → `docs/TAILSCALE_SETUP.md`
+4. **Removed duplicate directories**
+   - Deleted `wiki/` (kept `Proxmox-TerraformDeployments.wiki/`)
+5. **Removed sensitive file** - `CREDENTIALS.md`
+6. **Updated `.gitignore`** with comprehensive exclusions
+   - Organized into sections: Terraform, Sensitive Files, IDE/OS, Python, Logs
+
+**Files Deleted**: 41 files (-15,580 lines)
+**Files Created**: `dashboards/README.md`
+
+---
+
 ### 16:00 - Glance Homepage Fix and Service Reorganization
 **Status**: Completed
 **Request**: Fix Glance homepage (K8s timeout errors, daily note widget, reorganize new services)
