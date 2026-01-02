@@ -102,6 +102,7 @@ Infrastructure:
 | Command | Description |
 |---------|-------------|
 | `/help` | Show all Sentinel commands in a formatted embed |
+| `/insight` | Health check: memory, errors, storage, failed downloads |
 | `/homelab status` | Cluster overview (CPU, RAM, uptime per node) |
 | `/homelab uptime` | Uptime for all Proxmox nodes and Docker hosts |
 | `/node <name> status` | Detailed status for a Proxmox node |

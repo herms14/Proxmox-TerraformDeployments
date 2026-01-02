@@ -195,6 +195,7 @@ Unified homelab management bot combining the functionality of 4 previous bots (A
 | Command | Description |
 |---------|-------------|
 | `/help` | Show all commands |
+| `/insight` | Health check (memory, errors, storage, downloads) |
 | `/homelab status` | Cluster overview |
 | `/homelab uptime` | All node/host uptimes |
 | `/node <name> restart` | Restart Proxmox node (with confirmation) |

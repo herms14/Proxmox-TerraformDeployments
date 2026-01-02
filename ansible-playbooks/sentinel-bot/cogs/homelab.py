@@ -102,6 +102,203 @@ class HomelabCog(commands.Cog, name="Homelab"):
 
         await interaction.response.send_message(embed=embed)
 
+    # ==================== Insight Command ====================
+
+    @app_commands.command(name="insight", description="Get health insights for your homelab")
+    async def insight_command(self, interaction: discord.Interaction):
+        """Check homelab health: high memory, errors, storage, and issues."""
+        await interaction.response.defer()
+
+        progress = ProgressEmbed(":mag: Analyzing Homelab Health...", 5)
+        status_msg = await interaction.followup.send(embed=progress.embed)
+
+        issues = []
+        warnings = []
+        healthy = []
+
+        # Docker hosts to check
+        docker_hosts = [
+            ('utilities', self.config.ssh.docker_utilities_ip),
+            ('media', self.config.ssh.docker_media_ip),
+            ('glance', self.config.ssh.docker_glance_ip),
+        ]
+
+        # Step 1: Check container memory usage
+        progress.update(0, ":hourglass: Checking container memory usage...")
+        await status_msg.edit(embed=progress.embed)
+
+        high_memory_containers = []
+        for host_name, host_ip in docker_hosts:
+            result = await self.ssh.run(
+                host_ip,
+                'docker stats --no-stream --format "{{.Name}}:{{.MemPerc}}" 2>/dev/null'
+            )
+            if result.success:
+                for line in result.output.split('\n'):
+                    if ':' in line:
+                        name, mem = line.split(':')
+                        try:
+                            mem_pct = float(mem.replace('%', '').strip())
+                            if mem_pct > 80:
+                                high_memory_containers.append(f"{name} ({mem_pct:.0f}%)")
+                        except:
+                            pass
+
+        if high_memory_containers:
+            issues.append(f"🔴 **High Memory** ({len(high_memory_containers)}): " + ", ".join(high_memory_containers[:5]))
+        else:
+            healthy.append("✅ Container memory usage normal")
+
+        # Step 2: Check for unhealthy/restarting containers
+        progress.update(1, ":hourglass: Checking container health...")
+        await status_msg.edit(embed=progress.embed)
+
+        unhealthy_containers = []
+        for host_name, host_ip in docker_hosts:
+            result = await self.ssh.run(
+                host_ip,
+                'docker ps -a --format "{{.Names}}:{{.Status}}" 2>/dev/null'
+            )
+            if result.success:
+                for line in result.output.split('\n'):
+                    if ':' in line:
+                        name, status = line.split(':', 1)
+                        status_lower = status.lower()
+                        if 'restarting' in status_lower:
+                            unhealthy_containers.append(f"{name} (restarting)")
+                        elif 'unhealthy' in status_lower:
+                            unhealthy_containers.append(f"{name} (unhealthy)")
+                        elif 'exited' in status_lower and 'exited (0)' not in status_lower:
+                            unhealthy_containers.append(f"{name} (crashed)")
+
+        if unhealthy_containers:
+            issues.append(f"🔴 **Unhealthy Containers** ({len(unhealthy_containers)}): " + ", ".join(unhealthy_containers[:5]))
+        else:
+            healthy.append("✅ All containers healthy")
+
+        # Step 3: Check disk usage
+        progress.update(2, ":hourglass: Checking disk usage...")
+        await status_msg.edit(embed=progress.embed)
+
+        disk_warnings = []
+        all_hosts = docker_hosts + [
+            ('traefik', self.config.ssh.traefik_ip),
+            ('authentik', self.config.ssh.authentik_ip),
+        ]
+        for host_name, host_ip in all_hosts:
+            result = await self.ssh.run(host_ip, "df -h / | tail -1 | awk '{print $5}'")
+            if result.success:
+                try:
+                    usage = int(result.output.replace('%', '').strip())
+                    if usage > 90:
+                        disk_warnings.append(f"{host_name} ({usage}%) 🔴")
+                    elif usage > 80:
+                        disk_warnings.append(f"{host_name} ({usage}%) 🟡")
+                except:
+                    pass
+
+        if disk_warnings:
+            warnings.append(f"💾 **Disk Usage**: " + ", ".join(disk_warnings))
+        else:
+            healthy.append("✅ Disk usage normal (<80%)")
+
+        # Step 4: Check Proxmox nodes
+        progress.update(3, ":hourglass: Checking Proxmox nodes...")
+        await status_msg.edit(embed=progress.embed)
+
+        proxmox_issues = []
+        for node_name, node_ip in [('node01', self.config.ssh.node01_ip), ('node02', self.config.ssh.node02_ip)]:
+            result = await self.ssh.pve_node_status(node_ip)
+            if result.success:
+                try:
+                    data = json.loads(result.stdout)
+                    cpu = data.get('cpu', 0) * 100
+                    mem = data.get('memory', {})
+                    mem_pct = (mem.get('used', 0) / mem.get('total', 1)) * 100 if mem.get('total') else 0
+
+                    if cpu > 90:
+                        proxmox_issues.append(f"{node_name} CPU {cpu:.0f}% 🔴")
+                    elif cpu > 80:
+                        proxmox_issues.append(f"{node_name} CPU {cpu:.0f}% 🟡")
+
+                    if mem_pct > 90:
+                        proxmox_issues.append(f"{node_name} RAM {mem_pct:.0f}% 🔴")
+                    elif mem_pct > 80:
+                        proxmox_issues.append(f"{node_name} RAM {mem_pct:.0f}% 🟡")
+                except:
+                    pass
+            else:
+                proxmox_issues.append(f"{node_name} unreachable 🔴")
+
+        if proxmox_issues:
+            warnings.append(f"🖥️ **Proxmox**: " + ", ".join(proxmox_issues))
+        else:
+            healthy.append("✅ Proxmox nodes healthy")
+
+        # Step 5: Check for failed downloads
+        progress.update(4, ":hourglass: Checking download queues...")
+        await status_msg.edit(embed=progress.embed)
+
+        failed_downloads = []
+        # Check Radarr
+        radarr_url = f"{self.bot.config.api.radarr_url}/api/v3/queue"
+        radarr_data = await self.bot.api_get(radarr_url, 'radarr')
+        if radarr_data:
+            for item in radarr_data.get('records', []):
+                if item.get('status', '').lower() in ['failed', 'warning']:
+                    failed_downloads.append(f"🎬 {item.get('title', 'Unknown')[:20]}")
+
+        # Check Sonarr
+        sonarr_url = f"{self.bot.config.api.sonarr_url}/api/v3/queue"
+        sonarr_data = await self.bot.api_get(sonarr_url, 'sonarr')
+        if sonarr_data:
+            for item in sonarr_data.get('records', []):
+                if item.get('status', '').lower() in ['failed', 'warning']:
+                    failed_downloads.append(f"📺 {item.get('title', 'Unknown')[:20]}")
+
+        if failed_downloads:
+            warnings.append(f"⬇️ **Failed Downloads** ({len(failed_downloads)}): " + ", ".join(failed_downloads[:3]))
+
+        # Build final embed
+        total_issues = len(issues) + len(warnings)
+        if total_issues == 0:
+            color = discord.Color.green()
+            title = "✅ Homelab Health: All Clear!"
+        elif issues:
+            color = discord.Color.red()
+            title = f"🚨 Homelab Health: {len(issues)} Issue(s) Found"
+        else:
+            color = discord.Color.yellow()
+            title = f"⚠️ Homelab Health: {len(warnings)} Warning(s)"
+
+        embed = progress.complete(title, "Health check complete", color)
+        embed.clear_fields()
+
+        if issues:
+            embed.add_field(
+                name="🚨 Issues",
+                value="\n".join(issues) or "None",
+                inline=False
+            )
+
+        if warnings:
+            embed.add_field(
+                name="⚠️ Warnings",
+                value="\n".join(warnings) or "None",
+                inline=False
+            )
+
+        if healthy and not issues:
+            embed.add_field(
+                name="✅ Healthy",
+                value="\n".join(healthy[:5]),
+                inline=False
+            )
+
+        embed.set_footer(text="Run /check for container updates • /downloads for queue status")
+
+        await status_msg.edit(embed=embed)
+
     @property
     def config(self):
         return self.bot.config
