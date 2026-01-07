@@ -1,8 +1,97 @@
+<div align="center">
+
+<br><br><br><br>
+
+# ═══════════════════════════════════════════════
+
+# HERMES' HOMELAB PROJECT
+
+# ═══════════════════════════════════════════════
+
+<br><br>
+
+### Infrastructure Technical Manual
+
+<br><br><br>
+
+**Started:** December 2024
+
+**Documentation Version:** 2.1 | January 2026
+
+<br><br><br><br>
+
+---
+
+**Author**
+
+### Hermes Miraflor II
+
+*with the assistance of*
+
+### Claude Code
+
+<br><br><br><br><br><br><br><br><br><br>
+
+---
+
+*"The best time to plant a tree was 20 years ago.*
+*The second best time is now."*
+
+— Chinese Proverb
+
+<br><br>
+
+</div>
+
+<div style="page-break-after: always;"></div>
+
+---
+
+# Document History
+
+This page tracks all major revisions made to this technical manual.
+
+| Version | Date | Author | Changes |
+|:-------:|:----:|:------:|---------|
+| **2.1** | January 8, 2026 | Hermes + Claude | Added Storage Architecture (Section 8), Kubernetes Cluster with installation guide (Section 9), Observability Stack (Section 10), Watchtower Updates (Section 11), Sentinel Discord Bot (Section 12), SSH Configuration (Appendix D), WiFi SSID mapping, fixed ASCII diagram rendering |
+| **2.0** | January 7, 2026 | Hermes + Claude | Complete rewrite with comprehensive technical documentation. Added Prologue story, expanded all sections with beginner-friendly explanations, added deployment workflows, Authentik integration |
+| **1.0** | December 2024 | Hermes | Initial documentation covering basic Proxmox setup and network architecture |
+
+---
+
+## About This Manual
+
+This manual serves as the complete technical reference for the Hermes Homelab—a passion project that grew from a simple NAS purchase into a full enterprise-grade infrastructure.
+
+**What You'll Find Here:**
+- Detailed explanations suitable for beginners and experts alike
+- Step-by-step guides for every major component
+- Architecture diagrams and data flows
+- Troubleshooting procedures
+- Best practices learned through real-world experience
+
+**Living Document:** This manual is continuously updated as the infrastructure evolves. Each change is tracked in the version history above.
+
+---
+
+## Quick Reference
+
+| Resource | Location |
+|----------|----------|
+| **GitHub Repository** | [Proxmox-TerraformDeployments](https://github.com/herms14/Proxmox-TerraformDeployments) |
+| **Glance Dashboard** | https://glance.hrmsmrflrii.xyz |
+| **Grafana Monitoring** | https://grafana.hrmsmrflrii.xyz |
+| **Proxmox Web UI** | https://proxmox.hrmsmrflrii.xyz |
+
+---
+
+<div style="page-break-after: always;"></div>
+
 # Homelab Infrastructure Technical Manual
 
 > **Comprehensive Documentation for the Hermes Homelab & Azure Hybrid Environment**
 >
-> Version 2.0 | January 7, 2026
+> Version 2.1 | January 8, 2026
 
 ---
 
