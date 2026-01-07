@@ -6,7 +6,7 @@ This document provides a comprehensive list of all Docker services running acros
 
 ---
 
-## docker-vm-utilities01 (192.168.40.10)
+## docker-vm-core-utilities01 (192.168.40.13)
 
 Primary host for utilities, monitoring, and web applications.
 
@@ -115,21 +115,21 @@ Primary host for media services and the *arr stack.
 
 ## Quick Access URLs
 
-### docker-vm-utilities01 (192.168.40.10)
+### docker-vm-core-utilities01 (192.168.40.13)
 
 | Service | Local URL | External URL |
 |---------|-----------|--------------|
-| Glance | http://192.168.40.10:8080 | https://glance.hrmsmrflrii.xyz |
-| Grafana | http://192.168.40.10:3030 | https://grafana.hrmsmrflrii.xyz |
-| Prometheus | http://192.168.40.10:9090 | https://prometheus.hrmsmrflrii.xyz |
-| n8n | http://192.168.40.10:5678 | https://n8n.hrmsmrflrii.xyz |
-| Uptime Kuma | http://192.168.40.10:3001 | https://uptime.hrmsmrflrii.xyz |
-| Paperless | http://192.168.40.10:8000 | https://paperless.hrmsmrflrii.xyz |
-| Speedtest | http://192.168.40.10:3000 | https://speedtest.hrmsmrflrii.xyz |
-| Karakeep | http://192.168.40.10:3005 | https://karakeep.hrmsmrflrii.xyz |
-| Lagident | http://192.168.40.10:9933 | https://lagident.hrmsmrflrii.xyz |
-| Wizarr | http://192.168.40.10:5690 | https://wizarr.hrmsmrflrii.xyz |
-| Tracearr | http://192.168.40.10:3002 | https://tracearr.hrmsmrflrii.xyz |
+| Glance | http://192.168.40.12:8080 | https://glance.hrmsmrflrii.xyz |
+| Grafana | http://192.168.40.13:3030 | https://grafana.hrmsmrflrii.xyz |
+| Prometheus | http://192.168.40.13:9090 | https://prometheus.hrmsmrflrii.xyz |
+| n8n | http://192.168.40.13:5678 | https://n8n.hrmsmrflrii.xyz |
+| Uptime Kuma | http://192.168.40.13:3001 | https://uptime.hrmsmrflrii.xyz |
+| Paperless | http://192.168.40.13:8000 | https://paperless.hrmsmrflrii.xyz |
+| Speedtest | http://192.168.40.13:3000 | https://speedtest.hrmsmrflrii.xyz |
+| Karakeep | http://192.168.40.13:3005 | https://karakeep.hrmsmrflrii.xyz |
+| Lagident | http://192.168.40.13:9933 | https://lagident.hrmsmrflrii.xyz |
+| Wizarr | http://192.168.40.13:5690 | https://wizarr.hrmsmrflrii.xyz |
+| Tracearr | http://192.168.40.13:3002 | https://tracearr.hrmsmrflrii.xyz |
 
 ### docker-vm-media01 (192.168.40.11)
 

@@ -93,13 +93,13 @@ See [Kubernetes_Setup.md](./legacy/Kubernetes_Setup.md) for complete guide.
 | Authentik | `authentik/deploy-authentik.yml` | authentik-vm01 |
 | Immich | `immich/deploy-immich.yml` | immich-vm01 |
 | GitLab | `gitlab/deploy-gitlab.yml` | gitlab-vm01 |
-| n8n | `n8n/deploy-n8n.yml` | docker-vm-utilities01 |
-| Monitoring Stack | `monitoring/deploy-monitoring-stack.yml` | docker-vm-utilities01 |
-| Observability Stack | `monitoring/deploy-observability-stack.yml` | docker-vm-utilities01 |
-| Argus SysAdmin Bot | `sysadmin-bot/deploy-sysadmin-bot.yml` | docker-vm-utilities01 |
+| n8n | `n8n/deploy-n8n.yml` | docker-vm-core-utilities01 |
+| Monitoring Stack | `monitoring/deploy-monitoring-stack.yml` | docker-vm-core-utilities01 |
+| Observability Stack | `monitoring/deploy-observability-stack.yml` | docker-vm-core-utilities01 |
+| Argus SysAdmin Bot | `sysadmin-bot/deploy-sysadmin-bot.yml` | docker-vm-core-utilities01 |
 | Download Monitor | `arr-stack/deploy-download-monitor.yml` | docker-vm-media01 |
-| Life Progress API | `glance/deploy-life-progress-api.yml` | docker-vm-utilities01 |
-| Reddit Manager | `reddit-manager/deploy-reddit-manager.yml` | docker-vm-utilities01 |
+| Life Progress API | `glance/deploy-life-progress-api.yml` | docker-vm-core-utilities01 |
+| Reddit Manager | `reddit-manager/deploy-reddit-manager.yml` | docker-vm-core-utilities01 |
 
 ## OPNsense DNS Automation
 
@@ -117,7 +117,7 @@ Manage DNS host overrides in OPNsense via API.
 ### Add Single DNS Record
 
 ```bash
-ansible-playbook opnsense/add-dns-record.yml -e "hostname=myservice ip=192.168.40.10"
+ansible-playbook opnsense/add-dns-record.yml -e "hostname=myservice ip=192.168.40.13"
 ```
 
 ### Add All Homelab Services
@@ -209,7 +209,7 @@ k8s-worker06 ansible_host=192.168.20.45
 
 [docker_hosts]
 docker-vm-media01 ansible_host=192.168.40.11
-docker-vm-utilities01 ansible_host=192.168.40.10
+docker-vm-core-utilities01 ansible_host=192.168.40.13
 
 [services]
 traefik-vm01 ansible_host=192.168.40.20

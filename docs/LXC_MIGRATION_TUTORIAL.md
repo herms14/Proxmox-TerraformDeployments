@@ -224,7 +224,7 @@ If your services reference other services by IP, update them to use `localhost`:
 
 ```bash
 # Example: Update IP references in config files
-sed -i 's/192.168.40.10/localhost/g' /opt/glance/config/glance.yml
+sed -i 's/192.168.40.13/localhost/g' /opt/glance/config/glance.yml
 ```
 
 ---
@@ -348,7 +348,7 @@ services:
   glance:
     loadBalancer:
       servers:
-        - url: "http://192.168.40.10:8080"
+        - url: "http://192.168.40.12:8080"
 
 # After (pointing to new LXC)
 services:

@@ -176,10 +176,10 @@ The Update Manager container uses these environment variables:
 
 ### Adding API Credentials
 
-To enable full functionality, you need to add API credentials to the `.env` file on docker-vm-utilities01:
+To enable full functionality, you need to add API credentials to the `.env` file on docker-vm-core-utilities01:
 
 ```bash
-ssh hermes-admin@192.168.40.10
+ssh hermes-admin@192.168.40.13
 sudo nano /opt/update-manager/.env
 ```
 
@@ -216,17 +216,17 @@ sudo docker compose restart
 
 1. Check container is running:
    ```bash
-   ssh hermes-admin@192.168.40.10 "docker ps | grep update-manager"
+   ssh hermes-admin@192.168.40.13 "docker ps | grep update-manager"
    ```
 
 2. Check container logs:
    ```bash
-   ssh hermes-admin@192.168.40.10 "docker logs update-manager --tail 50"
+   ssh hermes-admin@192.168.40.13 "docker logs update-manager --tail 50"
    ```
 
 3. Test health endpoint:
    ```bash
-   ssh hermes-admin@192.168.40.10 "curl http://localhost:5050/health"
+   ssh hermes-admin@192.168.40.13 "curl http://localhost:5050/health"
    ```
 
 ### Slash Commands Not Showing
@@ -259,8 +259,8 @@ The bot uses SSH to check remote servers. If SSH checks are failing:
 
 | Component | Location |
 |-----------|----------|
-| Update Manager Bot | `/opt/update-manager/` on docker-vm-utilities01 (192.168.40.10) |
-| Argus SysAdmin Bot | `/opt/sysadmin-bot/` on docker-vm-utilities01 (192.168.40.10) |
+| Update Manager Bot | `/opt/update-manager/` on docker-vm-core-utilities01 (192.168.40.13) |
+| Argus SysAdmin Bot | `/opt/sysadmin-bot/` on docker-vm-core-utilities01 (192.168.40.13) |
 | Download Monitor | `/opt/download-monitor/` on docker-vm-media01 (192.168.40.11) |
 | Docker Compose | `/opt/<service>/docker-compose.yml` |
 | Environment File | `/opt/update-manager/.env` |

@@ -48,7 +48,7 @@ End-to-end request visibility using OpenTelemetry, Jaeger, Prometheus, and Grafa
 
 ### OpenTelemetry Collector
 
-**Host**: docker-vm-utilities01 (192.168.40.10)
+**Host**: docker-vm-core-utilities01 (192.168.40.13)
 **Image**: otel/opentelemetry-collector-contrib:0.91.0
 
 | Port | Protocol | Purpose |
@@ -66,7 +66,7 @@ End-to-end request visibility using OpenTelemetry, Jaeger, Prometheus, and Grafa
 
 ### Jaeger
 
-**Host**: docker-vm-utilities01 (192.168.40.10)
+**Host**: docker-vm-core-utilities01 (192.168.40.13)
 **Image**: jaegertracing/all-in-one:1.53
 **URL**: https://jaeger.hrmsmrflrii.xyz (protected by Authentik)
 
@@ -80,7 +80,7 @@ End-to-end request visibility using OpenTelemetry, Jaeger, Prometheus, and Grafa
 
 ### Demo Application
 
-**Host**: docker-vm-utilities01 (192.168.40.10)
+**Host**: docker-vm-core-utilities01 (192.168.40.13)
 **URL**: https://demo.hrmsmrflrii.xyz (protected by Authentik)
 **Port**: 8080
 
@@ -145,8 +145,8 @@ ansible-playbook traefik/deploy-traefik-ssl.yml
 
 ```bash
 # Direct test (bypassing auth)
-curl http://192.168.40.10:8080/health
-curl http://192.168.40.10:8080/api/data
+curl http://192.168.40.12:8080/health
+curl http://192.168.40.12:8080/api/data
 
 # Through Traefik (requires auth)
 # Open in browser: https://demo.hrmsmrflrii.xyz/api/data
@@ -210,10 +210,10 @@ rate(otelcol_processor_dropped_spans[5m])
 
 ```bash
 # Health check
-curl http://192.168.40.10:13133
+curl http://192.168.40.13:13133
 
 # Metrics
-curl http://192.168.40.10:8888/metrics | head -20
+curl http://192.168.40.13:8888/metrics | head -20
 ```
 
 ### Check Traefik Tracing
@@ -230,17 +230,17 @@ curl http://192.168.40.20:8082/metrics | head -20
 
 ```bash
 # Health check
-curl http://192.168.40.10:14269
+curl http://192.168.40.13:14269
 
 # Check for services in Jaeger
-curl http://192.168.40.10:16686/api/services
+curl http://192.168.40.13:16686/api/services
 ```
 
 ### Check Prometheus Targets
 
 ```bash
 # View target status
-curl -s http://192.168.40.10:9090/api/v1/targets | jq '.data.activeTargets[] | {job: .labels.job, health: .health}'
+curl -s http://192.168.40.13:9090/api/v1/targets | jq '.data.activeTargets[] | {job: .labels.job, health: .health}'
 ```
 
 ## Troubleshooting
@@ -249,12 +249,12 @@ curl -s http://192.168.40.10:9090/api/v1/targets | jq '.data.activeTargets[] | {
 
 1. **Check OTEL Collector is running**:
    ```bash
-   ssh hermes-admin@192.168.40.10 "docker logs otel-collector --tail 50"
+   ssh hermes-admin@192.168.40.13 "docker logs otel-collector --tail 50"
    ```
 
 2. **Verify Traefik can reach OTEL Collector**:
    ```bash
-   ssh hermes-admin@192.168.40.20 "curl -v http://192.168.40.10:4318/v1/traces"
+   ssh hermes-admin@192.168.40.20 "curl -v http://192.168.40.13:4318/v1/traces"
    ```
 
 3. **Check Traefik logs for trace errors**:
@@ -266,7 +266,7 @@ curl -s http://192.168.40.10:9090/api/v1/targets | jq '.data.activeTargets[] | {
 
 1. **Check target status**:
    ```bash
-   curl http://192.168.40.10:9090/api/v1/targets | jq '.data.activeTargets[] | select(.health != "up")'
+   curl http://192.168.40.13:9090/api/v1/targets | jq '.data.activeTargets[] | select(.health != "up")'
    ```
 
 2. **Verify network connectivity**:
@@ -279,12 +279,12 @@ curl -s http://192.168.40.10:9090/api/v1/targets | jq '.data.activeTargets[] | {
 
 1. **Check container logs**:
    ```bash
-   ssh hermes-admin@192.168.40.10 "docker logs demo-app"
+   ssh hermes-admin@192.168.40.13 "docker logs demo-app"
    ```
 
 2. **Verify OTEL Collector is healthy**:
    ```bash
-   ssh hermes-admin@192.168.40.10 "docker ps | grep otel"
+   ssh hermes-admin@192.168.40.13 "docker ps | grep otel"
    ```
 
 ## Security Considerations
@@ -323,10 +323,10 @@ OTEL Collector processors remove sensitive headers:
 
 ```bash
 # Update observability stack
-ssh hermes-admin@192.168.40.10 "cd /opt/observability && docker compose pull && docker compose up -d"
+ssh hermes-admin@192.168.40.13 "cd /opt/observability && docker compose pull && docker compose up -d"
 
 # Update monitoring stack
-ssh hermes-admin@192.168.40.10 "cd /opt/monitoring && docker compose pull && docker compose up -d"
+ssh hermes-admin@192.168.40.13 "cd /opt/monitoring && docker compose pull && docker compose up -d"
 ```
 
 ### Backup Considerations
@@ -372,10 +372,10 @@ SNMP must be enabled on the Synology NAS:
 
 ```bash
 # Test SNMP connectivity
-curl "http://192.168.40.10:9116/snmp?target=192.168.20.31&module=synology"
+curl "http://192.168.40.13:9116/snmp?target=192.168.20.31&module=synology"
 
 # Check Prometheus target
-curl -s http://192.168.40.10:9090/api/v1/targets | jq '.data.activeTargets[] | select(.labels.job=="synology")'
+curl -s http://192.168.40.13:9090/api/v1/targets | jq '.data.activeTargets[] | select(.labels.job=="synology")'
 ```
 
 ### Dashboard URLs
@@ -383,7 +383,7 @@ curl -s http://192.168.40.10:9090/api/v1/targets | jq '.data.activeTargets[] | s
 | Dashboard | URL |
 |-----------|-----|
 | Grafana (full) | https://grafana.hrmsmrflrii.xyz/d/synology-nas/synology-nas |
-| Grafana (kiosk) | http://192.168.40.10:3030/d/synology-nas/synology-nas?kiosk |
+| Grafana (kiosk) | http://192.168.40.13:3030/d/synology-nas/synology-nas?kiosk |
 | Glance (embedded) | https://glance.hrmsmrflrii.xyz → Storage page |
 
 ## Container Monitoring
@@ -392,7 +392,7 @@ Docker container metrics are collected via the Docker Stats Exporter and display
 
 ### Docker Stats Exporter
 
-**Hosts**: Both Docker VMs (192.168.40.10, 192.168.40.11)
+**Hosts**: Both Docker VMs (192.168.40.13, 192.168.40.11)
 **Port**: 9417
 
 | Metric | Description |
@@ -438,7 +438,7 @@ Docker container metrics are collected via the Docker Stats Exporter and display
 ```yaml
 - job_name: 'docker-stats-utilities'
   static_configs:
-    - targets: ['192.168.40.10:9417']
+    - targets: ['192.168.40.13:9417']
 
 - job_name: 'docker-stats-media'
   static_configs:

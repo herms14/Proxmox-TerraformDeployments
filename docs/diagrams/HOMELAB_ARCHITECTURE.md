@@ -179,7 +179,6 @@ flowchart TB
             Autobrr[Autobrr]
         end
 
-        Mnemosyne[Mnemosyne Bot]
     end
 
     subgraph UtilsHost["docker-core-utils - 192.168.40.13"]
@@ -195,7 +194,10 @@ flowchart TB
             Speedtest[Speedtest]
         end
 
-        n8n[n8n Automation]
+        subgraph Automation["Automation"]
+            n8n[n8n Workflows]
+            Sentinel[Sentinel Bot<br/>Unified Discord]
+        end
     end
 
     subgraph LXC200["LXC 200 - 192.168.40.12"]
@@ -204,11 +206,6 @@ flowchart TB
         RedditMgr[Reddit Manager]
         NBAAPI[NBA Stats API]
         PiholeAPI[Pi-hole Stats API]
-    end
-
-    subgraph LXC201["LXC 201 - 192.168.40.14"]
-        Argus[Argus Bot]
-        Chronos[Chronos Bot]
     end
 
     subgraph Node02Services["node02 Services"]
@@ -288,8 +285,7 @@ flowchart LR
         SL["Syslog: .5"]
         DM["docker-media: .11"]
         GL["Glance LXC: .12"]
-        DU["docker-utils: .13"]
-        DB["Bots LXC: .14"]
+        DU["docker-utils: .13<br/>(Sentinel Bot)"]
         TR["Traefik: .20"]
         AU["Authentik: .21"]
         IM["Immich: .22"]
@@ -310,6 +306,105 @@ flowchart LR
     subgraph VLAN91["VLAN 91 - Firewall<br/>192.168.91.0/24"]
         OP["OPNsense: .30"]
     end
+```
+
+---
+
+## Sentinel Bot Architecture
+
+```mermaid
+flowchart TB
+    subgraph Discord["Discord Server"]
+        CH1["#homelab-infrastructure"]
+        CH2["#container-updates"]
+        CH3["#media-downloads"]
+        CH4["#project-management"]
+        CH5["#claude-tasks"]
+        CH6["#new-service-onboarding-workflow"]
+    end
+
+    subgraph SentinelBot["Sentinel Bot - 192.168.40.13:5050"]
+        subgraph Core["Core Layer"]
+            Bot["SentinelBot<br/>(discord.py 2.3+)"]
+            DB["SQLite Database<br/>sentinel.db"]
+            Router["Channel Router"]
+        end
+
+        subgraph Cogs["Cog Modules"]
+            Homelab["homelab.py<br/>Proxmox Management"]
+            Updates["updates.py<br/>Container Updates"]
+            Media["media.py<br/>Download Tracking"]
+            GitLabCog["gitlab.py<br/>Issue Management"]
+            Tasks["tasks.py<br/>Claude Queue"]
+            Onboarding["onboarding.py<br/>Service Verification"]
+            Scheduler["scheduler.py<br/>Daily Reports"]
+        end
+
+        subgraph Webhooks["Webhook Server (Quart)"]
+            WH["/webhook/watchtower"]
+            JH["/webhook/jellyseerr"]
+            API["/api/tasks"]
+        end
+    end
+
+    subgraph External["External Services"]
+        Proxmox["Proxmox Cluster<br/>192.168.20.20-21"]
+        Prometheus["Prometheus<br/>192.168.40.13:9090"]
+        Radarr["Radarr<br/>192.168.40.11:7878"]
+        Sonarr["Sonarr<br/>192.168.40.11:8989"]
+        Jellyseerr["Jellyseerr<br/>192.168.40.11:5056"]
+        GitLab["GitLab<br/>192.168.40.23"]
+        Watchtower["Watchtower<br/>(All Docker Hosts)"]
+    end
+
+    %% Discord connections
+    CH1 --> Homelab
+    CH2 --> Updates
+    CH3 --> Media
+    CH4 --> GitLabCog
+    CH5 --> Tasks
+    CH6 --> Onboarding
+
+    %% Cog to external
+    Homelab --> Proxmox & Prometheus
+    Updates --> Watchtower
+    Media --> Radarr & Sonarr & Jellyseerr
+    GitLabCog --> GitLab
+
+    %% Webhooks
+    Watchtower --> WH
+    Jellyseerr --> JH
+
+    %% Core connections
+    Bot --> Router --> Cogs
+    Cogs --> DB
+```
+
+### Sentinel Bot Data Flow
+
+```mermaid
+sequenceDiagram
+    participant User
+    participant Discord
+    participant Sentinel
+    participant External as External Service
+    participant DB as SQLite
+
+    %% Command Flow
+    User->>Discord: /command
+    Discord->>Sentinel: Slash Command
+    Sentinel->>External: API Call
+    External-->>Sentinel: Response
+    Sentinel->>DB: Log/Track
+    Sentinel-->>Discord: Embed Response
+    Discord-->>User: Display Result
+
+    %% Webhook Flow
+    Note over External,Sentinel: Webhook Notification
+    External->>Sentinel: POST /webhook/*
+    Sentinel->>DB: Record Event
+    Sentinel->>Discord: Send Notification
+    Discord-->>User: Display Alert
 ```
 
 ---

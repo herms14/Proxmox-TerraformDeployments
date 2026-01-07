@@ -144,7 +144,7 @@ Infrastructure:
 | `/recent [type]` | Recently added media |
 
 **Automatic Notifications**:
-- Download progress at 50%, 80%, 100%
+- Download completion notifications (100% only to reduce spam)
 - Completion notifications with Jellyfin links
 - Poster images embedded
 - **Failed download alerts** with reaction-based removal (react with :wastebasket: to remove)
@@ -559,15 +559,14 @@ If you see "Improper token" errors:
 
 ### Download notifications spam
 
-If the same download milestone is sent repeatedly:
-1. Check database for stuck entries:
+**Fixed January 2026**: The scheduler now uses an in-memory cache instead of database tracking, and only notifies on 100% completion (not 50%, 80% milestones).
+
+If issues persist:
+1. Restart the bot to clear the in-memory cache:
    ```bash
-   docker exec sentinel-bot sqlite3 /app/data/sentinel.db "SELECT * FROM download_tracking;"
+   cd /opt/sentinel-bot && sudo docker compose restart
    ```
-2. Reset milestones if needed:
-   ```bash
-   docker exec sentinel-bot sqlite3 /app/data/sentinel.db "UPDATE download_tracking SET notified_milestones='[50,80,100]' WHERE completed_at IS NULL;"
-   ```
+2. The `_download_cache` is cleared when bot restarts, preventing duplicate notifications.
 
 ### Webhook not receiving updates
 

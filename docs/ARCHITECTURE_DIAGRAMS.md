@@ -137,7 +137,7 @@
 │  ┌─────────────────────────────┐  ┌─────────────────────────────┐  ┌─────────────────────────────┐             │
 │  │      INFRASTRUCTURE         │  │       DOCKER HOSTS          │  │     APPLICATION VMs         │             │
 │  ├─────────────────────────────┤  ├─────────────────────────────┤  ├─────────────────────────────┤             │
-│  │ .5   linux-syslog-server01  │  │ .10  docker-vm-utilities01  │  │ .20  traefik-vm01           │             │
+│  │ .5   linux-syslog-server01  │  │ .10  docker-vm-core-utilities01  │  │ .20  traefik-vm01           │             │
 │  │                             │  │      - Paperless-ngx        │  │ .21  authentik-vm01         │             │
 │  │                             │  │      - Glance Dashboard     │  │ .22  immich-vm01            │             │
 │  │                             │  │      - n8n Automation       │  │ .23  gitlab-vm01            │             │
@@ -174,7 +174,7 @@
      │                              │ │                              │ │                              │
      │  VMs Hosted:                 │ │  VMs Hosted:                 │ │  VMs Hosted:                 │
      │  - ansible-controller01     │ │  - linux-syslog-server01    │ │  - k8s-controller01          │
-     │                              │ │  - docker-vm-utilities01    │ │  - k8s-controller02          │
+     │                              │ │  - docker-vm-core-utilities01    │ │  - k8s-controller02          │
      │                              │ │  - docker-vm-media01        │ │  - k8s-controller03          │
      │  Templates:                  │ │  - traefik-vm01             │ │  - k8s-worker01              │
      │  - tpl-ubuntuv24.04-v1      │ │  - authentik-vm01           │ │  - k8s-worker02              │
@@ -276,8 +276,8 @@
 │  │ auth.hrmsmrflrii.xyz     → 192.168.40.21:9000  │  radarr.hrmsmrflrii.xyz     → 192.168.40.11:7878        │ │
 │  │ photos.hrmsmrflrii.xyz   → 192.168.40.22:2283  │  sonarr.hrmsmrflrii.xyz     → 192.168.40.11:8989        │ │
 │  │ gitlab.hrmsmrflrii.xyz   → 192.168.40.23:80    │  prowlarr.hrmsmrflrii.xyz   → 192.168.40.11:9696        │ │
-│  │ n8n.hrmsmrflrii.xyz      → 192.168.40.10:5678  │  bazarr.hrmsmrflrii.xyz     → 192.168.40.11:6767        │ │
-│  │ paperless.hrmsmrflrii.xyz→ 192.168.40.10:8000  │  jellyseerr.hrmsmrflrii.xyz → 192.168.40.11:5056        │ │
+│  │ n8n.hrmsmrflrii.xyz      → 192.168.40.13:5678  │  bazarr.hrmsmrflrii.xyz     → 192.168.40.11:6767        │ │
+│  │ paperless.hrmsmrflrii.xyz→ 192.168.40.13:8000  │  jellyseerr.hrmsmrflrii.xyz → 192.168.40.11:5056        │ │
 │  └────────────────────────────────────────────────────────────────────────────────────────────────────────────┘ │
 └─────────────────────────────────────────────────────────────────────────────────────────────────────────────────┘
                                                      │
@@ -474,7 +474,7 @@
 │                                        LOCAL STORAGE ON VMs                                                      │
 ├─────────────────────────────────────────────────────────────────────────────────────────────────────────────────┤
 │                                                                                                                  │
-│  docker-vm-media01 (.40.11):                     docker-vm-utilities01 (.40.10):                                │
+│  docker-vm-media01 (.40.11):                     docker-vm-core-utilities01 (.40.10):                                │
 │  /opt/arr-stack/                                  /opt/n8n/                                                      │
 │  ├── jellyfin/config/                            /opt/paperless/                                                 │
 │  ├── radarr/                                     /opt/glance/                                                    │
@@ -676,7 +676,7 @@
 | 192.168.20.32-34 | K8s Control Plane | k8s-controller01-03 |
 | 192.168.20.40-45 | K8s Workers | k8s-worker01-06 |
 | 192.168.40.5 | Logging | linux-syslog-server01 |
-| 192.168.40.10-11 | Docker Hosts | utilities01, media01 |
+| 192.168.40.12-13 | Docker Hosts | utilities01, media01 |
 | 192.168.40.20-23 | App Services | Traefik, Authentik, Immich, GitLab |
 | 192.168.91.30 | OPNsense | Firewall/DNS |
 
@@ -694,7 +694,7 @@
 | 7878 | Radarr | 192.168.40.11 |
 | 8989 | Sonarr | 192.168.40.11 |
 | 9696 | Prowlarr | 192.168.40.11 |
-| 5678 | n8n | 192.168.40.10 |
+| 5678 | n8n | 192.168.40.13 |
 
 ---
 

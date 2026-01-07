@@ -14,7 +14,7 @@ Ansible controller configured to manage all VMs in the homelab infrastructure.
 - k8s-controller02 (192.168.20.33)
 - k8s-controller03 (192.168.20.34)
 - linux-syslog-server01 (192.168.40.5)
-- docker-vm-utilities01 (192.168.40.10)
+- docker-vm-utilities01 (192.168.40.13)
 - docker-vm-media01 (192.168.40.11)
 - traefik-vm01 (192.168.40.20)
 - authentik-vm01 (192.168.40.21)
@@ -144,7 +144,7 @@ ansible-playbook n8n/deploy-n8n.yml -l docker-vm-utilities01 -v
 ```bash
 # Add single DNS record
 cd ~/ansible
-ansible-playbook opnsense/add-dns-record.yml -e "hostname=myservice ip=192.168.40.10"
+ansible-playbook opnsense/add-dns-record.yml -e "hostname=myservice ip=192.168.40.13"
 
 # Add all homelab services DNS records
 ansible-playbook opnsense/add-all-services-dns.yml

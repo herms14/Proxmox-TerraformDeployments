@@ -116,3 +116,4 @@ ENV/
 
 *.log
 logs/
+Azure-Hybrid-Lab/terraform/proxmox/terraform.tfvars

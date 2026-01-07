@@ -5,6 +5,89 @@
 
 ---
 
+## 2026-01-07
+
+### 02:10 - LXC Migration: VM to LXC Consolidation
+**Status**: Completed
+**Request**: Migrate Traefik, Authentik, and docker-media01 from VMs to LXC containers to save ~20GB RAM
+
+**Changes Made**:
+1. **Created LXC 203 (traefik-lxc)** on node02
+   - 2 cores, 2GB RAM, 20GB disk
+   - IP: 192.168.40.20 (same as original VM)
+   - Migrated from VM 102
+
+2. **Created LXC 204 (authentik-lxc)** on node02
+   - 2 cores, 4GB RAM, 30GB disk
+   - IP: 192.168.40.21 (same as original VM)
+   - Migrated from VM 100
+
+3. **Created LXC 205 (docker-lxc-media)** on node01
+   - 4 cores, 8GB RAM, 50GB disk
+   - IP: 192.168.40.11 (same as original VM)
+   - NFS mount to Synology for media files
+   - 14 containers running: jellyfin, radarr, sonarr, prowlarr, bazarr, lidarr, overseerr, jellyseerr, tdarr, autobrr, deluge, sabnzbd, metube, cadvisor
+
+**Key Technical Solutions**:
+- Added `security_opt: - apparmor=unconfined` to all docker-compose services for LXC compatibility
+- Used Blue-Green migration with temporary IPs then switched to original IPs
+- NFS mount configured directly inside LXC with nfs-common package
+
+**VMs Decommissioned** (permanently deleted):
+- VM 100 (authentik-vm01) - `qm destroy 100 --purge`
+- VM 102 (traefik-vm01) - `qm destroy 102 --purge`
+- VM 111 (docker-vm-media01) - `qm destroy 111 --purge`
+
+**RAM Savings**: ~20GB total (node01: ~10GB, node02: ~10GB)
+
+**Post-Migration Verification**:
+- ✅ All Prometheus targets pointing to correct IPs
+- ✅ Glance dashboard monitors pointing to correct IPs
+- ✅ All services accessible through Traefik
+- ⚠️ 2 targets down: docker-stats-media (docker-exporter not built), proxmox exporter (pre-existing misconfiguration)
+
+**Files Created/Modified**:
+- `docs/LXC_MIGRATION_PLAN.md` - Created comprehensive migration plan with execution summary
+- `docs/INVENTORY.md` - Updated with new LXC containers
+
+**Notes**:
+- youtube-stats-api and docker-exporter need to be built separately (AppArmor blocks docker build in LXC)
+- All services verified working through Traefik
+
+---
+
+### 03:00 - Post-Migration Fixes: Glance & Discord Bots
+**Status**: Completed
+**Request**: Fix Glance Media page, reconfigure Discord bots, fix Sentinel notification spam
+
+**Changes Made**:
+1. **Glance Media Page**:
+   - Removed YouTube Downloads and Recent YouTube Videos widgets (API not available)
+   - Verified media-stats-api correctly pointing to 192.168.40.11
+
+2. **Discord Bots Cleanup**:
+   - Removed duplicate sentinel-bot from docker-lxc-bots (201) - had invalid token
+   - Verified main Sentinel on docker-vm-core-utilities01 (192.168.40.13) is healthy
+
+3. **Sentinel Scheduler Spam Fix**:
+   - **Problem**: Bot was spamming 50% progress notifications because `download_milestones` database table didn't exist
+   - **Fix**: Changed `_notify_progress()` to use in-memory cache instead of database
+   - **Fix**: Changed milestones from `[50, 80, 100]` to `[100]` only (completion notifications)
+   - Updated `/opt/sentinel-bot/cogs/scheduler.py` on docker-vm-core-utilities01
+
+**Files Modified**:
+- `docs/DISCORD_BOTS.md` - Updated notification behavior, troubleshooting section
+- `docs/LXC_MIGRATION_PLAN.md` - Final execution summary with verification
+
+**Sentinel Bot Configuration** (verified correct):
+- RADARR_URL=http://192.168.40.11:7878
+- SONARR_URL=http://192.168.40.11:8989
+- DOCKER_MEDIA_IP=192.168.40.11
+- TRAEFIK_IP=192.168.40.20
+- AUTHENTIK_IP=192.168.40.21
+
+---
+
 ## 2026-01-02
 
 ### 14:50 - Azure Hybrid Lab Packer Build - autounattend.xml Fixes

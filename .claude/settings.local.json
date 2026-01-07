@@ -195,7 +195,9 @@
       "Bash(\\\\\"\"192.168.40.20 feeds.hrmsmrflrii.xyz\\\\\"\",)",
       "Bash(\\\\\"\"192.168.40.20 pihole.hrmsmrflrii.xyz\\\\\"\")",
       "Bash(]'''\n\ncontent = re.sub\\(r' hosts = \\\\[\\\\]', hosts_entries, content\\)\n\nwith open\\('/etc/pihole/pihole.toml', 'w'\\) as f:\n    f.write\\(content\\)\n\nprint\\('Updated hosts in pihole.toml'\\)\n\\\\\"\"\"\"')",
-      "Bash(powershell -ExecutionPolicy Bypass -File \"./scripts/sync-obsidian-posts.ps1\" -DryRun)"
+      "Bash(powershell -ExecutionPolicy Bypass -File \"./scripts/sync-obsidian-posts.ps1\" -DryRun)",
+      "Bash(powershell:*)",
+      "Bash(ipconfig:*)"
     ],
     "deny": [],
     "ask": []

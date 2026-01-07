@@ -435,7 +435,7 @@ python3 scripts/wake-nodes.py node01   # node01 only
 |---------|--------------|--------------|------|
 | n8n | http://192.168.40.13:5678 | https://n8n.hrmsmrflrii.xyz | Authentik |
 | Speedtest | http://192.168.40.13:3000 | https://speedtest.hrmsmrflrii.xyz | None |
-| Paperless-ngx | http://192.168.40.10:8000 | https://paperless.hrmsmrflrii.xyz | Authentik |
+| Paperless-ngx | http://192.168.40.13:8000 | https://paperless.hrmsmrflrii.xyz | Authentik |
 
 ---
 
@@ -491,7 +491,7 @@ node01 ansible_host=192.168.20.20 ansible_user=root
 node02 ansible_host=192.168.20.21 ansible_user=root
 
 [docker_hosts]
-docker-utilities ansible_host=192.168.40.10
+docker-vm-core-utilities01 ansible_host=192.168.40.13
 docker-media ansible_host=192.168.40.11
 
 [k8s_controllers]
@@ -625,7 +625,7 @@ Host ansible
     IdentityFile ~/.ssh/homelab_ed25519
 
 Host docker-utilities
-    HostName 192.168.40.10
+    HostName 192.168.40.13
     User hermes-admin
     IdentityFile ~/.ssh/homelab_ed25519
 

@@ -10,11 +10,21 @@
 |----------|-------|-------|-----|---------|
 | Ansible | 1 | 2 | 8GB | 20GB |
 | Kubernetes | 9 | 18 | 72GB | 180GB |
-| Services | 8 | 18 | 58GB | 190GB |
-| LXC Containers | 3 | 6 | 7GB | 36GB |
-| **Total** | **21** | **44** | **145GB** | **426GB** |
+| Services | 5 | 26 | 38GB | 130GB |
+| LXC Containers | 6 | 14 | 21GB | 136GB |
+| **Total** | **21** | **60** | **139GB** | **466GB** |
 
-*Last updated: December 30, 2025*
+*Last updated: January 7, 2026*
+
+## Synology NAS
+
+| Hostname | IP | Services | Storage |
+|----------|----|----------|---------|
+| Synology NAS | 192.168.20.31 | DSM, NFS, SNMP, **Plex Media Server** | 6 drives (RAID) |
+
+**Plex Media Server**: http://192.168.20.31:32400/web
+
+---
 
 ## VLAN 20 - Infrastructure (192.168.20.0/24)
 
@@ -66,15 +76,12 @@
 | Hostname | Node | VMID | IP | Cores | RAM | Disk | Purpose |
 |----------|------|------|----|-------|-----|------|---------|
 | linux-syslog-server01 | node02 | 109 | 192.168.40.5 | 8 | 8GB | 50GB | Centralized logging |
-| docker-vm-media01 | node01 | 111 | 192.168.40.11 | 2 | 12GB | 100GB | Arr media stack, Mnemosyne Bot |
 | docker-vm-core-utilities01 | node01 | 107 | 192.168.40.13 | 4 | 12GB | 40GB | Grafana, Prometheus, Uptime Kuma, Speedtest, n8n, Jaeger |
-| traefik-vm01 | node02 | 102 | 192.168.40.20 | 2 | 8GB | 20GB | Reverse proxy |
-| authentik-vm01 | node02 | 100 | 192.168.40.21 | 2 | 8GB | 20GB | Identity/SSO |
 | immich-vm01 | node02 | 108 | 192.168.40.22 | 10 | 12GB | 20GB | Photo management |
 | gitlab-vm01 | node02 | 106 | 192.168.40.23 | 2 | 8GB | 20GB | DevOps platform |
 | gitlab-runner-vm01 | node02 | 121 | 192.168.40.24 | 2 | 2GB | 20GB | CI/CD job executor |
 
-> **Note**: docker-vm-utilities01 (192.168.40.10) was decommissioned. Services moved to LXC 200 and VM 107.
+> **Note**: Traefik (VM 102), Authentik (VM 100), and docker-media (VM 111) were migrated to LXC containers on January 7, 2026. See [LXC Migration Plan](./LXC_MIGRATION_PLAN.md) for details.
 
 ## VLAN 90 - Management (192.168.90.0/24)
 
@@ -89,6 +96,9 @@
 | docker-lxc-glance | node01 | 200 | 192.168.40.12 | 2 | 4GB | 20GB | Glance, Media Stats API, Reddit Manager, NBA Stats API |
 | docker-lxc-bots | node01 | 201 | 192.168.40.14 | 2 | 2GB | 8GB | Argus Bot, Chronos Bot |
 | pihole | node01 | 202 | 192.168.90.53 | 2 | 1GB | 8GB | Pi-hole v6 + Unbound DNS |
+| traefik-lxc | node02 | 203 | 192.168.40.20 | 2 | 2GB | 20GB | Traefik reverse proxy (migrated from VM 102) |
+| authentik-lxc | node02 | 204 | 192.168.40.21 | 2 | 4GB | 30GB | Authentik SSO (migrated from VM 100) |
+| docker-lxc-media | node01 | 205 | 192.168.40.11 | 4 | 8GB | 50GB | Arr media stack (migrated from VM 111) |
 
 **Reserved IP Range**: 192.168.20.100-199
 

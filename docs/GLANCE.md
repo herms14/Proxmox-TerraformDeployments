@@ -77,7 +77,7 @@ This is a small Python program that runs in a Docker container. It acts as the "
 - Packages everything into a single, easy-to-read format
 - Responds to Glance when asked for data
 
-**Location:** `/opt/media-stats-api/` on docker-vm-utilities01
+**Location:** `/opt/media-stats-api/` on docker-vm-core-utilities01
 
 **Files:**
 
@@ -289,7 +289,7 @@ if __name__ == '__main__':
 
 This Python script updates the Glance dashboard configuration to use the new grid layout.
 
-**Location:** `temp-media-fix.py` (run on docker-vm-utilities01)
+**Location:** `temp-media-fix.py` (run on docker-vm-core-utilities01)
 
 ```python
 import yaml
@@ -324,7 +324,7 @@ media_page = {
                     "type": "custom-api",
                     "title": "Media Stats",
                     "cache": "1m",
-                    "url": "http://192.168.40.10:5054/api/stats",
+                    "url": "http://192.168.40.12:5054/api/stats",
                     "template": MEDIA_STATS_GRID_TEMPLATE
                 },
                 # ... other widgets (Recent Movies, RSS feeds, etc.)
@@ -358,7 +358,7 @@ print("Media page updated with correct template syntax")
 
 3. **Lines 23-43**: Defines the Media page structure
    - Uses the `custom-api` widget type
-   - Points to our Media Stats API (`http://192.168.40.10:5054/api/stats`)
+   - Points to our Media Stats API (`http://192.168.40.12:5054/api/stats`)
    - Caches data for 1 minute to avoid hammering the API
 
 4. **Lines 45-52**: Finds the existing Media page and replaces it with the new one
@@ -378,7 +378,7 @@ This automates the deployment of the Media Stats API.
 #   ansible-playbook glance/deploy-media-stats-api.yml
 
 - name: Deploy Media Stats API
-  hosts: docker-vm-utilities01
+  hosts: docker-vm-core-utilities01
   become: yes
   vars:
     app_path: /opt/media-stats-api
@@ -534,7 +534,7 @@ ansible-playbook glance/deploy-media-stats-api.yml
 
 ```bash
 # Test the API endpoint
-curl http://192.168.40.10:5054/api/stats
+curl http://192.168.40.12:5054/api/stats
 ```
 
 You should see JSON output with all 6 stats.
@@ -543,10 +543,10 @@ You should see JSON output with all 6 stats.
 
 ```bash
 # Copy the update script to the server
-scp temp-media-fix.py hermes-admin@192.168.40.10:/tmp/
+scp ... hermes-admin@192.168.40.13:/tmp/
 
 # Run the script and restart Glance
-ssh hermes-admin@192.168.40.10 "sudo python3 /tmp/temp-media-fix.py && cd /opt/glance && sudo docker compose restart"
+ssh hermes-admin@192.168.40.12:/opt/glance && sudo docker compose restart"
 ```
 
 ### 4. Verify Dashboard
@@ -559,10 +559,10 @@ Open https://glance.hrmsmrflrii.xyz and navigate to the **Media** tab. You shoul
 
 ```bash
 # Check container status
-ssh hermes-admin@192.168.40.10 "docker ps | grep media-stats"
+ssh hermes-admin@192.168.40.13 "docker ps | grep media-stats"
 
 # Check logs
-ssh hermes-admin@192.168.40.10 "docker logs media-stats-api"
+ssh hermes-admin@192.168.40.13 "docker logs media-stats-api"
 ```
 
 ### Stats Showing Zero
@@ -685,8 +685,8 @@ The Home page is managed via `temp-home-fix.py` in the repository root:
 
 ```bash
 # Deploy Home page configuration
-scp temp-home-fix.py hermes-admin@192.168.40.10:/tmp/
-ssh hermes-admin@192.168.40.10 "sudo python3 /tmp/temp-home-fix.py && cd /opt/glance && sudo docker compose restart"
+scp ... hermes-admin@192.168.40.13:/tmp/
+ssh hermes-admin@192.168.40.12:/opt/glance && sudo docker compose restart"
 ```
 
 ## Glance Dashboard Tab Structure
@@ -864,9 +864,9 @@ Two jobs scrape the docker-stats-exporters:
 # In prometheus.yml
 - job_name: 'docker-stats-utilities'
   static_configs:
-    - targets: ['192.168.40.10:9417']
+    - targets: ['192.168.40.13:9417']
       labels:
-        vm: 'docker-vm-utilities01'
+        vm: 'docker-vm-core-utilities01'
 
 - job_name: 'docker-stats-media'
   static_configs:
@@ -896,14 +896,14 @@ The Compute tab embeds the Grafana dashboard via iframe:
 ssh hermes-admin@192.168.20.30 "cd ~/ansible && ansible-playbook monitoring/deploy-docker-exporter.yml"
 
 # 2. Copy dashboard JSON to Grafana host
-scp temp-container-monitoring.json hermes-admin@192.168.40.10:/opt/monitoring/grafana/dashboards/container-monitoring.json
+scp ... hermes-admin@192.168.40.13:/opt/monitoring/grafana/dashboards/container-monitoring.json
 
 # 3. Restart Grafana to load new dashboard
-ssh hermes-admin@192.168.40.10 "cd /opt/monitoring && docker compose restart grafana"
+ssh hermes-admin@192.168.40.13 "cd /opt/monitoring && docker compose restart grafana"
 
 # 4. Update Glance config and restart
-scp temp-glance-update.py hermes-admin@192.168.40.10:/tmp/
-ssh hermes-admin@192.168.40.10 "sudo python3 /tmp/temp-glance-update.py && cd /opt/glance && sudo docker compose restart"
+scp ... hermes-admin@192.168.40.13:/tmp/
+ssh hermes-admin@192.168.40.12:/opt/glance && sudo docker compose restart"
 ```
 
 **File Locations Summary**:
@@ -1038,13 +1038,13 @@ transformations:
 
 **Network Device Status Widget** (Sidebar):
 - Type: `custom-api`
-- URL: `http://192.168.40.10:9090/api/v1/query?query=omada_device_cpu_percentage`
+- URL: `http://192.168.40.13:9090/api/v1/query?query=omada_device_cpu_percentage`
 - Shows all Omada devices with status indicator and CPU %
 - Replaced broken HTTP monitors (management VLANs unreachable from VLAN 40)
 
 **Speedtest Widget** (Sidebar):
 - Type: `custom-api`
-- URL: `http://192.168.40.10:3000/api/speedtest/latest`
+- URL: `http://192.168.40.13:3000/api/speedtest/latest`
 - Shows Download/Upload speeds, Ping, Jitter
 
 ### Web Tab
@@ -1115,9 +1115,9 @@ Dynamic Reddit feed aggregator with thumbnails and native Reddit widgets.
 └───────────────────────────────────────────────────────┴──────────────────┘
 ```
 
-**Reddit Manager API**: http://192.168.40.10:5053
-- **Manage Subreddits**: http://192.168.40.10:5053 (Web UI)
-- **API Endpoint**: http://192.168.40.10:5053/api/feed
+**Reddit Manager API**: http://192.168.40.12:5053
+- **Manage Subreddits**: http://192.168.40.12:5053 (Web UI)
+- **API Endpoint**: http://192.168.40.12:5053/api/feed
 
 **Configured Subreddits** (16 total):
 | Category | Subreddits |
@@ -1144,7 +1144,7 @@ Dynamic Reddit feed aggregator with thumbnails and native Reddit widgets.
 
 The Sports tab displays NBA data and Yahoo Fantasy league information using the NBA Stats API.
 
-**API Location**: docker-vm-utilities01:5060 (`/opt/nba-stats-api/`)
+**API Location**: docker-vm-core-utilities01:5060 (`/opt/nba-stats-api/`)
 
 **Layout (3 columns, 7 widgets)**:
 ```

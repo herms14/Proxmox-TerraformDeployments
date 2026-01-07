@@ -29,7 +29,7 @@ service:
   description: "What it does"
 
 deployment:
-  target_host: "docker-vm-utilities01"
+  target_host: "docker-vm-core-utilities01"
   port: 8080
   container_port: 8080
   image: "myorg/myservice:latest"
@@ -125,7 +125,7 @@ authentik:
 
 | Host | IP | Use For |
 |------|-----|---------|
-| docker-vm-utilities01 | 192.168.40.10 | Utility services |
+| docker-vm-core-utilities01 | 192.168.40.13 | Utility services |
 | docker-vm-media01 | 192.168.40.11 | Media services |
 
 ## CI/CD Variables
@@ -172,7 +172,7 @@ service:
   description: "Simple test service"
 
 deployment:
-  target_host: "docker-vm-utilities01"
+  target_host: "docker-vm-core-utilities01"
   port: 8888
   container_port: 80
   image: "traefik/whoami:latest"
@@ -199,7 +199,7 @@ sudo gitlab-runner status
 Check Ansible connectivity:
 ```bash
 ssh hermes-admin@192.168.40.24
-sudo -u gitlab-runner ansible docker-vm-utilities01 -m ping
+sudo -u gitlab-runner ansible docker-vm-core-utilities01 -m ping
 ```
 
 ### Traefik Not Routing

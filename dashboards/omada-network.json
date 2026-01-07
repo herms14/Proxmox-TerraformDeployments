@@ -118,12 +118,12 @@
       {
         "type": "piechart",
         "title": "WiFi Mode Distribution",
-        "gridPos": {"h": 4, "w": 6, "x": 18, "y": 1},
+        "gridPos": {"h": 8, "w": 8, "x": 16, "y": 1},
         "id": 7,
         "transparent": true,
         "datasource": {"type": "prometheus", "uid": "PBFA97CFB590B2093"},
         "fieldConfig": {"defaults": {"color": {"mode": "palette-classic"}}},
-        "options": {"pieType": "donut", "legend": {"displayMode": "table", "placement": "right", "showLegend": true, "values": ["value", "percent"]}, "reduceOptions": {"calcs": ["lastNotNull"]}},
+        "options": {"pieType": "donut", "legend": {"displayMode": "table", "placement": "right", "showLegend": true, "values": ["value", "percent"]}, "reduceOptions": {"calcs": ["lastNotNull"]}, "displayLabels": ["percent"]},
         "targets": [{"expr": "omada_client_connected_total{connection_mode=\"wireless\"}", "legendFormat": "{{wifi_mode}}", "refId": "A"}]
       },
       {
@@ -601,7 +601,7 @@
       {
         "type": "bargauge",
         "title": "Client TX Rate",
-        "gridPos": {"h": 6, "w": 12, "x": 0, "y": 77},
+        "gridPos": {"h": 8, "w": 12, "x": 0, "y": 77},
         "id": 54,
         "transparent": true,
         "datasource": {"type": "prometheus", "uid": "PBFA97CFB590B2093"},
@@ -611,13 +611,17 @@
             "unit": "bps"
           }
         },
-        "options": {"displayMode": "gradient", "orientation": "horizontal", "reduceOptions": {"calcs": ["lastNotNull"]}, "showUnfilled": true, "minVizHeight": 8},
-        "targets": [{"expr": "topk(10, omada_client_tx_rate * 1000000)", "legendFormat": "{{client}}", "refId": "A"}]
+        "options": {"displayMode": "gradient", "orientation": "horizontal", "reduceOptions": {"calcs": ["lastNotNull"]}, "showUnfilled": true, "minVizHeight": 10},
+        "targets": [{"expr": "topk(10, omada_client_tx_rate * 1000000)", "legendFormat": "{{client}}", "refId": "A"}],
+        "transformations": [
+          {"id": "reduce", "options": {"reducers": ["lastNotNull"]}},
+          {"id": "sortBy", "options": {"sort": [{"field": "Last *", "desc": true}]}}
+        ]
       },
       {
         "type": "bargauge",
         "title": "Client RX Rate",
-        "gridPos": {"h": 6, "w": 12, "x": 12, "y": 77},
+        "gridPos": {"h": 8, "w": 12, "x": 12, "y": 77},
         "id": 55,
         "transparent": true,
         "datasource": {"type": "prometheus", "uid": "PBFA97CFB590B2093"},
@@ -627,8 +631,12 @@
             "unit": "bps"
           }
         },
-        "options": {"displayMode": "gradient", "orientation": "horizontal", "reduceOptions": {"calcs": ["lastNotNull"]}, "showUnfilled": true, "minVizHeight": 8},
-        "targets": [{"expr": "topk(10, omada_client_rx_rate * 1000000)", "legendFormat": "{{client}}", "refId": "A"}]
+        "options": {"displayMode": "gradient", "orientation": "horizontal", "reduceOptions": {"calcs": ["lastNotNull"]}, "showUnfilled": true, "minVizHeight": 10},
+        "targets": [{"expr": "topk(10, omada_client_rx_rate * 1000000)", "legendFormat": "{{client}}", "refId": "A"}],
+        "transformations": [
+          {"id": "reduce", "options": {"reducers": ["lastNotNull"]}},
+          {"id": "sortBy", "options": {"sort": [{"field": "Last *", "desc": true}]}}
+        ]
       },
       {
         "type": "row",

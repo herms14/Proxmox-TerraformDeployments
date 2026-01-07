@@ -522,7 +522,7 @@ terraform apply recovery.tfplan
 terraform output vm_summary
 
 # Verify connectivity
-for ip in 192.168.20.30 192.168.20.32 192.168.20.33 192.168.20.34 192.168.20.40 192.168.20.41 192.168.20.42 192.168.20.43 192.168.20.44 192.168.20.45 192.168.40.5 192.168.40.10 192.168.40.11 192.168.40.20 192.168.40.21 192.168.40.22 192.168.40.23; do
+for ip in 192.168.20.30 192.168.20.32 192.168.20.33 192.168.20.34 192.168.20.40 192.168.20.41 192.168.20.42 192.168.20.43 192.168.20.44 192.168.20.45 192.168.40.5 192.168.40.13 192.168.40.11 192.168.40.20 192.168.40.21 192.168.40.22 192.168.40.23; do
   echo -n "$ip: "
   timeout 3 ssh -o StrictHostKeyChecking=no hermes-admin@$ip "hostname" 2>/dev/null || echo "UNREACHABLE"
 done
@@ -576,7 +576,7 @@ k8s_controllers
 k8s_workers
 
 [docker_utilities]
-docker-vm-utilities01 ansible_host=192.168.40.10
+docker-vm-core-utilities01 ansible_host=192.168.40.13
 
 [docker_media]
 docker-vm-media01 ansible_host=192.168.40.11
@@ -623,7 +623,7 @@ pipelining = True
 ssh-keygen -t ed25519 -C "ansible@homelab" -f ~/.ssh/id_ed25519 -N ""
 
 # Copy to all hosts
-for ip in 192.168.20.32 192.168.20.33 192.168.20.34 192.168.20.40 192.168.20.41 192.168.20.42 192.168.20.43 192.168.20.44 192.168.20.45 192.168.40.5 192.168.40.10 192.168.40.11 192.168.40.20 192.168.40.21 192.168.40.22 192.168.40.23; do
+for ip in 192.168.20.32 192.168.20.33 192.168.20.34 192.168.20.40 192.168.20.41 192.168.20.42 192.168.20.43 192.168.20.44 192.168.20.45 192.168.40.5 192.168.40.13 192.168.40.11 192.168.40.20 192.168.40.21 192.168.40.22 192.168.40.23; do
   ssh-copy-id -o StrictHostKeyChecking=no hermes-admin@$ip
 done
 ```
@@ -744,7 +744,7 @@ Services will be available at:
 ansible-playbook n8n/deploy-n8n.yml
 ```
 
-Access: http://192.168.40.10:5678
+Access: http://192.168.40.13:5678
 
 ---
 
@@ -827,7 +827,7 @@ ssh hermes-admin@192.168.20.32 "kubectl get nodes --no-headers | grep -c Ready" 
 
 echo ""
 echo "=== Docker Services ==="
-for svc in "192.168.40.20:8080 Traefik" "192.168.40.21:9000 Authentik" "192.168.40.22:2283 Immich" "192.168.40.23:80 GitLab" "192.168.40.11:8096 Jellyfin" "192.168.40.10:5678 n8n"; do
+for svc in "192.168.40.20:8080 Traefik" "192.168.40.21:9000 Authentik" "192.168.40.22:2283 Immich" "192.168.40.23:80 GitLab" "192.168.40.11:8096 Jellyfin" "192.168.40.13:5678 n8n"; do
   ip=$(echo $svc | cut -d' ' -f1)
   name=$(echo $svc | cut -d' ' -f2)
   curl -s -o /dev/null -w "%{http_code}" http://$ip | grep -qE "200|302|301" && echo "$name: OK" || echo "$name: FAIL"
@@ -897,7 +897,7 @@ vzdump 100 --storage VMDisks --mode snapshot
 curl -k -u "key:secret" https://192.168.91.30/api/core/backup/download/this
 
 # Service config backup
-rsync -avz hermes-admin@192.168.40.10:/opt/ /backup/docker-utilities/
+rsync -avz hermes-admin@192.168.40.13:/opt/ /backup/docker-utilities/
 rsync -avz hermes-admin@192.168.40.11:/opt/ /backup/docker-media/
 rsync -avz hermes-admin@192.168.40.20:/opt/ /backup/traefik/
 ```

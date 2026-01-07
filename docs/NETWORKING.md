@@ -180,7 +180,7 @@ ip -d link show vmbr0 | grep vlan_filtering
 | Range | Purpose | Hosts |
 |-------|---------|-------|
 | 5 | Logging | linux-syslog-server01 |
-| 10-11 | Docker hosts | docker-vm-utilities01, docker-vm-media01 |
+| 10-11 | Docker hosts | docker-vm-core-utilities01, docker-vm-media01 |
 | 12-19 | Reserved | Additional Docker hosts |
 | 20-29 | Application services | traefik, authentik, immich, gitlab |
 | 30-39 | Reserved | Monitoring & additional services |
@@ -276,34 +276,34 @@ All `*.hrmsmrflrii.xyz` subdomains resolve to `192.168.40.20` (Traefik) via Pi-h
 | Deluge | https://deluge.hrmsmrflrii.xyz | 192.168.40.11:8112 |
 | SABnzbd | https://sabnzbd.hrmsmrflrii.xyz | 192.168.40.11:8081 |
 
-### Utility Services (docker-vm-utilities01)
+### Utility Services (docker-vm-core-utilities01)
 
 | Service | URL | Backend |
 |---------|-----|---------|
-| Paperless-ngx | https://paperless.hrmsmrflrii.xyz | 192.168.40.10:8000 |
-| Glance Dashboard | https://glance.hrmsmrflrii.xyz | 192.168.40.10:8080 |
-| n8n Automation | https://n8n.hrmsmrflrii.xyz | 192.168.40.10:5678 |
+| Paperless-ngx | https://paperless.hrmsmrflrii.xyz | 192.168.40.13:8000 |
+| Glance Dashboard | https://glance.hrmsmrflrii.xyz | 192.168.40.12:8080 |
+| n8n Automation | https://n8n.hrmsmrflrii.xyz | 192.168.40.13:5678 |
 
-### Monitoring & Observability (docker-vm-utilities01)
+### Monitoring & Observability (docker-vm-core-utilities01)
 
 | Service | URL | Backend | Purpose |
 |---------|-----|---------|---------|
-| Uptime Kuma | https://uptime.hrmsmrflrii.xyz | 192.168.40.10:3001 | Service uptime monitoring |
-| Prometheus | https://prometheus.hrmsmrflrii.xyz | 192.168.40.10:9090 | Metrics collection |
-| Grafana | https://grafana.hrmsmrflrii.xyz | 192.168.40.10:3030 | Dashboards |
-| Jaeger | https://jaeger.hrmsmrflrii.xyz | 192.168.40.10:16686 | Distributed tracing |
-| Demo App | https://demo.hrmsmrflrii.xyz | 192.168.40.10:8080 | OTEL demo application |
+| Uptime Kuma | https://uptime.hrmsmrflrii.xyz | 192.168.40.13:3001 | Service uptime monitoring |
+| Prometheus | https://prometheus.hrmsmrflrii.xyz | 192.168.40.13:9090 | Metrics collection |
+| Grafana | https://grafana.hrmsmrflrii.xyz | 192.168.40.13:3030 | Dashboards |
+| Jaeger | https://jaeger.hrmsmrflrii.xyz | 192.168.40.13:16686 | Distributed tracing |
+| Demo App | https://demo.hrmsmrflrii.xyz | 192.168.40.12:8080 | OTEL demo application |
 
 ### Internal Observability Endpoints (not externally exposed)
 
 | Service | Endpoint | Purpose |
 |---------|----------|---------|
 | Traefik Metrics | 192.168.40.20:8082/metrics | Prometheus scrape target |
-| OTEL Collector (gRPC) | 192.168.40.10:4317 | OTLP trace receiver |
-| OTEL Collector (HTTP) | 192.168.40.10:4318 | OTLP trace receiver |
-| OTEL Collector Metrics | 192.168.40.10:8888/metrics | Collector internal metrics |
-| OTEL Pipeline Metrics | 192.168.40.10:8889/metrics | Pipeline exporter metrics |
-| Jaeger Metrics | 192.168.40.10:14269/metrics | Jaeger internal metrics |
+| OTEL Collector (gRPC) | 192.168.40.13:4317 | OTLP trace receiver |
+| OTEL Collector (HTTP) | 192.168.40.13:4318 | OTLP trace receiver |
+| OTEL Collector Metrics | 192.168.40.13:8888/metrics | Collector internal metrics |
+| OTEL Pipeline Metrics | 192.168.40.13:8889/metrics | Pipeline exporter metrics |
+| Jaeger Metrics | 192.168.40.13:14269/metrics | Jaeger internal metrics |
 
 ## Remote Access (Tailscale)
 
@@ -411,7 +411,7 @@ tailscale status
 
 # SSH via local IPs (through subnet router)
 ssh hermes-admin@192.168.20.30    # Ansible controller
-ssh hermes-admin@192.168.40.10    # Docker utilities
+ssh hermes-admin@192.168.40.13    # Docker utilities
 
 # SSH via Tailscale IPs (direct)
 ssh root@100.89.33.5              # node01
@@ -426,10 +426,10 @@ curl https://glance.hrmsmrflrii.xyz
 
 | Access Type | Method | Example |
 |-------------|--------|---------|
-| SSH to any VM/container | Local IP via subnet router | `ssh 192.168.40.10` |
+| SSH to any VM/container | Local IP via subnet router | `ssh 192.168.40.13` |
 | Web services | Domain name via split DNS | `https://grafana.hrmsmrflrii.xyz` |
 | Proxmox Web UI | Tailscale IP or local IP | `https://192.168.20.20:8006` |
-| Direct container access | Local IP + port | `http://192.168.40.10:3030` |
+| Direct container access | Local IP + port | `http://192.168.40.13:3030` |
 
 ### Troubleshooting
 

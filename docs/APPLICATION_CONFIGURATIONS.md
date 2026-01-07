@@ -698,7 +698,7 @@ See [IMMICH_AUTHENTIK_SSO_TUTORIAL.md](./IMMICH_AUTHENTIK_SSO_TUTORIAL.md) for d
 
 ## Life Progress Widget (Glance)
 
-**Host**: docker-vm-utilities01 (192.168.40.10)
+**Host**: docker-vm-core-utilities01 (192.168.40.13)
 **API Port**: 5051
 **Configured**: December 22, 2025
 
@@ -721,7 +721,7 @@ The widget consists of two components:
 
 | Component | Purpose | Location |
 |-----------|---------|----------|
-| Flask API | Calculates progress percentages and serves quotes | docker-vm-utilities01:5051 |
+| Flask API | Calculates progress percentages and serves quotes | docker-vm-core-utilities01:5051 |
 | Glance Widget | Renders HTML progress bars using API data | Glance dashboard |
 
 **Data Flow**:
@@ -735,7 +735,7 @@ The widget consists of two components:
 #### Step 1: Create Service Directory
 
 ```bash
-ssh hermes-admin@192.168.40.10 "sudo mkdir -p /opt/life-progress"
+ssh hermes-admin@192.168.40.13:/opt/life-progress"
 ```
 
 #### Step 2: Create Flask Application
@@ -878,14 +878,14 @@ services:
 #### Step 5: Deploy the Service
 
 ```bash
-ssh hermes-admin@192.168.40.10 "cd /opt/life-progress && sudo docker compose up -d --build"
+ssh hermes-admin@192.168.40.13:/opt/life-progress && sudo docker compose up -d --build"
 ```
 
 #### Step 6: Verify API
 
 ```bash
 # Test the API endpoint
-curl http://192.168.40.10:5051/progress
+curl http://192.168.40.13:5051/progress
 ```
 
 **Expected Response**:
@@ -905,7 +905,7 @@ curl http://192.168.40.10:5051/progress
 
 ### Glance Widget Configuration
 
-The widget is configured in `/opt/glance/config/glance.yml` on docker-vm-utilities01.
+The widget is configured in `/opt/glance/config/glance.yml` on docker-vm-core-utilities01.
 
 **Widget Configuration**:
 
@@ -913,7 +913,7 @@ The widget is configured in `/opt/glance/config/glance.yml` on docker-vm-utiliti
 - type: custom-api
   title: Life Progress
   cache: 1h
-  url: http://192.168.40.10:5051/progress
+  url: http://192.168.40.13:5051/progress
   template: |
     <div style="font-family: sans-serif; padding: 10px;">
       <div style="display: flex; align-items: center; margin-bottom: 12px;">
@@ -972,7 +972,7 @@ BIRTH_DATE = date(1989, 2, 14)  # Change to your birth date (YYYY, MM, DD)
 Then rebuild the container:
 
 ```bash
-ssh hermes-admin@192.168.40.10 "cd /opt/life-progress && sudo docker compose up -d --build"
+ssh hermes-admin@192.168.40.13:/opt/life-progress && sudo docker compose up -d --build"
 ```
 
 #### Changing Target Age
@@ -1025,32 +1025,32 @@ Edit the `cache` value in the widget configuration:
 #### Rebuild Container After Changes
 
 ```bash
-ssh hermes-admin@192.168.40.10 "cd /opt/life-progress && sudo docker compose up -d --build"
+ssh hermes-admin@192.168.40.13:/opt/life-progress && sudo docker compose up -d --build"
 ```
 
 #### View Logs
 
 ```bash
-ssh hermes-admin@192.168.40.10 "sudo docker logs life-progress"
+ssh hermes-admin@192.168.40.13:/opt/life-progress"
 ```
 
 #### Restart Service
 
 ```bash
-ssh hermes-admin@192.168.40.10 "sudo docker restart life-progress"
+ssh hermes-admin@192.168.40.13:/opt/life-progress"
 ```
 
 #### Test API
 
 ```bash
-curl http://192.168.40.10:5051/progress | jq
+curl http://192.168.40.13:5051/progress | jq
 ```
 
 ---
 
 ## Glance Dashboard Theming
 
-**Host**: docker-vm-utilities01 (192.168.40.10)
+**Host**: docker-vm-core-utilities01 (192.168.40.13)
 **Configured**: December 22, 2025
 
 ### Theme Overview
@@ -1157,7 +1157,7 @@ ocean:
 After editing, restart Glance:
 
 ```bash
-ssh hermes-admin@192.168.40.10 "cd /opt/glance && sudo docker compose restart"
+ssh hermes-admin@192.168.40.12 "cd /opt/glance && sudo docker compose restart"
 ```
 
 ### Theme Design Reference
@@ -1390,7 +1390,7 @@ Normally, when you want to watch movies on Jellyfin, you need to create a separa
 |-----------|---------|----------|
 | Jellyfin SSO-Auth Plugin | Adds OIDC login capability to Jellyfin | Installed in Jellyfin |
 | Authentik OAuth2 Provider | Issues authentication tokens | auth.hrmsmrflrii.xyz |
-| Traefik Route | Bypasses ForwardAuth for SSO callbacks | docker-vm-utilities01 |
+| Traefik Route | Bypasses ForwardAuth for SSO callbacks | docker-vm-core-utilities01 |
 
 #### Step-by-Step Configuration
 
@@ -1547,7 +1547,7 @@ The SSO callback URL (`/sso/OID/redirect/authentik`) needs to bypass Authentik F
 **Edit Traefik Configuration**:
 
 ```bash
-ssh hermes-admin@192.168.40.10 "sudo nano /opt/traefik/config/dynamic/services.yml"
+ssh hermes-admin@192.168.40.13 "sudo nano /opt/traefik/config/dynamic/services.yml"
 ```
 
 **Add this route** (before the main jellyfin route, with higher priority):
@@ -1572,7 +1572,7 @@ jellyfin-sso:
 **Reload Traefik**:
 
 ```bash
-ssh hermes-admin@192.168.40.10 "cd /opt/traefik && sudo docker compose restart"
+ssh hermes-admin@192.168.40.13 "cd /opt/traefik && sudo docker compose restart"
 ```
 
 ##### Step 7: Configure DNS Resolution in Jellyfin Container
@@ -2200,7 +2200,7 @@ curl -s -H "Authorization: Bearer TOKEN" \
 
 ## Project Bot - Discord-GitLab Kanban Integration
 
-**Host**: docker-vm-utilities01 (192.168.40.10)
+**Host**: docker-vm-core-utilities01 (192.168.40.13)
 **Port**: 5055 (webhook)
 **Channel**: #project-management
 
@@ -2340,14 +2340,14 @@ ansible-playbook ansible-playbooks/project-bot/deploy-project-bot.yml
 Or deploy from local machine:
 ```bash
 ansible-playbook -i inventory ansible-playbooks/project-bot/deploy-project-bot.yml \
-  --limit docker-vm-utilities01
+  --limit docker-vm-core-utilities01
 ```
 
 ### Step 6: Configure GitLab Webhook
 
 1. Go to GitLab Project → Settings → Webhooks
 2. Add webhook:
-   - **URL**: `http://192.168.40.10:5055/webhook`
+   - **URL**: `http://192.168.40.12:5055/webhook`
    - **Secret token**: Same as `PROJECT_BOT_WEBHOOK_SECRET`
    - **Trigger**: Issues events (check "Issues events")
    - **SSL verification**: Disabled (internal network)
@@ -2362,7 +2362,7 @@ ansible-playbook -i inventory ansible-playbooks/project-bot/deploy-project-bot.y
 
 2. **Check health endpoint**:
    ```bash
-   curl http://192.168.40.10:5055/health
+   curl http://192.168.40.12:5055/health
    # Expected: {"status":"healthy","service":"project-bot","gitlab_connected":true}
    ```
 
@@ -2407,7 +2407,7 @@ ansible-playbook -i inventory ansible-playbooks/project-bot/deploy-project-bot.y
 **Diagnosis**:
 ```bash
 # Check container logs
-ssh hermes-admin@192.168.40.10 "docker logs project-bot --tail 50"
+ssh hermes-admin@192.168.40.13 "docker logs project-bot --tail 50"
 
 # Check if commands synced
 # Look for "Synced X slash commands" in logs
@@ -2425,7 +2425,7 @@ ssh hermes-admin@192.168.40.10 "docker logs project-bot --tail 50"
 **Diagnosis**:
 ```bash
 # Check health endpoint
-curl http://192.168.40.10:5055/health
+curl http://192.168.40.12:5055/health
 # Look for "gitlab_connected": false
 ```
 
@@ -2444,11 +2444,11 @@ curl http://192.168.40.10:5055/health
 # Project → Settings → Webhooks → Recent Deliveries
 
 # Check bot logs for webhook requests
-ssh hermes-admin@192.168.40.10 "docker logs project-bot | grep webhook"
+ssh hermes-admin@192.168.40.13 "docker logs project-bot | grep webhook"
 ```
 
 **Fix**:
-1. Verify webhook URL is correct: `http://192.168.40.10:5055/webhook`
+1. Verify webhook URL is correct: `http://192.168.40.12:5055/webhook`
 2. Check secret token matches
 3. Ensure "Issues events" trigger is enabled
 

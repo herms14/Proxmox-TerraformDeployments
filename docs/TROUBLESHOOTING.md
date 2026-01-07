@@ -876,10 +876,10 @@ tls: first record does not look like a TLS handshake
 **Fix**: Update `WATCHTOWER_NOTIFICATION_URL` in docker-compose.yml:
 ```yaml
 # Wrong
-WATCHTOWER_NOTIFICATION_URL: "generic://192.168.40.10:5050/webhook"
+WATCHTOWER_NOTIFICATION_URL: "generic://192.168.40.13:5050/webhook"
 
 # Correct
-WATCHTOWER_NOTIFICATION_URL: "generic+http://192.168.40.10:5050/webhook"
+WATCHTOWER_NOTIFICATION_URL: "generic+http://192.168.40.13:5050/webhook"
 ```
 
 Then restart: `cd /opt/watchtower && sudo docker compose restart`
@@ -897,16 +897,16 @@ Then restart: `cd /opt/watchtower && sudo docker compose restart`
 **Fix**:
 ```bash
 # Copy SSH key to host
-scp ~/.ssh/homelab_ed25519 hermes-admin@192.168.40.10:/home/hermes-admin/.ssh/
-ssh hermes-admin@192.168.40.10 "chmod 600 /home/hermes-admin/.ssh/homelab_ed25519"
+scp ... hermes-admin@192.168.40.13:/home/hermes-admin/.ssh/
+ssh hermes-admin@192.168.40.13 "chmod 600 /home/hermes-admin/.ssh/homelab_ed25519"
 
 # Restart container
-ssh hermes-admin@192.168.40.10 "cd /opt/update-manager && sudo docker compose restart"
+ssh hermes-admin@192.168.40.13 "cd /opt/update-manager && sudo docker compose restart"
 ```
 
 **Verification**:
 ```bash
-ssh hermes-admin@192.168.40.10 "docker exec update-manager ssh -i /root/.ssh/homelab_ed25519 -o StrictHostKeyChecking=no hermes-admin@192.168.40.11 hostname"
+ssh hermes-admin@192.168.40.13 "docker exec update-manager ssh -i /root/.ssh/homelab_ed25519 -o StrictHostKeyChecking=no hermes-admin@192.168.40.11 hostname"
 ```
 
 ---
@@ -948,7 +948,7 @@ with ThreadPoolExecutor(max_workers=6) as executor:
 
 **Verification**:
 ```bash
-time curl -s "http://192.168.40.10:5053/api/feed" | head -c 100
+time curl -s "http://192.168.40.12:5053/api/feed" | head -c 100
 # Should complete in ~2 seconds
 ```
 
@@ -1181,14 +1181,14 @@ docker exec gitlab gitlab-ctl status
 
 **Diagnosis**:
 ```bash
-ssh hermes-admin@192.168.40.10 "docker logs glance 2>&1 | head -10"
+ssh hermes-admin@192.168.40.13 "docker logs glance 2>&1 | head -10"
 # Look for: "The default location of glance.yml in the Docker image has changed"
 ```
 
 **Fix**:
 ```bash
 # Update docker-compose.yml to use directory mount format
-ssh hermes-admin@192.168.40.10 "cat > /opt/glance/docker-compose.yml << 'EOF'
+ssh hermes-admin@192.168.40.12:/opt/glance/docker-compose.yml << 'EOF'
 services:
   glance:
     image: glanceapp/glance:latest
@@ -1206,7 +1206,7 @@ services:
 EOF"
 
 # Restart the container
-ssh hermes-admin@192.168.40.10 "cd /opt/glance && sudo docker compose down && sudo docker compose up -d"
+ssh hermes-admin@192.168.40.12 "cd /opt/glance && sudo docker compose down && sudo docker compose up -d"
 ```
 
 **Key Changes**:
@@ -1217,7 +1217,7 @@ ssh hermes-admin@192.168.40.10 "cd /opt/glance && sudo docker compose down && su
 **Verification**:
 ```bash
 # Check logs for successful startup
-ssh hermes-admin@192.168.40.10 "docker logs glance 2>&1"
+ssh hermes-admin@192.168.40.13 "docker logs glance 2>&1"
 # Should show: "Starting server on :8080"
 
 # Test dashboard access
@@ -1263,7 +1263,7 @@ ssh hermes-admin@192.168.40.20 "cd /opt/traefik && sudo docker compose restart"
 
 2. Update Glance config to use ping endpoint:
 ```bash
-ssh hermes-admin@192.168.40.10 "sudo sed -i 's|url: http://192.168.40.20:8080/api/overview|url: http://192.168.40.20:8082/ping|' /opt/glance/config/glance.yml"
+ssh hermes-admin@192.168.40.12:/opt/glance/config/glance.yml"
 ```
 
 **Verification**:
@@ -1282,12 +1282,12 @@ curl -s http://192.168.40.20:8082/ping
 
 **Root Cause**: Multiple issues:
 1. GitLab's health endpoints (`/-/health`, `/-/readiness`) are restricted by `monitoring_whitelist` (default: localhost only)
-2. DNS resolution fails on docker-vm-utilities01 for `gitlab.hrmsmrflrii.xyz`
+2. DNS resolution fails on docker-vm-core-utilities01 for `gitlab.hrmsmrflrii.xyz`
 
 **Fix**:
 1. Use direct HTTP URL that returns 200:
 ```bash
-ssh hermes-admin@192.168.40.10 "sudo sed -i 's|url: http://192.168.40.23/-/health|url: http://192.168.40.23/users/sign_in|' /opt/glance/config/glance.yml"
+ssh hermes-admin@192.168.40.12:/opt/glance/config/glance.yml"
 ```
 
 Note: Using `/users/sign_in` returns 200 without requiring health endpoint access.
@@ -1301,7 +1301,7 @@ ssh hermes-admin@192.168.40.23 "sudo docker exec gitlab gitlab-ctl reconfigure"
 
 **Verification**:
 ```bash
-ssh hermes-admin@192.168.40.10 "curl -s -o /dev/null -w '%{http_code}' http://192.168.40.23/users/sign_in"
+ssh hermes-admin@192.168.40.13 "curl -s -o /dev/null -w '%{http_code}' http://192.168.40.23/users/sign_in"
 # Should return: 200
 ```
 
@@ -1441,22 +1441,22 @@ volumes:
 **Fix**: Replace `si:` icons with Dashboard Icons URLs (more reliable):
 ```bash
 # Fix Lidarr icon
-ssh hermes-admin@192.168.40.10 'sudo sed -i "s|icon: si:lidarr|icon: https://cdn.jsdelivr.net/gh/walkxcode/dashboard-icons/png/lidarr.png|g" /opt/glance/config/glance.yml'
+ssh hermes-admin@192.168.40.12:/opt/glance/config/glance.yml'
 
 # Fix Prowlarr icon
-ssh hermes-admin@192.168.40.10 'sudo sed -i "s|icon: si:prowlarr|icon: https://cdn.jsdelivr.net/gh/walkxcode/dashboard-icons/png/prowlarr.png|g" /opt/glance/config/glance.yml'
+ssh hermes-admin@192.168.40.12:/opt/glance/config/glance.yml'
 
 # Fix Bazarr icon
-ssh hermes-admin@192.168.40.10 'sudo sed -i "s|icon: si:bazarr|icon: https://cdn.jsdelivr.net/gh/walkxcode/dashboard-icons/png/bazarr.png|g" /opt/glance/config/glance.yml'
+ssh hermes-admin@192.168.40.12:/opt/glance/config/glance.yml'
 
 # Fix Jellyseerr icon
-ssh hermes-admin@192.168.40.10 'sudo sed -i "s|icon: si:jellyseerr|icon: https://cdn.jsdelivr.net/gh/walkxcode/dashboard-icons/png/jellyseerr.png|g" /opt/glance/config/glance.yml'
+ssh hermes-admin@192.168.40.12:/opt/glance/config/glance.yml'
 
 # Fix Tdarr icon
-ssh hermes-admin@192.168.40.10 'sudo sed -i "s|icon: si:tdarr|icon: https://cdn.jsdelivr.net/gh/walkxcode/dashboard-icons/png/tdarr.png|g" /opt/glance/config/glance.yml'
+ssh hermes-admin@192.168.40.12:/opt/glance/config/glance.yml'
 
 # Restart Glance
-ssh hermes-admin@192.168.40.10 'cd /opt/glance && sudo docker compose restart'
+ssh hermes-admin@192.168.40.12:/opt/glance && sudo docker compose restart'
 ```
 
 **Icon Sources for Glance**:
@@ -1611,7 +1611,7 @@ ip route show
 ```bash
 docker logs <container> --tail 50
 docker exec <container> <command>
-ssh hermes-admin@192.168.40.10 "docker logs update-manager --tail 50"
+ssh hermes-admin@192.168.40.13 "docker logs update-manager --tail 50"
 ssh hermes-admin@192.168.40.11 "docker logs watchtower --tail 50"
 ```
 

@@ -182,7 +182,7 @@ vm_groups = {
 
   db = {
     count       = 2
-    starting_ip = "192.168.40.10"
+    starting_ip = "192.168.40.13"
     cores       = 4
     memory      = 16384
     disk_size   = "200G"

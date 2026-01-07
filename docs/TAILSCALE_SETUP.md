@@ -101,7 +101,7 @@ Host ansible
 
 # Docker Hosts
 Host docker-utilities
-    HostName 192.168.40.10
+    HostName 192.168.40.13
     User hermes-admin
     IdentityFile ~/.ssh/homelab_ed25519
 
@@ -180,7 +180,7 @@ tailscale status
 ping -c 3 192.168.20.30    # Ansible controller
 
 # Test Services VLAN (192.168.40.x)
-ping -c 3 192.168.40.10    # Docker utilities
+ping -c 3 192.168.40.13    # Docker utilities
 
 # Test Firewall VLAN (192.168.91.x)
 ping -c 3 192.168.91.30    # OPNsense DNS
@@ -236,7 +236,7 @@ brew install ansible
 | `node02` | 192.168.20.21 | root | Proxmox |
 | `node03` | 192.168.20.22 | root | Proxmox |
 | `ansible` | 192.168.20.30 | hermes-admin | Ansible Controller |
-| `docker-utilities` | 192.168.40.10 | hermes-admin | Glance, Grafana, Prometheus |
+| `docker-vm-core-utilities01` | 192.168.40.13 | hermes-admin | Glance, Grafana, Prometheus |
 | `docker-media` | 192.168.40.11 | hermes-admin | Jellyfin, *arr stack |
 | `traefik` | 192.168.40.20 | hermes-admin | Reverse Proxy |
 | `authentik` | 192.168.40.21 | hermes-admin | SSO/Auth |
@@ -344,7 +344,7 @@ ssh-keygen -R 192.168.20.30
 ssh-keygen -R 192.168.20.20
 ssh-keygen -R 192.168.20.21
 ssh-keygen -R 192.168.20.22
-ssh-keygen -R 192.168.40.10
+ssh-keygen -R 192.168.40.13
 ssh-keygen -R 192.168.40.11
 ```
 

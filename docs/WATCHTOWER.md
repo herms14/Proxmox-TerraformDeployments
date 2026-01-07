@@ -12,7 +12,7 @@ Watchtower monitors Docker containers for updates and sends interactive Discord 
 | Mode | Monitor-only (requires approval) |
 | Notifications | Discord bot with reaction-based approval |
 | Auto-cleanup | Old images removed after update |
-| Webhook Endpoint | http://192.168.40.10:5050/webhook |
+| Webhook Endpoint | http://192.168.40.13:5050/webhook |
 
 ## Architecture
 
@@ -23,7 +23,7 @@ Watchtower monitors Docker containers for updates and sends interactive Discord 
 │  ┌─────────────────────────────────────────────────────────────────────┐    │
 │  │                    Docker Hosts with Watchtower                      │    │
 │  │                                                                      │    │
-│  │   192.168.40.10     192.168.40.11     192.168.40.20                 │    │
+│  │   192.168.40.13     192.168.40.11     192.168.40.20                 │    │
 │  │   (utilities)       (media)           (traefik)                     │    │
 │  │        │                 │                 │                        │    │
 │  │   192.168.40.21     192.168.40.22     192.168.40.23                 │    │
@@ -33,7 +33,7 @@ Watchtower monitors Docker containers for updates and sends interactive Discord 
 │            │ Shoutrrr Webhook (generic+http://)                             │
 │            ▼                                                                 │
 │  ┌─────────────────────────────────────────────────────────────────────┐    │
-│  │              Update Manager (192.168.40.10:5050)                    │    │
+│  │              Update Manager (192.168.40.13:5050)                    │    │
 │  │                                                                      │    │
 │  │   ┌──────────────┐              ┌──────────────────┐                │    │
 │  │   │ Flask Server │◄─────────────│  Discord.py Bot  │                │    │
@@ -122,14 +122,14 @@ Type `update all` to update all, or wait for individual notifications.
 
 | Host | IP | Config Location | Purpose |
 |------|----|-----------------|---------|
-| docker-vm-utilities01 | 192.168.40.10 | `/opt/watchtower/docker-compose.yml` | Utilities, monitoring |
+| docker-vm-core-utilities01 | 192.168.40.13 | `/opt/watchtower/docker-compose.yml` | Utilities, monitoring |
 | docker-vm-media01 | 192.168.40.11 | `/opt/watchtower/docker-compose.yml` | Arr stack, Jellyfin |
 | traefik-vm01 | 192.168.40.20 | `/opt/watchtower/docker-compose.yml` | Reverse proxy |
 | authentik-vm01 | 192.168.40.21 | `/opt/watchtower/docker-compose.yml` | SSO/Identity |
 | immich-vm01 | 192.168.40.22 | `/opt/watchtower/docker-compose.yml` | Photo management |
 | gitlab-vm01 | 192.168.40.23 | `/opt/watchtower/docker-compose.yml` | DevOps platform |
 
-### Update Manager (192.168.40.10)
+### Update Manager (192.168.40.13)
 
 | Component | Location |
 |-----------|----------|
@@ -146,14 +146,14 @@ The Update Manager maintains a mapping of containers to their host IPs:
 
 ```python
 CONTAINER_HOSTS = {
-    # Utilities (192.168.40.10)
-    "uptime-kuma": "192.168.40.10",
-    "prometheus": "192.168.40.10",
-    "grafana": "192.168.40.10",
-    "glance": "192.168.40.10",
-    "n8n": "192.168.40.10",
-    "paperless-ngx": "192.168.40.10",
-    "openspeedtest": "192.168.40.10",
+    # Utilities (192.168.40.13)
+    "uptime-kuma": "192.168.40.13",
+    "prometheus": "192.168.40.13",
+    "grafana": "192.168.40.13",
+    "glance": "192.168.40.12",
+    "n8n": "192.168.40.13",
+    "paperless-ngx": "192.168.40.13",
+    "openspeedtest": "192.168.40.13",
 
     # Media (192.168.40.11)
     "jellyfin": "192.168.40.11",
@@ -198,7 +198,7 @@ services:
       WATCHTOWER_INCLUDE_STOPPED: "false"
       WATCHTOWER_MONITOR_ONLY: "true"
       WATCHTOWER_NOTIFICATIONS: "shoutrrr"
-      WATCHTOWER_NOTIFICATION_URL: "generic+http://192.168.40.10:5050/webhook"
+      WATCHTOWER_NOTIFICATION_URL: "generic+http://192.168.40.13:5050/webhook"
       TZ: "America/New_York"
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock:ro
@@ -307,7 +307,7 @@ DISCORD_CHANNEL_ID=your_channel_id_here
 
 ```bash
 # SSH to utilities host
-ssh hermes-admin@192.168.40.10
+ssh hermes-admin@192.168.40.13
 
 # Create .env file
 cat > /opt/update-manager/.env << 'EOF'
@@ -325,14 +325,14 @@ chmod 600 /opt/update-manager/.env
 
 ```bash
 # 1. Deploy Watchtower to all hosts
-for ip in 192.168.40.10 192.168.40.11 192.168.40.20 192.168.40.21 192.168.40.22 192.168.40.23; do
+for ip in 192.168.40.13 192.168.40.11 192.168.40.20 192.168.40.21 192.168.40.22 192.168.40.23; do
   ssh hermes-admin@$ip "sudo mkdir -p /opt/watchtower"
   scp watchtower-compose.yml hermes-admin@$ip:/opt/watchtower/docker-compose.yml
   ssh hermes-admin@$ip "cd /opt/watchtower && sudo docker compose up -d"
 done
 
 # 2. Deploy Update Manager
-ssh hermes-admin@192.168.40.10
+ssh hermes-admin@192.168.40.13
 cd /opt/update-manager
 sudo docker compose up -d --build
 ```
@@ -343,10 +343,10 @@ The Update Manager container needs SSH access to all Docker hosts:
 
 ```bash
 # Copy SSH key to utilities host (if not already present)
-scp ~/.ssh/homelab_ed25519 hermes-admin@192.168.40.10:/home/hermes-admin/.ssh/
+scp ... hermes-admin@192.168.40.13:/home/hermes-admin/.ssh/
 
 # Set correct permissions
-ssh hermes-admin@192.168.40.10 "chmod 600 /home/hermes-admin/.ssh/homelab_ed25519"
+ssh hermes-admin@192.168.40.13 "chmod 600 /home/hermes-admin/.ssh/homelab_ed25519"
 ```
 
 ## Commands
@@ -355,10 +355,10 @@ ssh hermes-admin@192.168.40.10 "chmod 600 /home/hermes-admin/.ssh/homelab_ed2551
 
 ```bash
 # Update Manager status
-ssh hermes-admin@192.168.40.10 "docker ps --filter name=update-manager --format '{{.Status}}'"
+ssh hermes-admin@192.168.40.13 "docker ps --filter name=update-manager --format '{{.Status}}'"
 
 # Watchtower on all hosts
-for ip in 192.168.40.10 192.168.40.11 192.168.40.20 192.168.40.21 192.168.40.22 192.168.40.23; do
+for ip in 192.168.40.13 192.168.40.11 192.168.40.20 192.168.40.21 192.168.40.22 192.168.40.23; do
   echo -n "$ip: "
   ssh hermes-admin@$ip "docker ps --filter name=watchtower --format '{{.Status}}'"
 done
@@ -371,7 +371,7 @@ done
 ssh hermes-admin@192.168.40.11 "docker exec watchtower /watchtower --run-once"
 
 # On all hosts
-for ip in 192.168.40.10 192.168.40.11 192.168.40.20 192.168.40.21 192.168.40.22 192.168.40.23; do
+for ip in 192.168.40.13 192.168.40.11 192.168.40.20 192.168.40.21 192.168.40.22 192.168.40.23; do
   echo "Checking $ip..."
   ssh hermes-admin@$ip "docker exec watchtower /watchtower --run-once" &
 done
@@ -382,28 +382,28 @@ wait
 
 ```bash
 # Update Manager logs
-ssh hermes-admin@192.168.40.10 "docker logs update-manager --tail 50"
+ssh hermes-admin@192.168.40.13 "docker logs update-manager --tail 50"
 
 # Watchtower logs (specific host)
 ssh hermes-admin@192.168.40.11 "docker logs watchtower --tail 50"
 
 # Check for logged-in status
-ssh hermes-admin@192.168.40.10 "docker logs update-manager 2>&1 | grep 'logged in'"
+ssh hermes-admin@192.168.40.13 "docker logs update-manager 2>&1 | grep 'logged in'"
 ```
 
 ### Restart Services
 
 ```bash
 # Update Manager
-ssh hermes-admin@192.168.40.10 "cd /opt/update-manager && sudo docker compose restart"
+ssh hermes-admin@192.168.40.13 "cd /opt/update-manager && sudo docker compose restart"
 
 # Watchtower (all hosts)
-for ip in 192.168.40.10 192.168.40.11 192.168.40.20 192.168.40.21 192.168.40.22 192.168.40.23; do
+for ip in 192.168.40.13 192.168.40.11 192.168.40.20 192.168.40.21 192.168.40.22 192.168.40.23; do
   ssh hermes-admin@$ip "cd /opt/watchtower && sudo docker compose restart"
 done
 
 # Full rebuild (after code changes)
-ssh hermes-admin@192.168.40.10 "cd /opt/update-manager && sudo docker compose down && sudo docker compose build --no-cache && sudo docker compose up -d"
+ssh hermes-admin@192.168.40.13 "cd /opt/update-manager && sudo docker compose down && sudo docker compose build --no-cache && sudo docker compose up -d"
 ```
 
 ### Test Notification
@@ -411,13 +411,13 @@ ssh hermes-admin@192.168.40.10 "cd /opt/update-manager && sudo docker compose do
 ```bash
 # Send test webhook
 curl -X POST -d 'Found new lscr.io/linuxserver/sonarr image (sha256:test123)' \
-  http://192.168.40.10:5050/webhook
+  http://192.168.40.13:5050/webhook
 
 # Check health endpoint
-curl http://192.168.40.10:5050/health
+curl http://192.168.40.13:5050/health
 
 # Test notification endpoint
-curl http://192.168.40.10:5050/test
+curl http://192.168.40.13:5050/test
 ```
 
 ## Excluding Containers from Updates
@@ -443,7 +443,7 @@ CONTAINER_HOSTS = {
 2. Rebuild the Update Manager:
 
 ```bash
-ssh hermes-admin@192.168.40.10 "cd /opt/update-manager && sudo docker compose build --no-cache && sudo docker compose up -d"
+ssh hermes-admin@192.168.40.13 "cd /opt/update-manager && sudo docker compose build --no-cache && sudo docker compose up -d"
 ```
 
 3. Ensure Watchtower is running on the new container's host.
@@ -457,13 +457,13 @@ ssh hermes-admin@192.168.40.10 "cd /opt/update-manager && sudo docker compose bu
 **Diagnosis**:
 ```bash
 # Check bot is running and logged in
-ssh hermes-admin@192.168.40.10 "docker logs update-manager 2>&1 | grep 'logged in'"
+ssh hermes-admin@192.168.40.13 "docker logs update-manager 2>&1 | grep 'logged in'"
 
 # Expected output:
 # Discord bot logged in as Hermes Update Manager#2521
 
 # Check for errors
-ssh hermes-admin@192.168.40.10 "docker logs update-manager --tail 20"
+ssh hermes-admin@192.168.40.13 "docker logs update-manager --tail 20"
 ```
 
 **Fixes**:
@@ -481,10 +481,10 @@ ssh hermes-admin@192.168.40.10 "docker logs update-manager --tail 20"
 **Fix**: Update `WATCHTOWER_NOTIFICATION_URL` in docker-compose.yml:
 ```yaml
 # Wrong
-WATCHTOWER_NOTIFICATION_URL: "generic://192.168.40.10:5050/webhook"
+WATCHTOWER_NOTIFICATION_URL: "generic://192.168.40.13:5050/webhook"
 
 # Correct
-WATCHTOWER_NOTIFICATION_URL: "generic+http://192.168.40.10:5050/webhook"
+WATCHTOWER_NOTIFICATION_URL: "generic+http://192.168.40.13:5050/webhook"
 ```
 
 Then restart Watchtower:
@@ -504,10 +504,10 @@ ssh hermes-admin@192.168.40.11 "cd /opt/watchtower && sudo docker compose restar
 **Diagnosis**:
 ```bash
 # Test SSH from container
-ssh hermes-admin@192.168.40.10 "docker exec update-manager ssh -i /root/.ssh/homelab_ed25519 -o StrictHostKeyChecking=no hermes-admin@192.168.40.11 hostname"
+ssh hermes-admin@192.168.40.13 "docker exec update-manager ssh -i /root/.ssh/homelab_ed25519 -o StrictHostKeyChecking=no hermes-admin@192.168.40.11 hostname"
 
 # Check if SSH key exists in container
-ssh hermes-admin@192.168.40.10 "docker exec update-manager ls -la /root/.ssh/"
+ssh hermes-admin@192.168.40.13 "docker exec update-manager ls -la /root/.ssh/"
 ```
 
 **Fixes**:
@@ -516,11 +516,11 @@ ssh hermes-admin@192.168.40.10 "docker exec update-manager ls -la /root/.ssh/"
 ls -la /home/hermes-admin/.ssh/homelab_ed25519
 
 # 2. If missing, copy from local machine
-scp ~/.ssh/homelab_ed25519 hermes-admin@192.168.40.10:/home/hermes-admin/.ssh/
-ssh hermes-admin@192.168.40.10 "chmod 600 /home/hermes-admin/.ssh/homelab_ed25519"
+scp ... hermes-admin@192.168.40.13:/home/hermes-admin/.ssh/
+ssh hermes-admin@192.168.40.13 "chmod 600 /home/hermes-admin/.ssh/homelab_ed25519"
 
 # 3. Restart container to remount volume
-ssh hermes-admin@192.168.40.10 "cd /opt/update-manager && sudo docker compose restart"
+ssh hermes-admin@192.168.40.13 "cd /opt/update-manager && sudo docker compose restart"
 ```
 
 ### Container Not in Host Mapping
@@ -529,7 +529,7 @@ ssh hermes-admin@192.168.40.10 "cd /opt/update-manager && sudo docker compose re
 
 **Fix**: Add the container to `CONTAINER_HOSTS` in `update_manager.py` and rebuild:
 ```bash
-ssh hermes-admin@192.168.40.10 "cd /opt/update-manager && sudo docker compose build --no-cache && sudo docker compose up -d"
+ssh hermes-admin@192.168.40.13 "cd /opt/update-manager && sudo docker compose build --no-cache && sudo docker compose up -d"
 ```
 
 ### Changes Not Taking Effect After Rebuild
@@ -540,7 +540,7 @@ ssh hermes-admin@192.168.40.10 "cd /opt/update-manager && sudo docker compose bu
 
 **Fix**: Force full rebuild with no cache:
 ```bash
-ssh hermes-admin@192.168.40.10 "cd /opt/update-manager && sudo docker compose down && sudo docker compose build --no-cache && sudo docker compose up -d"
+ssh hermes-admin@192.168.40.13 "cd /opt/update-manager && sudo docker compose down && sudo docker compose build --no-cache && sudo docker compose up -d"
 ```
 
 ### Webhook Not Received
@@ -553,10 +553,10 @@ ssh hermes-admin@192.168.40.10 "cd /opt/update-manager && sudo docker compose do
 ssh hermes-admin@192.168.40.11 "docker logs watchtower 2>&1 | grep -i notification"
 
 # Check Update Manager received webhook
-ssh hermes-admin@192.168.40.10 "docker logs update-manager 2>&1 | grep -i webhook"
+ssh hermes-admin@192.168.40.13 "docker logs update-manager 2>&1 | grep -i webhook"
 
 # Test webhook manually
-curl -X POST -d 'Found new test/image image (sha256:test123)' http://192.168.40.10:5050/webhook
+curl -X POST -d 'Found new test/image image (sha256:test123)' http://192.168.40.13:5050/webhook
 ```
 
 **Fixes**:

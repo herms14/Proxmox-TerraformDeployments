@@ -66,12 +66,14 @@ Application configuration data for containers.
 
 ### Media (Manual mount)
 
-Media files for Arr stack and Jellyfin.
+Media files for Arr stack, Jellyfin, and Plex.
 
 - **Mount point**: `/mnt/nfs/media` (Proxmox nodes), `/mnt/media` (Docker hosts)
-- **Used for**: Radarr, Sonarr, Lidarr, Jellyfin media files
+- **Used for**: Radarr, Sonarr, Lidarr, Jellyfin, **Plex** media files
 - **Directory structure**: `/Movies/`, `/Series/`, `/Music/`
 - **Why NOT Proxmox storage**: Prevents Proxmox from scanning thousands of media files
+
+**Plex Access**: Plex runs on the Synology NAS and accesses media directly at `/volume2/Proxmox-Media/` without needing NFS mounts.
 
 **Docker Host Mount**:
 ```

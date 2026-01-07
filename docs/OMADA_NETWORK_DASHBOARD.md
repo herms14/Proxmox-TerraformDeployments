@@ -71,9 +71,9 @@ The Omada Network Dashboard combines metrics from:
 |-----------|--------|------|------|
 | Omada Controller | OC300 | 443 | 192.168.0.103 |
 | OPNsense Firewall | Active | 9198 | 192.168.91.30 |
-| Speedtest Tracker | Active | 3000 | 192.168.40.10 |
-| Prometheus | Active | 9090 | 192.168.40.10 |
-| Grafana | Active | 3030 | 192.168.40.10 |
+| Speedtest Tracker | Active | 3000 | 192.168.40.13 |
+| Prometheus | Active | 9090 | 192.168.40.13 |
+| Grafana | Active | 3030 | 192.168.40.13 |
 
 ## Step 1: Create Omada Viewer User
 
@@ -99,10 +99,10 @@ cd ~/ansible
 ansible-playbook monitoring/deploy-omada-exporter.yml
 ```
 
-Or deploy manually on docker-vm-utilities01:
+Or deploy manually on docker-vm-core-utilities01:
 
 ```bash
-ssh hermes-admin@192.168.40.10
+ssh hermes-admin@192.168.40.13
 
 # Create directory
 sudo mkdir -p /opt/omada-exporter
@@ -138,7 +138,7 @@ curl http://localhost:9202/metrics | head -50
 Add the Omada scrape job to Prometheus:
 
 ```bash
-ssh hermes-admin@192.168.40.10
+ssh hermes-admin@192.168.40.13
 
 # Edit prometheus config
 sudo nano /opt/monitoring/prometheus/prometheus.yml
@@ -149,14 +149,14 @@ Add to `scrape_configs`:
 ```yaml
   - job_name: 'omada'
     static_configs:
-      - targets: ['192.168.40.10:9202']
+      - targets: ['192.168.40.13:9202']
         labels:
           site: 'Default'
 
   - job_name: 'speedtest'
     metrics_path: /api/speedtest/latest/prometheus
     static_configs:
-      - targets: ['192.168.40.10:3000']
+      - targets: ['192.168.40.13:3000']
     scrape_interval: 5m
 ```
 
@@ -532,7 +532,7 @@ Grafana uses a 24-column grid:
 ### Method 1: Grafana API
 
 ```bash
-curl -X POST "http://192.168.40.10:3030/api/dashboards/db" \
+curl -X POST "http://192.168.40.13:3030/api/dashboards/db" \
   -H "Content-Type: application/json" \
   -u admin:admin \
   -d @temp-omada-full-dashboard.json

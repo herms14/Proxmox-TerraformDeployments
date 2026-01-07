@@ -260,7 +260,7 @@ module "db" {
   vm_name = "db-01"
   storage = "Synology-VMDisks"
   vlan_tag   = 40
-  ip_address = "192.168.40.10"
+  ip_address = "192.168.40.13"
   # ... config
 }
 ```

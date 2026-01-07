@@ -2,6 +2,56 @@
 
 Terraform infrastructure-as-code for deploying VMs and LXC containers on a Proxmox VE 9.1.2 cluster.
 
+## Session Start Protocol
+
+**IMPORTANT: At the start of EVERY session or when the user asks for a new task, display the Infrastructure Context Summary below.**
+
+### Infrastructure Context Summary (Display This)
+
+```
+╔══════════════════════════════════════════════════════════════════════════════╗
+║                        HOMELAB INFRASTRUCTURE CONTEXT                         ║
+╠══════════════════════════════════════════════════════════════════════════════╣
+║ PROXMOX CLUSTER: MorpheusCluster (2-node + Qdevice)                          ║
+║   • node01: 192.168.20.20 (Tailscale: 100.89.33.5)  - Primary VM Host        ║
+║   • node02: 192.168.20.21 (Tailscale: 100.96.195.27) - Service Host          ║
+╠══════════════════════════════════════════════════════════════════════════════╣
+║ SYNOLOGY NAS: 192.168.20.31                                                  ║
+║   • DSM: https://192.168.20.31:5001                                          ║
+║   • Plex: http://192.168.20.31:32400/web                                     ║
+║   • Media: /volume2/Proxmox-Media/ (Movies, Series, Music)                   ║
+╠══════════════════════════════════════════════════════════════════════════════╣
+║ NETWORKS                                                                      ║
+║   • VLAN 20 (192.168.20.0/24): Infrastructure (K8s, Ansible, Proxmox)        ║
+║   • VLAN 40 (192.168.40.0/24): Services (Docker, Apps)                       ║
+║   • VLAN 90 (192.168.90.0/24): Management (Pi-hole DNS: 192.168.90.53)       ║
+╠══════════════════════════════════════════════════════════════════════════════╣
+║ KEY HOSTS                                                                     ║
+║   • ansible:        192.168.20.30  - Ansible Controller + Packer             ║
+║   • docker-media:   192.168.40.11  - Jellyfin, *arr stack                    ║
+║   • docker-glance:  192.168.40.12  - Glance Dashboard, APIs                  ║
+║   • docker-utils:   192.168.40.13  - Grafana, Prometheus, Sentinel Bot       ║
+║   • traefik:        192.168.40.20  - Reverse Proxy                           ║
+║   • authentik:      192.168.40.21  - SSO/Identity                            ║
+╠══════════════════════════════════════════════════════════════════════════════╣
+║ MEDIA SERVERS                                                                 ║
+║   • Plex (Synology):   http://192.168.20.31:32400  - TV apps, remote access  ║
+║   • Jellyfin (Docker): http://192.168.40.11:8096   - Open-source alternative ║
+╠══════════════════════════════════════════════════════════════════════════════╣
+║ KEY URLS                                                                      ║
+║   • Proxmox:  https://proxmox.hrmsmrflrii.xyz                                ║
+║   • Glance:   https://glance.hrmsmrflrii.xyz                                 ║
+║   • Grafana:  https://grafana.hrmsmrflrii.xyz                                ║
+║   • Traefik:  https://traefik.hrmsmrflrii.xyz                                ║
+╠══════════════════════════════════════════════════════════════════════════════╣
+║ SSH ACCESS                                                                    ║
+║   • User: hermes-admin (VMs) | root (Proxmox)                                ║
+║   • Key:  ~/.ssh/homelab_ed25519                                             ║
+╚══════════════════════════════════════════════════════════════════════════════╝
+```
+
+---
+
 ## Multi-Session Workflow
 
 **CRITICAL: Follow this protocol for all sessions to ensure context continuity.**
@@ -65,6 +115,7 @@ Before tokens exhaust, write a handoff:
 | **Glance** | [docs/GLANCE.md](./docs/GLANCE.md) |
 | **CI/CD** | [docs/CICD.md](./docs/CICD.md) |
 | **Service Onboarding** | [docs/SERVICE_ONBOARDING.md](./docs/SERVICE_ONBOARDING.md) |
+| **Discord Bots** | [docs/DISCORD_BOTS.md](./docs/DISCORD_BOTS.md) |
 | **Troubleshooting** | [docs/TROUBLESHOOTING.md](./docs/TROUBLESHOOTING.md) |
 
 ---
@@ -115,7 +166,7 @@ ssh hermes-admin@192.168.20.30
 # SSH Quick Access (from ~/.ssh/config)
 ssh node01              # Proxmox node01
 ssh ansible             # Ansible controller
-ssh docker-utilities    # Docker utilities host
+ssh docker-vm-core-utilities01    # Docker utilities host
 ```
 
 ---
@@ -265,7 +316,7 @@ node01 (100.89.33.5) is configured as a **subnet router** advertising:
 
 # Verify subnet routes are accepted
 ping 192.168.20.30    # Ansible controller
-ping 192.168.40.10    # Docker utilities
+ping 192.168.40.13    # Docker utilities
 
 # Verify DNS works
 nslookup grafana.hrmsmrflrii.xyz
@@ -303,8 +354,13 @@ Host ansible
     IdentityFile ~/.ssh/homelab_ed25519
 
 # Homelab - Docker Hosts
-Host docker-utilities
-    HostName 192.168.40.10
+Host docker-vm-core-utilities01
+    HostName 192.168.40.13
+    User hermes-admin
+    IdentityFile ~/.ssh/homelab_ed25519
+
+Host docker-lxc-glance
+    HostName 192.168.40.12
     User hermes-admin
     IdentityFile ~/.ssh/homelab_ed25519
 
@@ -386,7 +442,8 @@ ssh docker-utilities "cd /opt/myservice && docker compose up -d"
 | Alias | IP | User | Purpose |
 |-------|-----|------|---------|
 | `ansible` | 192.168.20.30 | hermes-admin | Ansible controller, run playbooks |
-| `docker-utilities` | 192.168.40.10 | hermes-admin | Glance, Grafana, Prometheus, n8n |
+| `docker-vm-core-utilities01` | 192.168.40.13 | hermes-admin | Grafana, Prometheus, n8n, Life Progress API |
+| `docker-lxc-glance` | 192.168.40.12 | hermes-admin | Glance Dashboard |
 | `docker-media` | 192.168.40.11 | hermes-admin | Jellyfin, *arr stack |
 | `traefik` | 192.168.40.20 | hermes-admin | Reverse proxy |
 | `authentik` | 192.168.40.21 | hermes-admin | SSO/Authentication |
@@ -397,13 +454,13 @@ ssh docker-utilities "cd /opt/myservice && docker compose up -d"
 
 ```bash
 # === Service Management ===
-ssh docker-utilities "docker ps"                          # List containers
-ssh docker-utilities "docker restart grafana"             # Restart service
-ssh docker-utilities "docker logs glance --tail 100"      # View logs
+ssh docker-vm-core-utilities01 "docker ps"                          # List containers
+ssh docker-vm-core-utilities01 "docker restart grafana"             # Restart service
+ssh docker-vm-core-utilities01 "docker logs glance --tail 100"      # View logs
 
 # === Glance Dashboard ===
-ssh docker-utilities "cd /opt/glance && docker compose restart"
-ssh docker-utilities "cat /opt/glance/config/glance.yml"  # View config
+ssh docker-lxc-glance "docker restart glance"
+ssh docker-lxc-glance "cat /opt/glance/config/glance.yml"  # View config
 
 # === Grafana Dashboards ===
 ssh ansible "cd ~/ansible && ansible-playbook monitoring/deploy-container-status-dashboard.yml"
@@ -474,7 +531,7 @@ ssh-add ~/.ssh/homelab_ed25519
 # Test connectivity step by step
 ping 100.89.33.5      # Tailscale direct to node01
 ping 192.168.20.20    # Via subnet router to node01
-ping 192.168.40.10    # Via subnet router to docker-utilities
+ping 192.168.40.13    # Via subnet router to docker-utilities
 ```
 
 ### macOS Tailscale Alias (Recommended)
@@ -511,15 +568,15 @@ When connected to the local network and want the Obsidian Daily Notes widget to 
    - [ ] Plugin must bind to `0.0.0.0` (not localhost) - Settings > Local REST API > Network Interface
    - [ ] MacBook connected to Tailscale
 
-2. **Server Requirements** (docker-utilities):
+2. **Server Requirements** (docker-vm-core-utilities01):
    - [ ] Tailscale installed and authenticated (already done)
    - [ ] Can reach MacBook via Tailscale IP (100.90.207.58)
 
 ### Verify Connectivity
 
 ```bash
-# From docker-utilities server
-ssh docker-utilities "curl -s -H 'Authorization: Bearer YOUR_API_KEY' http://100.90.207.58:27123/vault/"
+# From docker-vm-core-utilities01 server
+ssh docker-vm-core-utilities01 "curl -s -H 'Authorization: Bearer YOUR_API_KEY' http://100.90.207.58:27123/vault/"
 
 # Test from MacBook (should work locally)
 curl -s -H 'Authorization: Bearer YOUR_API_KEY' http://localhost:27123/vault/
