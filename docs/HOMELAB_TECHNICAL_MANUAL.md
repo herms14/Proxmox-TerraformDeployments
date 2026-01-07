@@ -10,13 +10,15 @@
 
 ### It Started With Sophia's Photos
 
-In 2023, I took my daughter Sophia on a trip to Japan. We explored temples in Kyoto, watched the sun set over Mount Fuji, and wandered through the neon-lit streets of Tokyo together. I captured every moment—hundreds of photos and videos, tiny slices of memory I wanted to keep forever.
+In 2023, two things happened almost simultaneously. I traveled to Japan—exploring temples in Kyoto, watching the sun set over Mount Fuji, wandering through the neon-lit streets of Tokyo. I captured hundreds of photos and videos, moments I wanted to keep forever.
 
-When we returned home and I began sorting through everything, Google Photos delivered the notification I'd been dreading: *"You've run out of storage. Upgrade to continue backing up your memories."*
+Around the same time, my daughter Sophia was growing up fast. Her first steps, her laughter, her tiny milestones—I was capturing everything. These weren't just files. They were irreplaceable memories.
+
+Then Google Photos delivered the notification I'd been dreading: *"You've run out of storage. Upgrade to continue backing up your memories."*
 
 That notification changed everything.
 
-I did the math. If I kept paying monthly just to store my own memories, I would eventually spend enough to buy a NAS outright—and I would gain something the cloud could never give me: **real privacy and full control over my data**. Sophia's photos, her first steps, her laughter, her milestones—these weren't just files. They were irreplaceable moments that deserved to exist somewhere I truly owned.
+I did the math. If I kept paying monthly just to store my own memories, I would eventually spend enough to buy a NAS outright—and I would gain something the cloud could never give me: **real privacy and full control over my data**. My Japan trip photos, Sophia's milestones—these deserved to exist somewhere I truly owned.
 
 So I bought a Synology NAS. Just to store photos. Just to save money.
 
