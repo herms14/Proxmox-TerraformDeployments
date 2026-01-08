@@ -351,18 +351,35 @@ Unified homelab management bot combining the functionality of 4 previous bots (A
 **Layout:**
 ```
 ┌─────────────────────────────────────────────────────────────────────────┐
-│ [Uptime]  [Total Storage]  [Used Storage]  [Storage %]  [CPU %] [Mem %] │  Row 1: h=4
+│ [RAID Status] [SSD Cache] [Uptime] [Total] [Used] [Storage %]           │  Row 1: h=4
 ├─────────────────────────────────────────────────────────────────────────┤
 │ [Drive 1 HDD] [Drive 2 HDD] [Drive 3 HDD] [Drive 4 HDD] [M.2 1] [M.2 2] │  Row 2: h=4
 ├──────────────────────────────────┬──────────────────────────────────────┤
-│ Disk Temperatures (bargauge)     │ [Sys Temp] [Healthy] [Total RAM]    │  Row 3: h=6
-│ All 6 drives with gradient       │ [CPU Cores] [Free]   [Avail RAM]    │
+│ Disk Temperatures (bargauge)     │ [Sys Temp] [Healthy] [CPU Gauge]    │  Row 3: h=6
+│ All 6 drives with gradient       │ [CPU Cores] [Free]   [Mem Gauge]    │
 ├──────────────────────────────────┼──────────────────────────────────────┤
-│ CPU Usage Over Time (4 cores)    │ Memory Usage Over Time              │  Row 4: h=7
+│ CPU Gauge        Memory Gauge    │ [Total RAM]  [Available RAM]        │  Row 4: h=5
+├──────────────────────────────────┼──────────────────────────────────────┤
+│ CPU Usage Over Time (4 cores)    │ Memory Usage Over Time              │  Row 5: h=8
 ├──────────────────────────────────┴──────────────────────────────────────┤
-│ Storage Consumption Over Time (Used/Free/Total, 7-day window)           │  Row 5: h=8
+│ Storage Consumption Over Time (Used/Free/Total, 7-day window)           │  Row 6: h=8
 └─────────────────────────────────────────────────────────────────────────┘
 ```
+
+**RAID Status Panels (Added January 8, 2026):**
+| Panel | Metric | Description |
+|-------|--------|-------------|
+| RAID Status | `synologyRaidStatus{raidIndex="0"}` | Storage Pool 1 (HDD array) |
+| SSD Cache Status | `synologyRaidStatus{raidIndex="1"}` | SSD Cache Pool |
+
+**RAID Status Value Mappings:**
+| Value | Status | Color | Description |
+|-------|--------|-------|-------------|
+| 1 | Normal | Green (#22c55e) | Array healthy |
+| 2 | REPAIRING | Orange (#f59e0b) | Rebuilding after drive replacement |
+| 7 | SYNCING | Blue (#3b82f6) | Data verification in progress |
+| 11 | DEGRADED | Red (#ef4444) | Drive failure, needs attention |
+| 12 | CRASHED | Red (#ef4444) | Array failed |
 
 **Disk Configuration (6 drives):**
 - Drive 1: Seagate 8TB HDD (ST8000VN004)

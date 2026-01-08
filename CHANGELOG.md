@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added - Synology NAS RAID Status Monitoring (January 8, 2026)
+- **Added RAID Status panels** to Synology NAS Grafana dashboard (`synology-nas-modern`)
+  - **RAID Status panel**: Monitors Storage Pool 1 (HDD array) health via `synologyRaidStatus{raidIndex="0"}`
+  - **SSD Cache Status panel**: Monitors SSD Cache Pool health via `synologyRaidStatus{raidIndex="1"}`
+- **RAID status value mappings** for proper status display:
+  - 1 = Normal (green), 2 = REPAIRING (orange), 7 = SYNCING (blue)
+  - 11 = DEGRADED (red), 12 = CRASHED (red)
+- **Why this matters**: Individual disk health (`synologyDiskHealthStatus`) only shows per-disk SMART status, while RAID status shows array-level health. A degraded RAID can have all disks showing "Healthy" while the array rebuilds.
+- **Dashboard layout reorganized** with proper grid alignment:
+  - Row 1: RAID Status, SSD Cache, Uptime, Total, Used, Storage %
+  - Row 2: 6 drive health panels
+  - Row 3: Disk temps, system stats, CPU/Memory gauges
+  - Row 4-5: Time series graphs side-by-side
+  - Row 6: Storage consumption over time
+- **Glance iframe cache-busting**: Added timestamp parameter to force dashboard refresh
+- **Updated documentation**: GLANCE.md, context.md, OBSERVABILITY.md
+
 ### Added - Infrastructure Diagram Generation (December 30, 2025)
 - **Created diagram generator** `scripts/generate-infrastructure-diagram.py`
   - Uses Python `diagrams` library for infrastructure-as-code diagrams

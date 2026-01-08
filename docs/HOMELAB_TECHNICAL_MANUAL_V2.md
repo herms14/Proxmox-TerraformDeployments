@@ -1640,12 +1640,35 @@ container_memory_usage_bytes{instance=~"$host"}
 #### 2. Synology NAS Dashboard
 
 **UID**: `synology-nas-modern`
-**Purpose**: Monitor NAS storage, CPU, temperatures
+**Purpose**: Monitor NAS storage, RAID health, CPU, temperatures
 **Iframe Height**: 1350px
+
+**RAID Status Panels** (Added January 8, 2026):
+
+The dashboard includes RAID array health monitoring, which is different from individual disk health:
+
+| Panel | Metric | Description |
+|-------|--------|-------------|
+| RAID Status | `synologyRaidStatus{raidIndex="0"}` | Storage Pool 1 (HDD array) |
+| SSD Cache Status | `synologyRaidStatus{raidIndex="1"}` | SSD Cache Pool |
+
+**RAID Status Values**:
+| Value | Status | Color |
+|-------|--------|-------|
+| 1 | Normal | Green |
+| 2 | REPAIRING | Orange |
+| 7 | SYNCING | Blue |
+| 11 | DEGRADED | Red |
+| 12 | CRASHED | Red |
+
+> **Why RAID Status Matters**: Individual disk health (`synologyDiskHealthStatus`) only shows per-disk SMART status. A degraded RAID can have all disks showing "Healthy" while the array rebuilds. RAID status (`synologyRaidStatus`) shows the true array-level health.
 
 **Key Queries (PromQL)**:
 
 ```promql
+# RAID array status
+synologyRaidStatus{job="synology", raidIndex="0"}
+
 # Disk usage percentage
 100 - (
   (hrStorageSize{instance="192.168.20.31"} - hrStorageUsed{instance="192.168.20.31"})
@@ -1664,6 +1687,7 @@ synologySystemTemperature{instance="192.168.20.31"}
 ```
 
 **Query Explanation**:
+- `synologyRaidStatus`: Synology RAID array status (1=Normal, 2=Repairing, 7=Syncing, 11=Degraded, 12=Crashed)
 - `hrStorage*`: SNMP metrics from Host Resources MIB
 - `synologySystemTemperature`: Synology-specific SNMP OID
 - Division by 1099511627776: Convert bytes to terabytes (1024^4)

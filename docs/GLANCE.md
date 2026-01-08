@@ -921,25 +921,51 @@ ssh hermes-admin@192.168.40.12:/opt/glance && sudo docker compose restart"
 **Grafana Dashboard**: `synology-nas-modern` (UID)
 - URL: `https://grafana.hrmsmrflrii.xyz/d/synology-nas-modern/synology-nas-storage?orgId=1&kiosk&theme=transparent&refresh=30s`
 - Iframe Height: 1350px
-- Dashboard JSON: `temp-synology-nas-dashboard.json`
+- Dashboard JSON: `dashboards/synology-nas.json`
 - Ansible Playbook: `ansible-playbooks/monitoring/deploy-synology-nas-dashboard.yml`
 - Time Range: 7 days (for storage consumption trends)
 
 **Layout:**
 ```
 ┌─────────────────────────────────────────────────────────────────────────┐
-│ [Uptime]  [Total Storage]  [Used Storage]  [Storage %]  [CPU %] [Mem %] │  Row 1: h=4
+│ [RAID Status] [SSD Cache] [Uptime] [Total] [Used] [Storage %]           │  Row 1: h=4
 ├─────────────────────────────────────────────────────────────────────────┤
 │ [Drive 1 HDD] [Drive 2 HDD] [Drive 3 HDD] [Drive 4 HDD] [M.2 1] [M.2 2] │  Row 2: h=4
 ├──────────────────────────────────┬──────────────────────────────────────┤
-│ Disk Temperatures (bargauge)     │ [Sys Temp] [Healthy] [Total RAM]    │  Row 3: h=6
-│ All 6 drives with gradient       │ [CPU Cores] [Free]   [Avail RAM]    │
+│ Disk Temperatures (bargauge)     │ [Sys Temp] [Healthy] [CPU Gauge]    │  Row 3: h=6
+│ All 6 drives with gradient       │ [CPU Cores] [Free]   [Mem Gauge]    │
 ├──────────────────────────────────┼──────────────────────────────────────┤
-│ CPU Usage Over Time (4 cores)    │ Memory Usage Over Time              │  Row 4: h=7
+│ CPU Gauge        Memory Gauge    │ [Total RAM]  [Available RAM]        │  Row 4: h=5
+├──────────────────────────────────┼──────────────────────────────────────┤
+│ CPU Usage Over Time (4 cores)    │ Memory Usage Over Time              │  Row 5: h=8
 ├──────────────────────────────────┴──────────────────────────────────────┤
-│ Storage Consumption Over Time (Used/Free/Total, 7-day window)           │  Row 5: h=8
+│ Storage Consumption Over Time (Used/Free/Total, 7-day window)           │  Row 6: h=8
 └─────────────────────────────────────────────────────────────────────────┘
 ```
+
+#### RAID Status Panels (Added January 8, 2026)
+
+Two new panels at the top of the dashboard monitor RAID array health:
+
+| Panel | Metric | Status Mappings |
+|-------|--------|-----------------|
+| **RAID Status** | `synologyRaidStatus{raidIndex="0"}` | Storage Pool 1 (HDD array) |
+| **SSD Cache Status** | `synologyRaidStatus{raidIndex="1"}` | SSD Cache Pool |
+
+**RAID Status Value Mappings:**
+| Value | Status | Color | Description |
+|-------|--------|-------|-------------|
+| 1 | Normal | Green (#22c55e) | Array healthy |
+| 2 | REPAIRING | Orange (#f59e0b) | Rebuilding after drive replacement |
+| 3-6 | Maintenance | Orange (#f59e0b) | Migrating, Expanding, Deleting, Creating |
+| 7 | SYNCING | Blue (#3b82f6) | Data verification/sync in progress |
+| 11 | DEGRADED | Red (#ef4444) | Drive failure, needs attention |
+| 12 | CRASHED | Red (#ef4444) | Array failed |
+
+**Why This Matters:**
+- Individual disk health (`synologyDiskHealthStatus`) only shows per-disk SMART status
+- RAID status (`synologyRaidStatus`) shows the overall array health
+- A degraded RAID can have all disks showing "Healthy" while the array rebuilds
 
 **Disk Configuration (6 drives):**
 | Slot | Drive | Model | Type |

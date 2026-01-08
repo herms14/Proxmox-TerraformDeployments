@@ -354,9 +354,34 @@ The monitoring stack includes SNMP-based monitoring for the Synology NAS (192.16
 |----------|---------|
 | Disk Health | SMART status, temperature, health status |
 | Storage | RAID total/free/used, volume usage |
+| **RAID Array** | RAID status per pool (synologyRaidStatus) |
 | CPU | Processor load per core, system stats |
 | Memory | Total, available, cached, buffer |
 | System | Status, temperature, fan status |
+
+### RAID Status Monitoring (Added January 8, 2026)
+
+Two new panels monitor RAID array health (not just individual disk health):
+
+| Panel | Metric | Description |
+|-------|--------|-------------|
+| RAID Status | `synologyRaidStatus{raidIndex="0"}` | Storage Pool 1 (HDD array) |
+| SSD Cache Status | `synologyRaidStatus{raidIndex="1"}` | SSD Cache Pool |
+
+**RAID Status Codes from Synology SNMP:**
+| Value | Status | Color |
+|-------|--------|-------|
+| 1 | Normal | Green (#22c55e) |
+| 2 | REPAIRING | Orange (#f59e0b) |
+| 3-6 | Maintenance | Orange (#f59e0b) |
+| 7 | SYNCING | Blue (#3b82f6) |
+| 11 | DEGRADED | Red (#ef4444) |
+| 12 | CRASHED | Red (#ef4444) |
+
+**Why RAID Status Matters:**
+- `synologyDiskHealthStatus` shows per-disk SMART status (individual drive health)
+- `synologyRaidStatus` shows array-level health (overall pool status)
+- A degraded RAID can show all disks as "Healthy" while the array is rebuilding
 
 ### Prerequisites
 
