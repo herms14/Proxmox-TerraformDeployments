@@ -7,6 +7,164 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added - Homelab Chronicle Timeline App (January 11, 2026)
+- **Created homelab-chronicle** - A beautiful timeline visualization app for documenting homelab evolution
+  - Location: `apps/homelab-chronicle/`
+  - URL: https://chronicle.hrmsmrflrii.xyz
+- **Tech stack**:
+  - Next.js 14 with App Router
+  - Tailwind CSS + shadcn/ui components
+  - TipTap rich text editor
+  - SQLite + Prisma ORM
+  - NextAuth.js + Authentik OAuth
+  - Docker containerization
+- **Features implemented**:
+  - Immich-style vertical timeline view grouped by year/month
+  - Rich text editor with formatting, code blocks, and image embedding
+  - Image upload support with drag-drop
+  - Category-based filtering (Infrastructure, Service, Milestone, Fix, etc.)
+  - Search functionality
+  - Admin panel for creating/editing events
+  - Authentik SSO integration
+- **Data import scripts**:
+  - `scripts/import-git.ts` - Import events from git commits
+  - `scripts/import-changelog.ts` - Import events from CHANGELOG.md
+  - `scripts/seed.ts` - Seed database with historical homelab events
+- **Deployment files**:
+  - `Dockerfile` + `docker-compose.yml` for containerized deployment
+  - `terraform/homelab-chronicle/main.tf` - LXC container provisioning
+  - `ansible-playbooks/services/deploy-homelab-chronicle.yml` - Deployment playbook
+  - `traefik-config.yml` - Traefik route configuration
+- **Seeded 23 historical events** from Dec 2024 to Jan 2026 covering:
+  - Initial Proxmox setup and VLAN configuration
+  - Kubernetes cluster foundation
+  - Observability stack deployment
+  - Service expansion (Glance, Grafana, Discord bots)
+  - Node additions and cluster growth
+
+### Added - Proxmox Backup Server (PBS) Deployment (January 11, 2026)
+- **Deployed PBS as LXC container** (VMID 100) on node03 at 192.168.20.50
+  - Debian 12 base with PBS packages from official repository
+  - 2 cores, 4GB RAM, 20GB root disk
+- **Configured dual-datastore backup architecture**:
+  - `main` datastore: 4TB Seagate HDD (ST4000VN006) for weekly/monthly archival backups
+  - `daily` datastore: 1TB Kingston NVMe (SNV3S1000G) for fast daily backups
+- **Storage preparation**:
+  - Wiped and formatted 4TB HDD with ext4 (label: pbs-backup)
+  - Wiped old Windows NTFS on Kingston NVMe, formatted with ext4 (label: pbs-ssd)
+  - Configured persistent mounts in /etc/fstab
+- **LXC bind mounts configured**:
+  - `/mnt/pbs-backup/datastore` → `/backup` (main datastore)
+  - `/mnt/pbs-ssd/datastore` → `/backup-ssd` (daily datastore)
+- **Authentication configured**:
+  - Root password set for web UI access
+  - Created `backup@pbs` user for PVE integration
+  - Generated API token `backup@pbs!pve` for Proxmox VE storage integration
+- **ACL permissions configured**:
+  - Root-level `Audit` permission for datastore listing
+  - `DatastoreAdmin` on both datastores for full backup access
+- **Proxmox VE integration**:
+  - Added `pbs-main` storage (4TB HDD) for archival backups
+  - Added `pbs-daily` storage (1TB SSD) for daily backups
+- **DNS and Traefik configured**:
+  - Added `pbs.hrmsmrflrii.xyz` DNS record in Pi-hole (pihole.toml)
+  - Configured Traefik route with HTTPS/TLS termination
+  - External access: https://pbs.hrmsmrflrii.xyz
+- **Documentation created**:
+  - `docs/PBS_DEPLOYMENT.md` - Complete deployment guide with all commands
+  - Updated `docs/STORAGE.md` with PBS section and external URL
+  - Updated `docs/INVENTORY.md` with PBS LXC
+  - Added credentials to Obsidian vault (11 - Credentials.md)
+- **Recommended backup strategy**:
+  - Daily 2AM: Critical VMs to SSD (7 daily retention)
+  - Weekly Sun 3AM: All VMs to HDD (4 weekly, 2 monthly retention)
+- **Post-deployment configuration**:
+  - Removed subscription nag popup via proxmoxlib.js patch
+  - Login note: Use `root` username (not `root@pam`) - realm dropdown adds suffix
+
+### Added - PBS Prometheus Monitoring & Glance Backup Page (January 11, 2026)
+- **Deployed PBS Exporter** for Prometheus metrics scraping
+  - Container: `pbs-exporter` on docker-vm-core-utilities01
+  - Image: `ghcr.io/natrontech/pbs-exporter:latest`
+  - Port: 9101 (mapped to internal 10019)
+  - Config: `/opt/pbs-exporter/docker-compose.yml`
+- **Environment variables configured**:
+  - `PBS_ENDPOINT`: https://192.168.20.50:8007
+  - `PBS_USERNAME`: backup@pbs
+  - `PBS_API_TOKEN_NAME`: pve
+  - `PBS_INSECURE`: true (for self-signed certificate)
+- **Prometheus integration**:
+  - Added `pbs` job to prometheus.yml with 60s scrape interval
+  - Target: 192.168.40.13:9101 with label `instance: pbs-lxc100`
+- **Available metrics**:
+  - `pbs_up` - Connection status
+  - `pbs_size`, `pbs_used`, `pbs_available` - Per-datastore storage
+  - `pbs_snapshot_count` - Backup counts per datastore
+  - `pbs_host_*` - CPU, memory, load, uptime metrics
+- **Created PBS Backup Status Grafana dashboard** (`pbs-backup-status`)
+  - Dashboard JSON: `dashboards/pbs-backup-status.json`
+  - URL: https://grafana.hrmsmrflrii.xyz/d/pbs-backup-status
+  - Sections: Status Overview, Datastore Storage, Backup Snapshots, Storage Over Time, Host Metrics
+- **Added Backup page to Glance dashboard**:
+  - Position: After Storage page, before Network page
+  - Embedded PBS Backup Status dashboard via iframe
+  - Monitor widget for PBS server health
+  - Quick links to PBS Web UI and Grafana
+- **Documentation created**:
+  - `docs/PBS_MONITORING.md` - Complete monitoring setup guide
+  - Updated CLAUDE.md Quick Reference table
+
+### Added - Proxmox Cluster Health Dashboard & Temperature Monitoring (January 11, 2026)
+- **Installed node_exporter v1.7.0** on all 3 Proxmox nodes for hardware metrics
+  - Binary installed at `/usr/local/bin/node_exporter`
+  - Systemd service at `/etc/systemd/system/node_exporter.service`
+  - Collectors enabled: hwmon, thermal_zone, cpu, meminfo, filesystem, loadavg, netdev
+  - Port: 9100 on each node (192.168.20.20, 192.168.20.21, 192.168.20.22)
+- **Created Proxmox Cluster Health Grafana dashboard** (`proxmox-cluster-health`)
+  - Dashboard JSON: `dashboards/proxmox-cluster-health.json`
+  - Server location: `/opt/monitoring/grafana/dashboards/proxmox-cluster-health.json`
+- **Dashboard panels include**:
+  - Cluster status: Quorum, Nodes Online, Total VMs, Total Containers
+  - CPU Temperature: Per-node gauges (node01, node02, node03) with color thresholds
+  - Temperature History: 24-hour line chart for all nodes
+  - Drive Temperatures: NVMe and GPU temp bar gauges
+  - Resource Usage: Top VMs by CPU, Top VMs by Memory
+  - VM Status Timeline: Historical VM state changes
+  - Storage Pool Usage: Bar gauges for each storage pool
+- **Temperature thresholds**: Green (<60°C), Yellow (60-80°C), Red (>80°C)
+- **Updated Prometheus config** with `proxmox-nodes` scrape job
+- **Updated Glance Compute tab** to embed new cluster health dashboard
+- **Documentation updated**: PROXMOX.md, OBSERVABILITY.md, GLANCE.md, context.md
+
+### Added - Node03 to Proxmox Cluster (January 11, 2026)
+- **Added node03** (192.168.20.22) to MorpheusCluster
+  - Hardware: AMD Ryzen 9 5900XT 16-Core desktop converted to server
+  - Storage: 2x NVMe (1TB each), 1x Samsung SSD (1TB), 1x Seagate HDD (4TB)
+  - Purpose: GitLab, Immich, Syslog Server workloads
+- **Updated Glance dashboard**: Added node03 to Proxmox Cluster monitor (all pages)
+- **Updated Sentinel Bot config**: Added node03 to PROXMOX_NODES dict
+- **Documentation updated**: CLAUDE.md, PROXMOX.md, INVENTORY.md, GLANCE.md, context.md
+
+### Added - Node03 Power Management (January 11, 2026)
+- **Configured power-saving optimizations** for node03 (AMD Ryzen 9 5900XT desktop)
+  - Set CPU governor to `powersave` for reduced idle power consumption
+  - AMD P-State driver (`amd-pstate-epp`) already active
+  - Updated GRUB with `amd_pstate=active processor.max_cstate=9`
+- **Created systemd services** for persistent power management:
+  - `power-save.service` - Applies CPU governor, SATA, PCIe, NVMe settings at boot
+  - `powertop.service` - Runs powertop auto-tune at boot
+- **Storage power management**:
+  - SATA link power management set to `med_power_with_dipm`
+  - HDD spindown configured to 20 minutes via hdparm
+  - NVMe power tolerance configured
+- **Expected power reduction**: ~100-150W idle → ~40-60W idle
+- **Files created on node03**:
+  - `/usr/local/bin/power-save.sh` - Power optimization script
+  - `/etc/systemd/system/power-save.service` - Systemd service
+  - `/etc/systemd/system/powertop.service` - Powertop auto-tune service
+  - `/etc/hdparm.conf` - HDD spindown configuration
+- **Documentation updated**: PROXMOX.md, context.md
+
 ### Added - Synology NAS RAID Status Monitoring (January 8, 2026)
 - **Added RAID Status panels** to Synology NAS Grafana dashboard (`synology-nas-modern`)
   - **RAID Status panel**: Monitors Storage Pool 1 (HDD array) health via `synologyRaidStatus{raidIndex="0"}`

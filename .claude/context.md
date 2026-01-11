@@ -1,16 +1,26 @@
 # Infrastructure Context
 
 > Core infrastructure reference. This file contains stable information that rarely changes.
-> Last updated: 2025-12-31
+> Last updated: 2026-01-11
 
 ## Proxmox Cluster
 
-**Cluster**: MorpheusCluster (2-node + Qdevice)
+**Cluster**: MorpheusCluster (3-node + Qdevice)
 
 | Node | Local IP | Tailscale IP | Purpose |
 |------|----------|--------------|---------|
 | node01 | 192.168.20.20 | 100.89.33.5 | Primary VM Host (K8s, LXCs, Core Services) |
 | node02 | 192.168.20.21 | 100.96.195.27 | Service Host (Traefik, Authentik, GitLab, Immich) |
+| node03 | 192.168.20.22 | - | Desktop Node - Ryzen 9 5900XT (GitLab, Immich, Syslog) |
+
+### Node03 Power Management
+
+Node03 is a desktop PC with power-saving optimizations applied:
+- **CPU**: AMD Ryzen 9 5900XT 16-Core, governor set to `powersave`
+- **Storage**: 2x NVMe, 1x SSD, 1x 4TB HDD (spindown: 20min)
+- **Services**: `power-save.service`, `powertop.service` (auto-tune at boot)
+- **GRUB**: `amd_pstate=active processor.max_cstate=9`
+- **Expected idle**: ~40-60W (down from ~100-150W)
 
 ### Wake-on-LAN
 
@@ -18,6 +28,7 @@
 |------|-------------|--------|
 | node01 | `38:05:25:32:82:76` | Enabled & Persistent |
 | node02 | `84:47:09:4d:7a:ca` | Enabled & Persistent |
+| node03 | `TBD` | TBD |
 
 **Wake nodes from MacBook**:
 ```bash
@@ -27,6 +38,46 @@ python3 scripts/wake-nodes.py node01   # Wake node01 only
 
 **BIOS**: Ensure WoL is enabled in each node's BIOS/UEFI (Power Management → Wake on LAN).
 
+### Node Exporter (Hardware Metrics)
+
+All Proxmox nodes run node_exporter v1.7.0 for temperature and hardware monitoring.
+
+| Node | Endpoint | Collectors |
+|------|----------|------------|
+| node01 | 192.168.20.20:9100 | hwmon, thermal_zone, cpu, meminfo |
+| node02 | 192.168.20.21:9100 | hwmon, thermal_zone, cpu, meminfo |
+| node03 | 192.168.20.22:9100 | hwmon, thermal_zone, cpu, meminfo |
+
+**Service**: `/etc/systemd/system/node_exporter.service`
+**Binary**: `/usr/local/bin/node_exporter`
+**Prometheus Job**: `proxmox-nodes`
+
+### Proxmox Backup Server (PBS)
+
+PBS runs as LXC 100 on node03, providing enterprise backups with deduplication.
+
+| Setting | Value |
+|---------|-------|
+| VMID | 100 |
+| IP | 192.168.20.50 |
+| Web UI | https://192.168.20.50:8007 |
+| Login | `root` (select "Linux PAM" realm) |
+| Password | `PBSr00t@2025!` |
+| API Token | backup@pbs!pve |
+
+> **Note**: Enter `root` in username field, not `root@pam`. Realm dropdown adds suffix.
+
+**Datastores:**
+
+| ID | Datastore | Storage | Size | Purpose |
+|----|-----------|---------|------|---------|
+| pbs-main | main | 4TB HDD | 3.4TB | Weekly/monthly archival |
+| pbs-daily | daily | 1TB NVMe | 870GB | Daily backups (fast) |
+
+**Backup Strategy:**
+- `pbs-daily`: Critical VMs daily at 2AM, keep 7
+- `pbs-main`: All VMs weekly Sun 3AM, keep 4 weekly + 2 monthly
+
 ### Remote Access (Tailscale)
 
 When outside the local network, use Tailscale IPs:
@@ -35,10 +86,12 @@ When outside the local network, use Tailscale IPs:
 # SSH via Tailscale
 ssh root@100.89.33.5         # node01
 ssh root@100.96.195.27       # node02
+ssh root@192.168.20.22       # node03 (no Tailscale yet)
 
 # Proxmox Web UI via Tailscale
 # https://100.89.33.5:8006    (node01)
 # https://100.96.195.27:8006  (node02)
+# https://192.168.20.22:8006  (node03 - local only)
 ```
 
 **Other Tailscale Devices**:
@@ -121,10 +174,11 @@ terraform init && terraform plan && terraform apply
 
 ## Deployed Infrastructure
 
-**Current Infrastructure** (December 2025):
+**Current Infrastructure** (January 2026):
 
 | Host | IP | Type | Services |
 |------|-----|------|----------|
+| pbs-server | 192.168.20.50 | LXC 100 | Proxmox Backup Server (4TB datastore) |
 | docker-lxc-glance | 192.168.40.12 | LXC 200 | Glance, Media Stats API, Reddit Manager, NBA Stats API |
 | docker-lxc-bots | 192.168.40.14 | LXC 201 | (Deprecated - bots consolidated to Sentinel) |
 | pihole | 192.168.90.53 | LXC 202 | Pi-hole v6 + Unbound DNS |
@@ -204,6 +258,7 @@ ssh hermes-admin@192.168.20.30
 | Service | URL |
 |---------|-----|
 | Proxmox | https://proxmox.hrmsmrflrii.xyz |
+| PBS | https://pbs.hrmsmrflrii.xyz (or https://192.168.20.50:8007 internal) |
 | **Plex** | http://192.168.20.31:32400/web |
 | Traefik | https://traefik.hrmsmrflrii.xyz |
 | Authentik | https://auth.hrmsmrflrii.xyz |
@@ -295,8 +350,9 @@ Unified homelab management bot combining the functionality of 4 previous bots (A
 - **Sidebar**: Media Apps Bookmarks, Services Status
 
 ### Compute Tab Structure
-- **Main**: Proxmox Cluster Dashboard (Grafana), Container Status History Dashboard (Grafana)
+- **Main**: Proxmox Cluster Health Dashboard (Grafana), Proxmox Cluster Overview (Grafana), Container Status History Dashboard (Grafana)
 - **Sidebar**: Proxmox Nodes Monitor, Quick Links
+- **Cluster Health Dashboard**: CPU temperature gauges, temp history, VM usage, storage (UID: `proxmox-cluster-health`)
 
 ### Container Status History Dashboard (PROTECTED)
 
@@ -554,4 +610,6 @@ packer build -var-file=credentials.pkrvars.hcl proxmox-ubuntu-template.pkr.hcl
 - Traefik uses ping entrypoint on port 8082 for health checks
 - Kubelet healthz endpoint binds to 0.0.0.0:10248 on all workers
 - Life Progress API runs on docker-vm-core-utilities (192.168.40.13:5051)
-- Prometheus targets: cadvisor, docker-stats-media, traefik, omada, synology
+- Prometheus targets: cadvisor, docker-stats-media, traefik, omada, synology, proxmox-nodes
+- **node_exporter** (v1.7.0) installed on all 3 Proxmox nodes (port 9100) for hardware metrics including CPU temperature
+- Proxmox Cluster Health dashboard: `/opt/monitoring/grafana/dashboards/proxmox-cluster-health.json`

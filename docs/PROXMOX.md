@@ -4,21 +4,56 @@
 
 ## Cluster Nodes
 
-**Cluster**: MorpheusCluster (2-node + Qdevice)
+**Cluster**: MorpheusCluster (3-node + Qdevice)
 
 | Node | IP Address | Purpose | Workload Type |
 |------|------------|---------|---------------|
 | **node01** | 192.168.20.20 | Primary VM Host | K8s cluster, LXCs, Core Services |
 | **node02** | 192.168.20.21 | Service Host | Traefik, Authentik, GitLab, Immich |
+| **node03** | 192.168.20.22 | Desktop Node (Ryzen 9) | GitLab, Immich, Syslog Server |
+
+### Node03 Hardware
+
+| Component | Details |
+|-----------|---------|
+| CPU | AMD Ryzen 9 5900XT 16-Core |
+| Storage | 1TB Kingston NVMe (PBS daily), 1TB Lexar NVMe (unused), 1TB Samsung SSD (boot), 4TB Seagate HDD (PBS main) |
+| Type | Desktop PC (converted to server) |
+| Special Role | Hosts Proxmox Backup Server (PBS) LXC |
+
+### Proxmox Backup Server (PBS)
+
+PBS is deployed as an LXC container on node03, providing enterprise-grade backups with deduplication.
+
+| Setting | Value |
+|---------|-------|
+| VMID | 100 |
+| Hostname | pbs-server |
+| IP | 192.168.20.50 |
+| Web UI | https://192.168.20.50:8007 |
+
+**Datastores:**
+
+| Datastore | Storage | Size | Purpose |
+|-----------|---------|------|---------|
+| `main` | Seagate 4TB HDD | 3.4TB | Weekly/monthly archival backups |
+| `daily` | Kingston 1TB NVMe | 870GB | Daily backups (fast restore) |
+
+**Proxmox VE Storage IDs:**
+- `pbs-main` - HDD datastore for archival
+- `pbs-daily` - SSD datastore for daily backups
+
+See [PBS Deployment Guide](./PBS_DEPLOYMENT.md) for full configuration details.
 
 ## Wake-on-LAN
 
-Both nodes have Wake-on-LAN enabled and configured to persist across reboots.
+All nodes have Wake-on-LAN enabled and configured to persist across reboots.
 
 | Node | MAC Address | Interface |
 |------|-------------|-----------|
 | node01 | `38:05:25:32:82:76` | nic0 |
 | node02 | `84:47:09:4d:7a:ca` | nic0 |
+| node03 | `TBD` | nic0 |
 
 ### Wake Nodes Remotely
 
@@ -319,6 +354,184 @@ scsihw = "virtio-scsi-single"
 ```
 
 **Key Lesson**: Always verify template boot mode with `qm config <vmid>` before deploying.
+
+## Node03 Power Management
+
+Node03 is a desktop PC (Ryzen 9 5900XT) configured with power-saving optimizations to reduce idle power consumption from ~100-150W to ~40-60W.
+
+### Applied Configurations
+
+| Setting | Value | Effect |
+|---------|-------|--------|
+| CPU Governor | `powersave` | Reduces clock speed at idle |
+| AMD P-State | `amd-pstate-epp` | Modern AMD power management |
+| Max C-State | `9` | Enables deep sleep states |
+| SATA Policy | `med_power_with_dipm` | SATA link power management |
+| PCIe ASPM | `powersave` | PCIe Active State Power Management |
+| HDD Spindown | 20 minutes | Spins down 4TB HDD after idle |
+
+### GRUB Configuration
+
+```
+GRUB_CMDLINE_LINUX_DEFAULT="quiet amd_pstate=active processor.max_cstate=9"
+```
+
+### Systemd Services
+
+| Service | Purpose | Runs At |
+|---------|---------|---------|
+| `power-save.service` | Applies CPU governor, SATA, PCIe settings | Boot |
+| `powertop.service` | Auto-tunes additional power settings | Boot |
+
+### Power-Save Script
+
+Located at `/usr/local/bin/power-save.sh`:
+- Sets CPU governor to powersave
+- Enables SATA link power management
+- Configures PCIe ASPM
+- Sets NVMe power tolerance
+- Enables audio codec power save
+
+### Verify Current Settings
+
+```bash
+# Check CPU governor
+cat /sys/devices/system/cpu/cpu0/cpufreq/scaling_governor
+
+# Check scaling driver
+cat /sys/devices/system/cpu/cpu0/cpufreq/scaling_driver
+
+# Check services
+systemctl status power-save powertop
+
+# Monitor power impact
+powertop
+```
+
+### BIOS Settings (Recommended)
+
+For maximum power savings, ensure these are enabled in BIOS:
+- Cool'n'Quiet: Enabled
+- Global C-State Control: Enabled
+- Power Supply Idle Control: Low Current Idle
+- CPPC: Enabled
+- CPPC Preferred Cores: Enabled
+
+## Node Exporter (Hardware Metrics)
+
+All Proxmox nodes have node_exporter v1.7.0 installed for hardware metrics collection, including CPU temperature monitoring.
+
+### Installation Details
+
+| Component | Value |
+|-----------|-------|
+| Version | 1.7.0 |
+| Port | 9100 |
+| Binary | `/usr/local/bin/node_exporter` |
+| Service | `node_exporter.service` |
+
+### Collectors Enabled
+
+| Collector | Purpose |
+|-----------|---------|
+| `hwmon` | Hardware sensors (CPU temp, fan speed) |
+| `thermal_zone` | Thermal zone temperatures |
+| `cpu` | CPU utilization |
+| `meminfo` | Memory statistics |
+| `filesystem` | Disk usage |
+| `loadavg` | System load |
+| `netdev` | Network interface stats |
+
+### Service Configuration
+
+Located at `/etc/systemd/system/node_exporter.service`:
+
+```ini
+[Unit]
+Description=Node Exporter
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+User=root
+ExecStart=/usr/local/bin/node_exporter --collector.hwmon --collector.thermal_zone --collector.cpu --collector.meminfo --collector.filesystem --collector.loadavg --collector.netdev
+Restart=always
+
+[Install]
+WantedBy=multi-user.target
+```
+
+### Prometheus Scrape Config
+
+Added to `/opt/monitoring/prometheus/prometheus.yml` on docker-vm-core-utilities01:
+
+```yaml
+- job_name: 'proxmox-nodes'
+  static_configs:
+    - targets:
+      - 192.168.20.20:9100
+      labels:
+        node: 'node01'
+    - targets:
+      - 192.168.20.21:9100
+      labels:
+        node: 'node02'
+    - targets:
+      - 192.168.20.22:9100
+      labels:
+        node: 'node03'
+```
+
+### Verify Node Exporter
+
+```bash
+# Check service status
+systemctl status node_exporter
+
+# Test metrics endpoint
+curl http://localhost:9100/metrics | head -50
+
+# Check temperature metrics
+curl -s http://localhost:9100/metrics | grep -E "(hwmon|thermal)"
+```
+
+## Cluster Health Dashboard
+
+A Grafana dashboard provides comprehensive cluster health monitoring with temperature tracking.
+
+### Dashboard Details
+
+| Setting | Value |
+|---------|-------|
+| Dashboard UID | `proxmox-cluster-health` |
+| Title | Proxmox Cluster Health |
+| Location | `/opt/monitoring/grafana/dashboards/proxmox-cluster-health.json` |
+| Glance Integration | Compute tab (iframe) |
+
+### Dashboard Panels
+
+| Panel | Description |
+|-------|-------------|
+| Cluster Quorum | Shows quorum status (Yes/No) |
+| Nodes Online | Count of online cluster nodes |
+| Total VMs | Running and stopped VM count |
+| Total Containers | Running and stopped LXC count |
+| CPU Temperature (per node) | Real-time temperature gauges |
+| Temperature History | 24-hour temperature chart |
+| NVMe Temperature | NVMe drive temperatures |
+| GPU Temperature | GPU temperatures (if present) |
+| Top VMs by CPU | Highest CPU consuming VMs |
+| Top VMs by Memory | Highest memory consuming VMs |
+| VM Status Timeline | Historical VM state changes |
+| Storage Pool Usage | Disk usage per storage pool |
+
+### Access Dashboard
+
+| Method | URL |
+|--------|-----|
+| Grafana Direct | https://grafana.hrmsmrflrii.xyz/d/proxmox-cluster-health |
+| Glance Embedded | https://glance.hrmsmrflrii.xyz → Compute tab |
+| Kiosk Mode | http://192.168.40.13:3030/d/proxmox-cluster-health?kiosk&theme=transparent |
 
 ## Useful Commands
 

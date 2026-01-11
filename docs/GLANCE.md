@@ -604,7 +604,7 @@ The Home page has been carefully configured and should be preserved as-is.
 ├──────────────────┼──────────────────────────────────────────┼──────────────────┤
 │ Clock            │ Life Progress Widget                      │ Chess.com Stats  │
 │ Weather          │ GitHub Contributions (green, dark mode)   │ Crypto Markets   │
-│ Sun Times        │ Proxmox Cluster Monitor (2 nodes)         │ Stock Markets    │
+│ Sun Times        │ Proxmox Cluster Monitor (3 nodes)         │ Stock Markets    │
 │ Calendar         │ Storage Monitor                           │ Tech News RSS    │
 │ Daily Note       │ Core Services Monitor                     │                  │
 │ Infrastructure   │ Media Services Monitor                    │                  │
@@ -639,7 +639,7 @@ The Home page has been carefully configured and should be preserved as-is.
 |--------|------|----------|
 | Life Progress | custom-api | http://192.168.40.13:5051/progress |
 | GitHub Contributions | custom-api | https://api.github.com/users/herms14 |
-| Proxmox Cluster | monitor | Node 01-02 on port 8006 |
+| Proxmox Cluster | monitor | Node 01-03 on port 8006 |
 | Storage | monitor | Synology NAS on VLAN 10 & 20, port 5001 |
 | Core Services | monitor | Traefik, Authentik, GitLab, Immich, n8n, Paperless, Pi-hole, Karakeep, Lagident, Home Assistant |
 | Media Services | monitor | Jellyfin, Radarr, Sonarr, Lidarr, Prowlarr, Bazarr, Jellyseerr, Tdarr, Deluge, SABnzbd, Wizarr, Tracearr |
@@ -672,7 +672,7 @@ The contribution graph uses:
 
 | Service | Endpoint | Port |
 |---------|----------|------|
-| Proxmox Nodes (2) | / | 8006 (HTTPS, allow-insecure) |
+| Proxmox Nodes (3) | / | 8006 (HTTPS, allow-insecure) |
 | Synology NAS | / | 5001 (HTTPS, allow-insecure) |
 | Traefik | /ping | 8082 |
 | Authentik | /-/health/ready/ | 9000 |
@@ -708,9 +708,38 @@ The Glance dashboard has 8 tabs in this order:
 
 **IMPORTANT: DO NOT modify the Compute tab layout without explicit user permission.**
 
-Displays Proxmox cluster metrics and container monitoring via two embedded Grafana dashboards.
+Displays Proxmox cluster metrics and container monitoring via three embedded Grafana dashboards.
 
-#### Proxmox Cluster Dashboard
+#### Proxmox Cluster Health Dashboard (Added January 11, 2026)
+
+**Grafana Dashboard**: `proxmox-cluster-health` (UID)
+- URL: `https://grafana.hrmsmrflrii.xyz/d/proxmox-cluster-health/proxmox-cluster-health?kiosk&theme=transparent&refresh=30s`
+- Iframe Height: 1100px
+- Dashboard JSON: `dashboards/proxmox-cluster-health.json`
+
+**Panels**:
+| Row | Panels |
+|-----|--------|
+| Cluster Status | Quorum status, Nodes online, Total VMs, Total Containers |
+| CPU Temperature | Per-node temperature gauges (node01, node02, node03) |
+| Temperature History | 24-hour line chart for all 3 nodes |
+| Drive Temperatures | NVMe and GPU temperature bar gauges |
+| Resource Usage | Top VMs by CPU, Top VMs by Memory |
+| VM Timeline | State timeline showing VM status history |
+| Storage | Storage pool usage bar gauges |
+
+**Temperature Thresholds**:
+| Range | Color | Status |
+|-------|-------|--------|
+| < 60°C | Green | Normal |
+| 60-80°C | Yellow | Warning |
+| > 80°C | Red | Critical |
+
+**Data Sources**:
+- `proxmox-nodes` job: node_exporter on ports 9100 (hardware metrics, temps)
+- `proxmox` job: PVE exporter on port 9221 (VM/container/storage metrics)
+
+#### Proxmox Cluster Overview Dashboard
 
 **Grafana Dashboard**: `proxmox-compute` (UID)
 - URL: `https://grafana.hrmsmrflrii.xyz/d/proxmox-compute/proxmox-cluster-overview?kiosk&theme=transparent&refresh=30s`

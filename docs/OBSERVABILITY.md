@@ -476,6 +476,152 @@ The Container Monitoring dashboard is embedded in the Glance **Compute** tab via
 - Height: 850px
 - URL: `https://grafana.hrmsmrflrii.xyz/d/containers-modern/container-monitoring?kiosk&theme=transparent&refresh=30s`
 
+## Proxmox Cluster Health Monitoring
+
+Comprehensive monitoring of the Proxmox cluster including hardware temperature tracking via node_exporter.
+
+### Architecture
+
+```
+┌─────────────┐     ┌─────────────┐     ┌─────────────┐
+│   node01    │     │   node02    │     │   node03    │
+│   :9100     │     │   :9100     │     │   :9100     │
+│ node_exporter│    │ node_exporter│    │ node_exporter│
+└──────┬──────┘     └──────┬──────┘     └──────┬──────┘
+       │                   │                   │
+       └───────────────────┼───────────────────┘
+                           │
+                    ┌──────▼──────┐
+                    │ Prometheus  │
+                    │ 192.168.40.13│
+                    └──────┬──────┘
+                           │
+                    ┌──────▼──────┐
+                    │   Grafana   │
+                    │   :3030     │
+                    └──────┬──────┘
+                           │
+                    ┌──────▼──────┐
+                    │   Glance    │
+                    │  (iframe)   │
+                    └─────────────┘
+```
+
+### Components
+
+| Component | Host | Port | Purpose |
+|-----------|------|------|---------|
+| node_exporter | All Proxmox nodes | 9100 | Hardware metrics (CPU, temp, disk) |
+| PVE Exporter | 192.168.40.13 | 9221 | Proxmox API metrics (VMs, storage) |
+| Prometheus | 192.168.40.13 | 9090 | Metrics aggregation |
+| Grafana | 192.168.40.13 | 3030 | Visualization |
+
+### Metrics Collected
+
+| Category | Source | Example Metrics |
+|----------|--------|-----------------|
+| **Temperature** | node_exporter (hwmon) | `node_hwmon_temp_celsius`, CPU/NVMe temps |
+| **CPU** | node_exporter | `node_cpu_seconds_total`, utilization |
+| **Memory** | node_exporter | `node_memory_MemTotal_bytes` |
+| **Disk** | node_exporter | `node_filesystem_size_bytes` |
+| **Cluster** | PVE Exporter | `pve_up`, `pve_cluster_quorate` |
+| **VMs** | PVE Exporter | `pve_guest_info`, `pve_cpu_usage_ratio` |
+| **Storage** | PVE Exporter | `pve_storage_used_bytes` |
+
+### Temperature Monitoring (Added January 11, 2026)
+
+Hardware temperature monitoring via node_exporter's hwmon collector:
+
+| Node | Sensors Available |
+|------|-------------------|
+| node01 | CPU (k10temp), NVMe drives |
+| node02 | CPU (k10temp), NVMe drives |
+| node03 | CPU (k10temp), NVMe drives, GPU (if present) |
+
+**Temperature Query Examples:**
+
+```promql
+# CPU temperature by node
+node_hwmon_temp_celsius{chip=~".*k10temp.*"}
+
+# NVMe temperatures
+node_hwmon_temp_celsius{chip=~".*nvme.*"}
+
+# All temperatures with labels
+node_hwmon_temp_celsius * on(instance) group_left(node)
+  label_replace(up{job="proxmox-nodes"}, "instance", "$1:9100", "instance", "(.*):9100")
+```
+
+### Prometheus Scrape Config
+
+```yaml
+# Proxmox node hardware metrics (node_exporter)
+- job_name: 'proxmox-nodes'
+  static_configs:
+    - targets:
+      - 192.168.20.20:9100
+      labels:
+        node: 'node01'
+    - targets:
+      - 192.168.20.21:9100
+      labels:
+        node: 'node02'
+    - targets:
+      - 192.168.20.22:9100
+      labels:
+        node: 'node03'
+
+# Proxmox API metrics (PVE Exporter)
+- job_name: 'proxmox'
+  static_configs:
+    - targets: ['192.168.40.13:9221']
+```
+
+### Grafana Dashboard
+
+**Dashboard**: `proxmox-cluster-health`
+**Location**: `/opt/monitoring/grafana/dashboards/proxmox-cluster-health.json`
+
+| Row | Panels |
+|-----|--------|
+| **Cluster Status** | Quorum status, Nodes online, Total VMs, Total Containers |
+| **CPU Temperature** | Per-node temperature gauges (color-coded) |
+| **Temperature History** | 24-hour line chart for all nodes |
+| **Drive Temperatures** | NVMe and GPU temperature bar gauges |
+| **Resource Usage** | Top VMs by CPU, Top VMs by Memory |
+| **VM Timeline** | State timeline showing VM status history |
+| **Storage** | Storage pool usage bar gauges |
+
+**Temperature Thresholds:**
+| Range | Color | Status |
+|-------|-------|--------|
+| < 60°C | Green | Normal |
+| 60-80°C | Yellow | Warning |
+| > 80°C | Red | Critical |
+
+### Dashboard URLs
+
+| Access Method | URL |
+|---------------|-----|
+| Grafana Direct | https://grafana.hrmsmrflrii.xyz/d/proxmox-cluster-health |
+| Kiosk Mode | http://192.168.40.13:3030/d/proxmox-cluster-health?kiosk&theme=transparent |
+| Glance Embedded | https://glance.hrmsmrflrii.xyz → Compute tab |
+
+### Verification
+
+```bash
+# Check node_exporter on each node
+curl http://192.168.20.20:9100/metrics | grep hwmon
+curl http://192.168.20.21:9100/metrics | grep hwmon
+curl http://192.168.20.22:9100/metrics | grep hwmon
+
+# Check Prometheus targets
+curl -s http://192.168.40.13:9090/api/v1/targets | jq '.data.activeTargets[] | select(.labels.job=="proxmox-nodes")'
+
+# Check temperature data in Prometheus
+curl -s "http://192.168.40.13:9090/api/v1/query?query=node_hwmon_temp_celsius" | jq '.data.result'
+```
+
 ## Related Documentation
 
 - [Services](./SERVICES.md) - Service deployment details

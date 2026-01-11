@@ -12,9 +12,10 @@ Terraform infrastructure-as-code for deploying VMs and LXC containers on a Proxm
 ╔══════════════════════════════════════════════════════════════════════════════╗
 ║                        HOMELAB INFRASTRUCTURE CONTEXT                         ║
 ╠══════════════════════════════════════════════════════════════════════════════╣
-║ PROXMOX CLUSTER: MorpheusCluster (2-node + Qdevice)                          ║
+║ PROXMOX CLUSTER: MorpheusCluster (3-node + Qdevice)                          ║
 ║   • node01: 192.168.20.20 (Tailscale: 100.89.33.5)  - Primary VM Host        ║
 ║   • node02: 192.168.20.21 (Tailscale: 100.96.195.27) - Service Host          ║
+║   • node03: 192.168.20.22 (No Tailscale)            - Additional Node        ║
 ╠══════════════════════════════════════════════════════════════════════════════╣
 ║ SYNOLOGY NAS: 192.168.20.31                                                  ║
 ║   • DSM: https://192.168.20.31:5001                                          ║
@@ -132,6 +133,7 @@ Before tokens exhaust, write a handoff:
 | **Discord Bots** | [docs/DISCORD_BOTS.md](./docs/DISCORD_BOTS.md) |
 | **Azure Environment** | [docs/AZURE_ENVIRONMENT.md](./docs/AZURE_ENVIRONMENT.md) |
 | **Azure Hybrid Lab** | [docs/AZURE_HYBRID_LAB.md](./docs/AZURE_HYBRID_LAB.md) |
+| **PBS Monitoring** | [docs/PBS_MONITORING.md](./docs/PBS_MONITORING.md) |
 | **Troubleshooting** | [docs/TROUBLESHOOTING.md](./docs/TROUBLESHOOTING.md) |
 
 ---
@@ -140,12 +142,13 @@ Before tokens exhaust, write a handoff:
 
 ### Proxmox Cluster
 
-**Cluster**: MorpheusCluster (2-node + Qdevice)
+**Cluster**: MorpheusCluster (3-node + Qdevice)
 
 | Node | Local IP | Tailscale IP | Purpose |
 |------|----------|--------------|---------|
 | node01 | 192.168.20.20 | 100.89.33.5 | Primary VM Host (K8s, LXCs, Core Services) |
 | node02 | 192.168.20.21 | 100.96.195.27 | Service Host (Traefik, Authentik, GitLab, Immich) |
+| node03 | 192.168.20.22 | - | Additional Node |
 
 ### Remote Access (Tailscale)
 
@@ -153,6 +156,7 @@ When outside the local network:
 ```bash
 ssh root@100.89.33.5         # node01
 ssh root@100.96.195.27       # node02
+ssh root@192.168.20.22       # node03 (local only)
 ```
 
 ### Networks
@@ -210,18 +214,24 @@ ssh docker-vm-core-utilities01    # Docker utilities host
 
 ## Documentation Update Protocol
 
-**When updating documentation, you MUST update ALL locations:**
+**CRITICAL: When user says "update all documentation" or "update all docs", you MUST update ALL of these locations:**
 
-1. **docs/** - Technical reference
-2. **Proxmox-TerraformDeployments.wiki/** - GitHub wiki (beginner-friendly)
-3. **Obsidian Vault** - Personal notes (includes credentials)
-4. **CHANGELOG.md** - Change history
+| Location | Path | What to Update |
+|----------|------|----------------|
+| **docs/** | `docs/*.md` | Technical reference files |
+| **GitHub Wiki** | `Proxmox-TerraformDeployments.wiki/*.md` | Corresponding wiki pages |
+| **Obsidian Vault** | See path below | Corresponding Obsidian notes |
+| **Technical Manual** | `38 - Homelab Technical Manual.md` in Obsidian | Comprehensive reference manual |
+| **.claude/context.md** | `.claude/context.md` | Infrastructure context |
+| **CHANGELOG.md** | `CHANGELOG.md` | Add change entry |
+
+This is NOT optional - ALL 6 locations must be updated for documentation consistency.
 
 See `.claude/conventions.md` for full sync guide and document mapping.
 
 ### Obsidian Vault Path
 ```
-C:\Users\herms\OneDrive\Obsidian Vault\Hermes's Life Knowledge Base\07 HomeLab Things\Claude Managed Homelab\
+C:\Users\herms14\OneDrive\Obsidian Vault\Hermes's Life Knowledge Base\07 HomeLab Things\Claude Managed Homelab\
 ```
 
 ---
@@ -267,6 +277,7 @@ See `.claude/context.md` for current structure details.
 | GitLab | https://gitlab.hrmsmrflrii.xyz |
 | Glance | https://glance.hrmsmrflrii.xyz |
 | Grafana | https://grafana.hrmsmrflrii.xyz |
+| PBS | https://pbs.hrmsmrflrii.xyz |
 | **New Services** | |
 | Lagident | https://lagident.hrmsmrflrii.xyz |
 | Karakeep | https://karakeep.hrmsmrflrii.xyz |
@@ -319,6 +330,59 @@ Blog posts are drafted in Obsidian before publishing:
 | SSH User | hermes-admin (VMs), root (Proxmox) |
 | SSH Key | `~/.ssh/homelab_ed25519` (no passphrase) |
 | Proxmox API | terraform-deployment-user@pve!tf |
+
+---
+
+## SSH Key Deployment (REQUIRED)
+
+**CRITICAL: When deploying ANY new infrastructure (VM, LXC, Docker container), you MUST configure SSH key authentication using the homelab SSH key.**
+
+### SSH Public Key
+
+```
+ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAINVYlOowJQE4tC4GEo17MptDGdaQfWwMDMRxLdKd/yui hermes@homelab-nopass
+```
+
+### Deployment Requirements
+
+| Infrastructure Type | SSH Key Setup Method |
+|---------------------|---------------------|
+| **Terraform VMs** | Use `ssh_public_key` variable in `terraform.tfvars` |
+| **LXC Containers** | Add to `authorized_keys` in Terraform or cloud-init |
+| **Docker Hosts** | Ensure key is in `~/.ssh/authorized_keys` for hermes-admin |
+| **Manual VMs** | Copy key to `/home/hermes-admin/.ssh/authorized_keys` |
+
+### How to Add Key to New Infrastructure
+
+**For cloud-init based VMs (Terraform):**
+```yaml
+# Already configured in terraform.tfvars
+ssh_public_key = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAINVYlOowJQE4tC4GEo17MptDGdaQfWwMDMRxLdKd/yui hermes@homelab-nopass"
+```
+
+**For manual setup:**
+```bash
+# On the new VM/LXC/container
+mkdir -p ~/.ssh && chmod 700 ~/.ssh
+echo "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAINVYlOowJQE4tC4GEo17MptDGdaQfWwMDMRxLdKd/yui hermes@homelab-nopass" >> ~/.ssh/authorized_keys
+chmod 600 ~/.ssh/authorized_keys
+```
+
+**For Ansible playbooks:**
+```yaml
+- name: Add SSH key for hermes-admin
+  authorized_key:
+    user: hermes-admin
+    key: "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAINVYlOowJQE4tC4GEo17MptDGdaQfWwMDMRxLdKd/yui hermes@homelab-nopass"
+    state: present
+```
+
+### Verification
+
+After deploying new infrastructure, verify SSH access works:
+```bash
+ssh hermes-admin@<new-host-ip>
+```
 
 ---
 

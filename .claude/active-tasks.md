@@ -136,6 +136,19 @@ ansible-playbook -i inventory/proxmox-hosts.yml playbooks/domain-join.yml
 
 ## Recently Completed (Last 24 Hours)
 
+### PBS Prometheus Monitoring & Glance Backup Page
+**Completed**: 2026-01-11
+**Changes**:
+- Deployed PBS exporter container on docker-vm-core-utilities01
+- Image: ghcr.io/natrontech/pbs-exporter:latest, Port: 9101
+- Added PBS scrape job to Prometheus config (60s interval)
+- Created PBS Backup Status Grafana dashboard (pbs-backup-status)
+- Added Backup page to Glance (between Storage and Network)
+- Created documentation: docs/PBS_MONITORING.md
+- Created detailed tutorial: docs/PBS_MONITORING_TUTORIAL.md
+- Updated CHANGELOG.md, conventions.md, CLAUDE.md
+- Created Obsidian file: 23 - PBS Monitoring.md
+
 ### Sentinel Bot Table Format Fix
 **Completed**: 2026-01-02
 **Changes**:
@@ -148,7 +161,31 @@ ansible-playbook -i inventory/proxmox-hosts.yml playbooks/domain-join.yml
 
 ## Interrupted Tasks (Need Resumption)
 
-*No interrupted tasks*
+### Node03 NVIDIA RTX 3050 GPU Monitoring
+**Blocked**: 2026-01-11
+**Reason**: NVIDIA driver 550.163 doesn't support kernel 6.17.4-2-pve
+
+**What was done:**
+- Added non-free repo to Debian sources
+- Installed nvidia-driver package
+- Installed pve-headers for DKMS
+- Tried both closed and open kernel modules - both fail to compile
+
+**What's needed:**
+- Wait for NVIDIA driver update that supports kernel 6.17+
+- Check periodically: `apt update && apt upgrade nvidia-driver`
+- Once driver works, run: `nvidia-smi` to verify
+- Then install nvidia_gpu_exporter and add to Prometheus
+
+**When driver works, complete these steps:**
+1. Verify nvidia-smi works on node03
+2. Install nvidia_gpu_exporter (Docker or binary)
+3. Add scrape target to Prometheus config
+4. Update Grafana dashboard to include node03 GPU temp
+
+**Dashboard location:** `dashboards/proxmox-cluster-health.json`
+- GPU panel currently shows AMD iGPU temps for node01/node02 only
+- Panel title: "GPU Temperatures (AMD iGPU)"
 
 ---
 
@@ -156,6 +193,6 @@ ansible-playbook -i inventory/proxmox-hosts.yml playbooks/domain-join.yml
 
 - **Azure Hybrid Lab**: Ready for Packer template build on Proxmox
 - **VLAN 80 Required**: Ensure VLAN 80 is configured on Proxmox bridge (vmbr0)
-- **CLUSTER**: 2-node (node01, node02) + Qdevice
+- **CLUSTER**: 3-node (node01, node02, node03) + Qdevice
 - Multiple Claude instances may run in parallel - always check active-tasks first
 - Glance pages are protected - don't modify without permission

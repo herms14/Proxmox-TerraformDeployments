@@ -4,17 +4,17 @@
 
 ## Summary
 
-**Cluster**: MorpheusCluster (2-node + Qdevice)
+**Cluster**: MorpheusCluster (3-node + Qdevice)
 
 | Category | Count | vCPUs | RAM | Storage |
 |----------|-------|-------|-----|---------|
 | Ansible | 1 | 2 | 8GB | 20GB |
 | Kubernetes | 9 | 18 | 72GB | 180GB |
 | Services | 5 | 26 | 38GB | 130GB |
-| LXC Containers | 7 | 16 | 25GB | 168GB |
-| **Total** | **22** | **62** | **143GB** | **498GB** |
+| LXC Containers | 8 | 18 | 29GB | 188GB + 4TB |
+| **Total** | **23** | **64** | **147GB** | **518GB + 4TB** |
 
-*Last updated: January 7, 2026*
+*Last updated: January 11, 2026*
 
 ## Synology NAS
 
@@ -100,6 +100,7 @@
 | authentik-lxc | node02 | 204 | 192.168.40.21 | 2 | 4GB | 30GB | Authentik SSO (migrated from VM 100) |
 | docker-lxc-media | node01 | 205 | 192.168.40.11 | 4 | 8GB | 50GB | Arr media stack (migrated from VM 111) |
 | homeassistant-lxc | node01 | 206 | 192.168.40.25 | 2 | 4GB | 32GB | Home Assistant smart home automation |
+| pbs-server | node03 | 100 | 192.168.20.50 | 2 | 4GB | 20GB + 4TB | Proxmox Backup Server |
 
 **Reserved IP Range**: 192.168.20.100-199
 

@@ -16,7 +16,7 @@
 
 **Started:** December 2024
 
-**Documentation Version:** 2.1 | January 2026
+**Documentation Version:** 2.2 | January 2026
 
 <br><br><br><br>
 
@@ -53,6 +53,7 @@ This page tracks all major revisions made to this technical manual.
 
 | Version | Date | Author | Changes |
 |:-------:|:----:|:------:|---------|
+| **2.2** | January 11, 2026 | Hermes + Claude | Added node03 (Ryzen 9 5900XT desktop) to cluster documentation, comprehensive power management section for node03 including CPU governor, AMD P-State, C-states, SATA/PCIe power management, systemd services |
 | **2.1** | January 8, 2026 | Hermes + Claude | Added Storage Architecture (Section 8), Kubernetes Cluster with installation guide (Section 9), Observability Stack (Section 10), Watchtower Updates (Section 11), Sentinel Discord Bot (Section 12), SSH Configuration (Appendix D), WiFi SSID mapping, fixed ASCII diagram rendering |
 | **2.0** | January 7, 2026 | Hermes + Claude | Complete rewrite with comprehensive technical documentation. Added Prologue story, expanded all sections with beginner-friendly explanations, added deployment workflows, Authentik integration |
 | **1.0** | December 2024 | Hermes | Initial documentation covering basic Proxmox setup and network architecture |
@@ -456,31 +457,78 @@ pvecm qdevice status
 
 ### Hardware Details
 
-| Property | node01 | node02 |
-|----------|--------|--------|
-| **Hostname** | node01 | node02 |
-| **IP Address** | 192.168.20.20 | 192.168.20.21 |
-| **Tailscale IP** | 100.89.33.5 | 100.96.195.27 |
-| **CPU** | AMD Ryzen 9 PRO 8945HS | AMD Ryzen 9 6900HX |
-| **Cores/Threads** | 8 cores / 16 threads | 8 cores / 16 threads |
-| **RAM** | 64 GB DDR5 | 32 GB DDR5 |
-| **Internal Storage** | 512 GB NVMe | 512 GB NVMe |
-| **Network** | 2.5 GbE | 2.5 GbE |
-| **Form Factor** | Minisforum MS-01 | Minisforum HX90G |
-| **MAC Address** | 38:05:25:32:82:76 | 84:47:09:4D:7A:CA |
+| Property | node01 | node02 | node03 |
+|----------|--------|--------|--------|
+| **Hostname** | node01 | node02 | node03 |
+| **IP Address** | 192.168.20.20 | 192.168.20.21 | 192.168.20.22 |
+| **Tailscale IP** | 100.89.33.5 | 100.96.195.27 | - |
+| **CPU** | AMD Ryzen 9 PRO 8945HS | AMD Ryzen 9 6900HX | AMD Ryzen 9 5900XT |
+| **Cores/Threads** | 8 cores / 16 threads | 8 cores / 16 threads | 16 cores / 32 threads |
+| **RAM** | 64 GB DDR5 | 32 GB DDR5 | 32 GB DDR4 |
+| **Internal Storage** | 512 GB NVMe | 512 GB NVMe | 2x 1TB NVMe + 1TB SSD + 4TB HDD |
+| **Network** | 2.5 GbE | 2.5 GbE | 2.5 GbE |
+| **Form Factor** | Minisforum MS-01 | Minisforum HX90G | Desktop PC |
+| **MAC Address** | 38:05:25:32:82:76 | 84:47:09:4D:7A:CA | TBD |
 
 ### Role Distribution
 
 | Node | Primary Role | VMs/Containers |
 |------|--------------|----------------|
 | **node01** | Primary VM Host | Ansible, K8s cluster (9 nodes), Docker LXCs |
-| **node02** | Service Host | Traefik, Authentik, GitLab, Immich |
+| **node02** | Service Host | Traefik, Authentik |
+| **node03** | Desktop Node | GitLab, Immich, Syslog Server |
 
 ### Why This Distribution?
 
 **node01 (64 GB RAM)**: Kubernetes requires significant memory for multiple nodes. The K8s cluster has 9 VMs, each consuming RAM.
 
 **node02 (32 GB RAM)**: Running individual service VMs that don't need as much total memory but benefit from dedicated resources.
+
+**node03 (32 GB RAM)**: Desktop PC repurposed as a server. Runs heavier workloads like GitLab and Immich that benefit from the Ryzen 9's 16 cores. Configured with power-saving optimizations to reduce idle power consumption.
+
+### Node03 Power Management
+
+Node03 is a desktop PC with power-saving optimizations to reduce idle power from ~100-150W to ~40-60W:
+
+| Setting | Value | Effect |
+|---------|-------|--------|
+| CPU Governor | `powersave` | Reduces clock speed at idle |
+| AMD P-State | `amd-pstate-epp` | Modern AMD power management driver |
+| Max C-State | `9` | Enables deep CPU sleep states |
+| SATA Policy | `med_power_with_dipm` | SATA link power management |
+| PCIe ASPM | `powersave` | PCIe Active State Power Management |
+| HDD Spindown | 20 minutes | Spins down 4TB HDD when idle |
+
+**GRUB Configuration** (`/etc/default/grub`):
+```
+GRUB_CMDLINE_LINUX_DEFAULT="quiet amd_pstate=active processor.max_cstate=9"
+```
+
+**Systemd Services**:
+- `power-save.service` - Applies CPU governor, SATA, PCIe, NVMe settings at boot
+- `powertop.service` - Runs powertop auto-tune at boot
+
+**Power-Save Script** (`/usr/local/bin/power-save.sh`):
+- Sets all CPU cores to powersave governor
+- Enables SATA link power management
+- Configures PCIe ASPM
+- Sets NVMe power tolerance
+- Enables audio codec power save
+
+**Verify Power Settings**:
+```bash
+# Check CPU governor
+cat /sys/devices/system/cpu/cpu0/cpufreq/scaling_governor  # Should show: powersave
+
+# Check scaling driver
+cat /sys/devices/system/cpu/cpu0/cpufreq/scaling_driver   # Should show: amd-pstate-epp
+
+# Check services
+systemctl status power-save powertop
+
+# Monitor power impact
+powertop
+```
 
 ---
 
@@ -4624,6 +4672,11 @@ Host node01
 
 Host node02
     HostName 192.168.20.21
+    User root
+    IdentityFile ~/.ssh/homelab_ed25519
+
+Host node03
+    HostName 192.168.20.22
     User root
     IdentityFile ~/.ssh/homelab_ed25519
 

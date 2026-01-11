@@ -5,6 +5,90 @@
 
 ---
 
+## 2026-01-11
+
+### Homelab Chronicle Timeline App Created
+**Status**: Completed
+**Request**: Create a timeline visualization app for documenting homelab changes/upgrades
+
+**App Created**: `apps/homelab-chronicle/`
+**Planned URL**: https://chronicle.hrmsmrflrii.xyz
+
+**Features**:
+- Immich-style vertical timeline with events grouped by year/month
+- TipTap rich text editor with formatting, code blocks, images
+- Image upload with drag-drop support
+- Category filtering and search
+- Admin panel for CRUD operations
+- Authentik SSO authentication
+
+**Tech Stack**:
+- Next.js 14 (App Router)
+- Tailwind CSS + shadcn/ui
+- TipTap rich text editor
+- SQLite + Prisma ORM
+- NextAuth.js + Authentik OAuth
+- Docker
+
+**Files Created**:
+- Core app files (50+ files in `apps/homelab-chronicle/`)
+- `scripts/seed.ts` - Seeds 23 historical events from Dec 2024 to Jan 2026
+- `scripts/import-git.ts` - Import from git commits
+- `scripts/import-changelog.ts` - Import from CHANGELOG.md
+- `Dockerfile` + `docker-compose.yml`
+- `terraform/homelab-chronicle/main.tf` - LXC provisioning (VMID 203, 192.168.40.15)
+- `ansible-playbooks/services/deploy-homelab-chronicle.yml`
+- `traefik-config.yml` - Traefik route config
+
+**Next Steps to Deploy**:
+1. Provision LXC via Terraform
+2. Run Ansible deployment playbook
+3. Configure Authentik application
+4. Add Traefik route
+5. Seed database with historical events
+
+---
+
+### Power Management Configuration for Node03
+**Status**: Completed
+**Request**: Configure power-saving settings for node03 (Ryzen 9 5900XT desktop) to reduce idle power consumption
+
+**Changes Made**:
+
+1. **CPU Power Management**:
+   - Set CPU governor from `performance` to `powersave`
+   - AMD P-State driver (`amd-pstate-epp`) was already active
+   - Updated GRUB: `amd_pstate=active processor.max_cstate=9`
+
+2. **Installed Power Tools**:
+   - Installed `powertop` for power monitoring and auto-tuning
+   - Created systemd service for powertop auto-tune at boot
+
+3. **Created Persistent Power-Save Script**:
+   - `/usr/local/bin/power-save.sh` - Applies all power optimizations
+   - `/etc/systemd/system/power-save.service` - Runs at boot
+   - Settings: CPU governor, SATA link power management, PCIe ASPM, NVMe power tolerance
+
+4. **Storage Power Management**:
+   - SATA: `med_power_with_dipm` policy
+   - HDD: 20-minute spindown via `/etc/hdparm.conf`
+
+5. **Documentation Updated**:
+   - `docs/PROXMOX.md` - Added Node03 Hardware section and Power Management section
+   - `.claude/context.md` - Added Node03 power management summary
+   - `CHANGELOG.md` - Added entry for January 11, 2026
+
+**Expected Results**:
+- Idle power: ~40-60W (down from ~100-150W)
+- GRUB changes require reboot to fully apply (skipped due to running VMs)
+
+**Running VMs on node03** (not rebooted):
+- gitlab-vm01 (106)
+- immich-vm01 (108)
+- linux-syslog-server01 (109)
+
+---
+
 ## 2026-01-08
 
 ### 01:30 - Technical Manual V2 Expansion (Major Update)

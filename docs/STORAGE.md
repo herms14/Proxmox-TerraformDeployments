@@ -209,6 +209,76 @@ SNMP must be enabled on the NAS (Control Panel → Terminal & SNMP → SNMP):
 
 See [Observability](./OBSERVABILITY.md#synology-nas-monitoring) for full setup details.
 
+## Proxmox Backup Server (PBS)
+
+**Address**: 192.168.20.50 (LXC 100 on node03)
+**Web UI**: https://192.168.20.50:8007
+**External URL**: https://pbs.hrmsmrflrii.xyz (via Traefik)
+
+PBS provides enterprise-grade backup storage with deduplication for the Proxmox cluster.
+
+### Datastores
+
+| Datastore | Storage | Size | Purpose | Mount Path |
+|-----------|---------|------|---------|------------|
+| `main` | Seagate 4TB HDD (ST4000VN006) | 3.4TB | Weekly/monthly backups, long retention | /backup |
+| `daily` | Kingston 1TB NVMe (SNV3S1000G) | 870GB | Daily backups, fast restores | /backup-ssd |
+
+### Backup Strategy
+
+| Storage | Schedule | VMs | Retention |
+|---------|----------|-----|-----------|
+| `pbs-daily` (SSD) | Daily 2AM | Critical VMs (Traefik, Authentik, Glance, Grafana) | 7 daily |
+| `pbs-main` (HDD) | Weekly Sun 3AM | All VMs | 4 weekly, 2 monthly |
+
+### PBS Architecture
+
+```
+node03 (host)
+├── /mnt/pbs-backup (4TB HDD)
+│   └── /datastore → LXC mount at /backup
+└── /mnt/pbs-ssd (1TB NVMe)
+    └── /datastore → LXC mount at /backup-ssd
+
+PBS LXC (100)
+├── /backup → main datastore
+└── /backup-ssd → daily datastore
+```
+
+### Proxmox Storage Configuration
+
+Add both PBS storages in Datacenter → Storage → Add → Proxmox Backup Server:
+
+| Setting | pbs-main | pbs-daily |
+|---------|----------|-----------|
+| ID | pbs-main | pbs-daily |
+| Server | 192.168.20.50 | 192.168.20.50 |
+| Datastore | main | daily |
+| Username | backup@pbs!pve | backup@pbs!pve |
+| Content | backup | backup |
+
+### PBS Credentials
+
+| Access | Value |
+|--------|-------|
+| Web UI | https://192.168.20.50:8007 |
+| External | https://pbs.hrmsmrflrii.xyz |
+| Username | `root` (select "Linux PAM" realm) |
+| Password | See Obsidian Credentials |
+| API Token | backup@pbs!pve |
+| Fingerprint | 32:27:42:d5:ab:7e:41:ef:80:17:ea:30:b8:43:9a:f3:59:af:60:f5:6b:05:ea:1f:28:30:ff:7f:19:b6:d4:55 |
+
+> **Login Note**: Enter `root` in username field (not `root@pam`). The realm dropdown adds `@pam` automatically.
+
+### Remove Subscription Nag
+
+```bash
+pct exec 100 -- perl -i.bak -pe \
+  's/res.status.toLowerCase\(\) !== .active./false/g' \
+  /usr/share/javascript/proxmox-widget-toolkit/proxmoxlib.js
+pct exec 100 -- systemctl restart proxmox-backup-proxy
+```
+
 ## Related Documentation
 
 - [Proxmox](./PROXMOX.md) - Cluster configuration

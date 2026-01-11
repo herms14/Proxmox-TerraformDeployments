@@ -83,7 +83,31 @@ When adding issues to [docs/TROUBLESHOOTING.md](../docs/TROUBLESHOOTING.md):
 
 ## Documentation Sync Guide
 
-Documentation is maintained in **three locations**:
+**IMPORTANT: When the user says "update all documentation" or "update all docs", you MUST update ALL of the following locations:**
+
+### Required Documentation Locations (ALL must be updated)
+
+| Location | Path | Purpose |
+|----------|------|---------|
+| **docs/** | `docs/*.md` | Git-tracked technical reference |
+| **GitHub Wiki** | `Proxmox-TerraformDeployments.wiki/*.md` | Public beginner-friendly wiki |
+| **Obsidian Vault** | `C:\Users\herms14\OneDrive\Obsidian Vault\Hermes's Life Knowledge Base\07 HomeLab Things\Claude Managed Homelab\` | Personal notes with credentials |
+| **Technical Manual** | `38 - Homelab Technical Manual.md` in Obsidian Vault | Comprehensive reference manual (Version 2.x) |
+| **.claude/context.md** | `.claude/context.md` | Infrastructure context for Claude sessions |
+| **CHANGELOG.md** | `CHANGELOG.md` | Change history |
+
+### Full Documentation Update Checklist
+
+When updating documentation, check ALL of these:
+
+1. **docs/** - Update relevant technical documentation files
+2. **Proxmox-TerraformDeployments.wiki/** - Update corresponding wiki pages
+3. **Obsidian Vault** - Update corresponding Obsidian notes
+4. **Technical Manual** - Update `38 - Homelab Technical Manual.md` (increment version in Document History)
+5. **.claude/context.md** - Update infrastructure context if relevant
+6. **CHANGELOG.md** - Add entry for significant changes
+
+### Documentation Maintained in Three Primary Locations
 
 | Location | Purpose | Format |
 |----------|---------|--------|
@@ -112,6 +136,7 @@ C:\Users\herms\OneDrive\Obsidian Vault\Hermes's Life Knowledge Base\07 HomeLab T
 | WATCHTOWER.md | Watchtower.md | 19 - Watchtower Updates.md |
 | CICD.md | GitLab-CICD.md | 20 - GitLab CI-CD Automation.md |
 | SERVICE_ONBOARDING.md | Service-Onboarding.md | 22 - Service Onboarding Workflow.md |
+| PBS_MONITORING.md | PBS-Monitoring.md | 23 - PBS Monitoring.md |
 | TROUBLESHOOTING.md | Troubleshooting.md | 12 - Troubleshooting.md |
 
 ### Documentation Content Requirements
