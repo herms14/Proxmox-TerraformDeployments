@@ -45,6 +45,11 @@ CREDENTIALS.md
 **/*.secret
 **/*.key
 
+# Obsidian sync - exclude credentials and sensitive docs
+obsidian-homelab/*Credentials*
+obsidian-homelab/*Technical Manual*
+obsidian-homelab/tmpclaude-*
+
 # Sensitive network configuration
 docs/legacy/2026-Omada-Network-Configuration.md
 
