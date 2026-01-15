@@ -1,0 +1,147 @@
+# =============================================================================
+# Install Microsoft Entra Connect on AADCON01
+# =============================================================================
+# This playbook installs and configures Entra ID Connect (formerly Azure AD Connect)
+#
+# Prerequisites:
+#   - AADCON01 must be domain joined
+#   - Azure AD Global Admin credentials
+#   - Domain Admin credentials
+#
+# Usage:
+#   ansible-playbook -i inventory.yml install-adconnect.yml
+# =============================================================================
+
+---
+- name: Install Entra ID Connect
+  hosts: identity_servers
+  gather_facts: yes
+  vars:
+    domain_name: hrmsmrflrii.xyz
+    domain_netbios: HRMSMRFLRII
+    aadconnect_download_url: "https://download.microsoft.com/download/B/0/0/B00291D0-5A83-4DE7-86F5-980BC00DE05A/AzureADConnect.msi"
+    aadconnect_install_path: "C:\\Program Files\\Microsoft Azure AD Sync"
+    temp_download_path: "C:\\Temp"
+
+  tasks:
+    - name: Create temp directory
+      win_file:
+        path: "{{ temp_download_path }}"
+        state: directory
+
+    - name: Check if Entra Connect is already installed
+      win_shell: |
+        $service = Get-Service -Name 'ADSync' -ErrorAction SilentlyContinue
+        if ($service) {
+          Write-Output "installed"
+        } else {
+          Write-Output "not_installed"
+        }
+      register: aadconnect_check
+      changed_when: false
+
+    - name: Download Entra Connect installer
+      win_get_url:
+        url: "{{ aadconnect_download_url }}"
+        dest: "{{ temp_download_path }}\\AzureADConnect.msi"
+      when: "'not_installed' in aadconnect_check.stdout"
+
+    - name: Install required Windows features
+      win_feature:
+        name:
+          - NET-Framework-45-Features
+          - RSAT-AD-Tools
+          - RSAT-AD-PowerShell
+        state: present
+      register: feature_install
+
+    - name: Reboot if features require restart
+      win_reboot:
+        reboot_timeout: 600
+      when: feature_install.reboot_required
+
+    - name: Install Entra Connect
+      win_package:
+        path: "{{ temp_download_path }}\\AzureADConnect.msi"
+        state: present
+        arguments: /quiet /passive
+      when: "'not_installed' in aadconnect_check.stdout"
+      register: aadconnect_install
+      async: 1800
+      poll: 60
+
+    - name: Wait for ADSync service to be available
+      win_shell: |
+        $timeout = 300
+        $start = Get-Date
+        while ((Get-Date) -lt $start.AddSeconds($timeout)) {
+          $service = Get-Service -Name 'ADSync' -ErrorAction SilentlyContinue
+          if ($service) {
+            Write-Output "ADSync service found"
+            exit 0
+          }
+          Start-Sleep -Seconds 10
+        }
+        Write-Output "ADSync service not found after timeout"
+        exit 1
+      when: aadconnect_install is changed
+      register: adsync_wait
+
+    - name: Configure Windows Firewall for Entra Connect
+      win_firewall_rule:
+        name: "{{ item.name }}"
+        localport: "{{ item.port }}"
+        action: allow
+        direction: out
+        protocol: tcp
+        state: present
+        enabled: yes
+      loop:
+        - { name: "Entra Connect - HTTPS", port: 443 }
+        - { name: "Entra Connect - HTTP (CRL)", port: 80 }
+
+    - name: Display installation status
+      debug:
+        msg: |
+          Entra Connect Installation Complete
+          ====================================
+          Server: {{ inventory_hostname }}
+          Install Path: {{ aadconnect_install_path }}
+
+          NEXT STEPS (Manual Configuration Required):
+          1. Log in to {{ inventory_hostname }} as a Domain Admin
+          2. Run the Azure AD Connect wizard from the desktop
+          3. Sign in with Azure AD Global Admin credentials
+          4. Choose "Password Hash Sync" or "Pass-through Authentication"
+          5. Select the OUs to sync
+          6. Complete the wizard and verify sync status
+
+    - name: Create configuration reminder file
+      win_copy:
+        content: |
+          Entra ID Connect Post-Installation Steps
+          =========================================
+
+          Installation Date: {{ ansible_date_time.iso8601 }}
+          Server: {{ inventory_hostname }}
+          Domain: {{ domain_name }}
+
+          Configuration Checklist:
+          [ ] Run Azure AD Connect wizard
+          [ ] Sign in with Azure AD Global Admin
+          [ ] Configure sync method (Password Hash Sync recommended)
+          [ ] Select OUs for synchronization
+          [ ] Enable Password Writeback (optional)
+          [ ] Configure Seamless SSO (optional)
+          [ ] Verify initial sync completes successfully
+          [ ] Set up sync schedule monitoring
+
+          Useful Commands:
+          - Start sync: Start-ADSyncSyncCycle -PolicyType Delta
+          - Full sync: Start-ADSyncSyncCycle -PolicyType Initial
+          - Check status: Get-ADSyncScheduler
+          - View connectors: Get-ADSyncConnector
+
+          Azure Portal:
+          - Entra ID Connect Health: https://portal.azure.com/#blade/Microsoft_AAD_IAM/ActiveDirectoryMenuBlade/AzureADConnect
+        dest: C:\EntraConnect_PostInstall_Steps.txt

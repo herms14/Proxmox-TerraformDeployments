@@ -1,0 +1,190 @@
+---
+# ==============================================================================
+# Fix On-Prem Windows VM Internet Connectivity
+# ==============================================================================
+# Configures network settings on Proxmox-hosted Windows VMs in VLAN 80
+# to ensure internet connectivity for Sentinel integration.
+#
+# This playbook will:
+#   - Configure default gateway (192.168.80.1)
+#   - Set DNS to Pi-hole (192.168.90.53) + fallback (8.8.8.8)
+#   - Enable necessary firewall rules
+#   - Verify connectivity
+#
+# Usage:
+#   ansible-playbook fix-onprem-windows-internet.yml -i inventory-onprem-windows.yml
+#
+# ==============================================================================
+
+- name: Fix On-Prem Windows VM Internet Connectivity
+  hosts: onprem_windows
+  gather_facts: false
+
+  vars:
+    # Network configuration for VLAN 80
+    gateway: "192.168.80.1"
+    primary_dns: "192.168.90.53"      # Pi-hole
+    secondary_dns: "8.8.8.8"          # Google DNS fallback
+    subnet_prefix: 24
+
+  tasks:
+    # -------------------------------------------------------------------------
+    # Pre-check: Get Current Configuration
+    # -------------------------------------------------------------------------
+    - name: Get current network configuration
+      win_shell: |
+        $adapters = Get-NetAdapter | Where-Object { $_.Status -eq 'Up' }
+        foreach ($adapter in $adapters) {
+            $ip = Get-NetIPConfiguration -InterfaceIndex $adapter.ifIndex
+            [PSCustomObject]@{
+                Name = $adapter.Name
+                Index = $adapter.ifIndex
+                IP = $ip.IPv4Address.IPAddress
+                Gateway = $ip.IPv4DefaultGateway.NextHop
+                DNS = ($ip.DNSServer.ServerAddresses -join ",")
+            }
+        } | ConvertTo-Json
+      register: current_config
+
+    - name: Display current configuration
+      debug:
+        msg: "Current config: {{ current_config.stdout }}"
+
+    # -------------------------------------------------------------------------
+    # Step 1: Configure Default Gateway
+    # -------------------------------------------------------------------------
+    - name: Check if gateway is configured
+      win_shell: |
+        $gateway = (Get-NetIPConfiguration | Where-Object { $_.IPv4DefaultGateway }).IPv4DefaultGateway.NextHop
+        if ($gateway -eq "{{ gateway }}") { "GATEWAY_OK" }
+        elseif ($gateway) { "GATEWAY_WRONG: $gateway" }
+        else { "NO_GATEWAY" }
+      register: gateway_check
+
+    - name: Add default gateway if missing
+      win_shell: |
+        $adapter = Get-NetAdapter | Where-Object { $_.Status -eq 'Up' } | Select-Object -First 1
+        # Remove existing gateway if wrong
+        Get-NetRoute -InterfaceIndex $adapter.ifIndex -DestinationPrefix "0.0.0.0/0" -ErrorAction SilentlyContinue | Remove-NetRoute -Confirm:$false
+        # Add correct gateway
+        New-NetRoute -InterfaceIndex $adapter.ifIndex -DestinationPrefix "0.0.0.0/0" -NextHop "{{ gateway }}"
+        Write-Output "Gateway configured: {{ gateway }}"
+      when: "'GATEWAY_OK' not in gateway_check.stdout"
+      register: gateway_result
+
+    # -------------------------------------------------------------------------
+    # Step 2: Configure DNS Servers
+    # -------------------------------------------------------------------------
+    - name: Configure DNS servers
+      win_shell: |
+        $adapter = Get-NetAdapter | Where-Object { $_.Status -eq 'Up' } | Select-Object -First 1
+        Set-DnsClientServerAddress -InterfaceIndex $adapter.ifIndex -ServerAddresses @("{{ primary_dns }}", "{{ secondary_dns }}")
+        Write-Output "DNS configured: {{ primary_dns }}, {{ secondary_dns }}"
+      register: dns_result
+
+    # -------------------------------------------------------------------------
+    # Step 3: Configure Windows Firewall
+    # -------------------------------------------------------------------------
+    - name: Enable ICMP (ping) for diagnostics
+      win_shell: |
+        # Enable ICMPv4 Echo Request (ping)
+        $rule = Get-NetFirewallRule -Name "CoreNet-Diag-ICMP4-EchoRequest-In" -ErrorAction SilentlyContinue
+        if ($rule) {
+            Enable-NetFirewallRule -Name "CoreNet-Diag-ICMP4-EchoRequest-In"
+            "ICMP_ENABLED"
+        } else {
+            New-NetFirewallRule -Name "Allow-ICMP-In" -DisplayName "Allow ICMP Echo Request" -Protocol ICMPv4 -IcmpType 8 -Direction Inbound -Action Allow
+            "ICMP_CREATED"
+        }
+      register: icmp_result
+
+    - name: Allow outbound HTTP/HTTPS
+      win_shell: |
+        # Ensure outbound HTTPS is allowed (usually is by default)
+        $outbound = Get-NetFirewallProfile | Select-Object Name, DefaultOutboundAction
+        $outbound | ConvertTo-Json
+      register: firewall_outbound
+
+    # -------------------------------------------------------------------------
+    # Step 4: Verify Connectivity
+    # -------------------------------------------------------------------------
+    - name: Test gateway connectivity
+      win_shell: |
+        $result = Test-Connection -ComputerName "{{ gateway }}" -Count 2 -Quiet
+        if ($result) { "GATEWAY_PING_OK" } else { "GATEWAY_PING_FAIL" }
+      register: gateway_ping
+
+    - name: Test internet connectivity
+      win_shell: |
+        $result = Test-Connection -ComputerName "8.8.8.8" -Count 2 -Quiet
+        if ($result) { "INTERNET_PING_OK" } else { "INTERNET_PING_FAIL" }
+      register: internet_ping
+
+    - name: Test DNS resolution
+      win_shell: |
+        try {
+            Resolve-DnsName "www.microsoft.com" -ErrorAction Stop | Out-Null
+            "DNS_OK"
+        } catch {
+            "DNS_FAIL: $_"
+        }
+      register: dns_test
+
+    - name: Test HTTPS connectivity
+      win_shell: |
+        try {
+            $response = Invoke-WebRequest -Uri "https://www.microsoft.com" -UseBasicParsing -TimeoutSec 10 -ErrorAction Stop
+            if ($response.StatusCode -eq 200) { "HTTPS_OK" } else { "HTTPS_FAIL" }
+        } catch {
+            "HTTPS_FAIL: $_"
+        }
+      register: https_test
+      ignore_errors: true
+
+    # -------------------------------------------------------------------------
+    # Results Summary
+    # -------------------------------------------------------------------------
+    - name: Display results
+      debug:
+        msg: |
+          ========================================
+          {{ inventory_hostname }} - Connectivity Results
+          ========================================
+          Gateway Ping:     {{ gateway_ping.stdout | trim }}
+          Internet Ping:    {{ internet_ping.stdout | trim }}
+          DNS Resolution:   {{ dns_test.stdout | trim }}
+          HTTPS Test:       {{ https_test.stdout | default('NOT_RUN') | trim }}
+
+          Changes Made:
+          - Gateway: {{ gateway_result.stdout | default('No change needed') | trim }}
+          - DNS: {{ dns_result.stdout | trim }}
+          - ICMP: {{ icmp_result.stdout | trim }}
+          ========================================
+
+    - name: Set connectivity status fact
+      set_fact:
+        internet_working: "{{ 'HTTPS_OK' in https_test.stdout | default('') }}"
+
+    # -------------------------------------------------------------------------
+    # Troubleshooting if Still Failing
+    # -------------------------------------------------------------------------
+    - name: Display troubleshooting steps if still failing
+      debug:
+        msg: |
+          ========================================
+          TROUBLESHOOTING REQUIRED FOR {{ inventory_hostname }}
+          ========================================
+          Internet connectivity still not working.
+
+          Check the following on OPNsense firewall (192.168.91.30):
+          1. VLAN 80 interface is UP and has correct IP (192.168.80.1)
+          2. Firewall rules allow VLAN 80 → Internet (WAN)
+          3. NAT/Outbound rules include VLAN 80
+          4. Check for any blocking rules
+
+          Manual Test from VM:
+          - tracert 8.8.8.8
+          - nslookup www.microsoft.com
+          - Test-NetConnection -ComputerName 192.168.80.1 -Port 80
+          ========================================
+      when: "'HTTPS_OK' not in https_test.stdout | default('')"

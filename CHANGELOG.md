@@ -7,6 +7,38 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Documentation - Complete Homelab Guide Book Expansion (January 13, 2026)
+- **Added Part VIII: Cloud Integration** with 4 new chapters to the Complete Homelab Guide book
+- **Chapter 24: Azure Cloud Environment** - Deployment VM setup, Sentinel SIEM, KQL queries, Terraform workflow
+- **Chapter 25: Azure Hybrid Lab (Active Directory)** - 4 Domain Controllers, Enterprise Tiering Model, OU structure
+- **Chapter 26: Backup and Disaster Recovery** - PBS configuration, 3-2-1 backup strategy, SMART monitoring, DR procedures
+- **Chapter 27: Glance Dashboard** - Dashboard architecture, custom APIs, embedded Grafana dashboards, deployment
+- **Updated Chapter 5** - Added Network Segmentation with ACLs section (62 Gateway ACL rules)
+- **Updated Chapter 17** - Replaced old bots (Argus, Chronos, Mnemosyne) with consolidated Sentinel Bot
+- **Updated Table of Contents** - Now shows 27 chapters across 8 parts + 3 appendices
+- **Updated CLAUDE.md** - Added Book/Manual sync requirement (7 locations for documentation updates)
+- **Book expanded** from ~3,400 to ~4,200+ lines
+- **File**: `Obsidian Vault/.../Book - The Complete Homelab Guide.md`
+
+### Documentation - Network ACL Implementation Guide (January 13, 2026)
+- **Created comprehensive Omada ACL Implementation Guide** in Obsidian vault (`41 - Omada ACL Implementation Guide.md`)
+- **62 Gateway ACL rules** for inter-VLAN traffic segmentation:
+  - DNS Access (Rules 1-2): Allow all VLANs to reach Pi-hole and OPNsense
+  - Guest Isolation (Rules 3-9): Block Guest VLAN from all internal networks
+  - IoT Isolation (Rules 10-14): Block IoT devices from trusted networks
+  - Management PC Full Access (Rules 15-18): Unrestricted access for Kratos (192.168.10.10)
+  - Internal Workstations (Rules 19-28): Limited access via Traefik for other VLAN 10 devices
+  - Infrastructure (Rules 29-39): Proxmox cluster, K8s, Ansible communication
+  - Services Dependencies (Rules 40-48): NFS, Prometheus scraping, Sentinel SSH
+  - Traefik Backend (Rules 49-56): Reverse proxy access to all services
+  - Sonos (Rules 57-60): Speaker control and NAS music access
+  - Default Deny (Rules 61-62): Catch-all blocks with logging
+- **17 IP Groups** for logical host grouping (PROXMOX_NODES, K8S_CONTROLLERS, TRAEFIK, etc.)
+- **Complete testing procedures** for validating each rule set
+- **ACL type explanations** (Gateway ACL vs Switch ACL vs EAP ACL)
+- **Updated Technical Manual** (v5.5) with Network Segmentation section
+- **Updated docs/NETWORKING.md** with ACL summary and rule processing order
+
 ### Documentation - Technical Manual V4.1 Comprehensive Expansion (January 13, 2026)
 - **Expanded Obsidian Technical Manual** from ~2,090 to ~3,372 lines with comprehensive service documentation
 - **Added Arr Media Stack section** (~350 lines):

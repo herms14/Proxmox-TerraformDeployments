@@ -1,0 +1,210 @@
+---
+# Configure DNS Resolution for Hybrid AD Environment
+#
+# DNS Strategy:
+#   - On-Prem VMs: Use on-prem DCs (192.168.80.2, 192.168.80.3)
+#   - Azure VMs: Use Azure DCs (10.10.4.4, 10.10.4.5)
+#   - AZRODC01: Use on-prem DCs (for cross-site replication)
+#
+# Run with:
+#   ansible-playbook -i inventory-hybrid.yml configure-dns.yml
+
+- name: "Phase 1: Configure DNS on On-Prem Domain Controllers"
+  hosts: onprem_dcs
+  gather_facts: no
+  tasks:
+    - name: Configure DNS client on DC01 (uses itself)
+      win_dns_client:
+        adapter_names: '*'
+        dns_servers:
+          - 127.0.0.1
+          - 192.168.80.3
+      when: inventory_hostname == "DC01"
+
+    - name: Configure DNS client on DC02 (uses DC01 first)
+      win_dns_client:
+        adapter_names: '*'
+        dns_servers:
+          - 192.168.80.2
+          - 127.0.0.1
+      when: inventory_hostname == "DC02"
+
+    - name: Configure DNS forwarders on on-prem DCs
+      win_shell: |
+        # Set forwarders to external DNS (Google and Cloudflare)
+        Set-DnsServerForwarder -IPAddress 8.8.8.8,8.8.4.4,1.1.1.1 -PassThru
+
+        Write-Output "=== DNS Forwarders Configured ==="
+        Get-DnsServerForwarder | Format-Table -AutoSize | Out-String
+      register: dns_forwarders
+
+    - name: Display DNS forwarder configuration
+      debug:
+        var: dns_forwarders.stdout_lines
+
+- name: "Phase 2: Configure Conditional Forwarders for Azure"
+  hosts: onprem_dcs
+  gather_facts: no
+  tasks:
+    - name: Add conditional forwarder for Azure internal zones (if needed)
+      win_shell: |
+        # Check if conditional forwarder for Azure DNS exists
+        $cfName = "azure.local"
+        $cf = Get-DnsServerZone -Name $cfName -ErrorAction SilentlyContinue
+
+        if (-not $cf) {
+          # Create conditional forwarder for any Azure-specific zones
+          # In this case, we don't need one since same domain is used
+          Write-Output "SKIP: No Azure-specific conditional forwarders needed"
+          Write-Output "Both sites use hrmsmrflrii.xyz domain - AD-integrated DNS handles replication"
+        } else {
+          Write-Output "EXISTS: Conditional forwarder already configured"
+        }
+      register: conditional_forwarder
+      changed_when: false
+
+    - name: Display conditional forwarder status
+      debug:
+        var: conditional_forwarder.stdout_lines
+
+- name: "Phase 3: Configure DNS on Azure DCs"
+  hosts: azure_dcs
+  gather_facts: no
+  tasks:
+    - name: Configure DNS on AZDC01 (primary Azure DC)
+      win_dns_client:
+        adapter_names: '*'
+        dns_servers:
+          - 127.0.0.1
+          - 10.10.4.5
+      when: inventory_hostname == "AZDC01"
+
+    - name: Configure DNS on AZDC02
+      win_dns_client:
+        adapter_names: '*'
+        dns_servers:
+          - 10.10.4.4
+          - 127.0.0.1
+      when: inventory_hostname == "AZDC02"
+
+    - name: Configure DNS on AZRODC01 (points to on-prem for cross-site replication)
+      win_dns_client:
+        adapter_names: '*'
+        dns_servers:
+          - 192.168.80.2
+          - 192.168.80.3
+      when: inventory_hostname == "AZRODC01"
+
+    - name: Configure DNS on AZRODC02
+      win_dns_client:
+        adapter_names: '*'
+        dns_servers:
+          - 10.10.4.4
+          - 10.10.4.5
+      when: inventory_hostname == "AZRODC02"
+
+- name: "Phase 4: Configure DNS on On-Prem Member Servers"
+  hosts: domain_join_targets
+  gather_facts: no
+  tasks:
+    - name: Configure DNS to use on-prem DCs
+      win_dns_client:
+        adapter_names: '*'
+        dns_servers:
+          - 192.168.80.2
+          - 192.168.80.3
+
+- name: "Phase 5: Verify DNS Resolution"
+  hosts: all_onprem
+  gather_facts: no
+  tasks:
+    - name: Test domain resolution
+      win_shell: |
+        Write-Output "=== DNS Resolution Test for {{ inventory_hostname }} ==="
+        Write-Output ""
+        Write-Output "DNS Servers:"
+        Get-DnsClientServerAddress -AddressFamily IPv4 |
+        Where-Object { $_.ServerAddresses } |
+        Select-Object InterfaceAlias, ServerAddresses |
+        Format-Table -AutoSize | Out-String
+
+        Write-Output "Domain Resolution:"
+        Resolve-DnsName -Name "hrmsmrflrii.xyz" -Type A -ErrorAction SilentlyContinue |
+        Format-Table -AutoSize | Out-String
+
+        Write-Output "DC SRV Records:"
+        Resolve-DnsName -Name "_ldap._tcp.dc._msdcs.hrmsmrflrii.xyz" -Type SRV -ErrorAction SilentlyContinue |
+        Select-Object -First 4 |
+        Format-Table -AutoSize | Out-String
+      register: dns_test
+      changed_when: false
+
+    - name: Display DNS test results
+      debug:
+        var: dns_test.stdout_lines
+
+- name: "Phase 6: Verify Cross-Site DNS"
+  hosts: onprem_primary_dc
+  gather_facts: no
+  tasks:
+    - name: Test resolution of Azure DCs from on-prem
+      win_shell: |
+        Write-Output "=== Cross-Site DNS Test ==="
+        Write-Output ""
+        Write-Output "Resolving Azure DCs:"
+        @("AZDC01", "AZDC02", "AZRODC01", "AZRODC02") | ForEach-Object {
+          $result = Resolve-DnsName -Name "$_.hrmsmrflrii.xyz" -ErrorAction SilentlyContinue
+          if ($result) {
+            Write-Output "  $_ : $($result.IPAddress)"
+          } else {
+            Write-Output "  $_ : NOT RESOLVED"
+          }
+        }
+
+        Write-Output ""
+        Write-Output "Resolving On-Prem DCs:"
+        @("DC01", "DC02") | ForEach-Object {
+          $result = Resolve-DnsName -Name "$_.hrmsmrflrii.xyz" -ErrorAction SilentlyContinue
+          if ($result) {
+            Write-Output "  $_ : $($result.IPAddress)"
+          } else {
+            Write-Output "  $_ : NOT RESOLVED"
+          }
+        }
+      register: cross_site_dns
+      changed_when: false
+
+    - name: Display cross-site DNS results
+      debug:
+        var: cross_site_dns.stdout_lines
+
+- name: "Phase 7: Verify Site-Specific DC Locator"
+  hosts: onprem_primary_dc
+  gather_facts: no
+  tasks:
+    - name: Test site-aware DC discovery
+      win_shell: |
+        Write-Output "=== Site-Aware DC Discovery ==="
+        Write-Output ""
+        Write-Output "OnPrem-Site DCs:"
+        Resolve-DnsName -Name "_ldap._tcp.OnPrem-Site._sites.dc._msdcs.hrmsmrflrii.xyz" -Type SRV -ErrorAction SilentlyContinue |
+        Format-Table -AutoSize | Out-String
+
+        Write-Output "Azure-Site DCs:"
+        Resolve-DnsName -Name "_ldap._tcp.Azure-Site._sites.dc._msdcs.hrmsmrflrii.xyz" -Type SRV -ErrorAction SilentlyContinue |
+        Format-Table -AutoSize | Out-String
+      register: site_aware_dns
+      changed_when: false
+
+    - name: Display site-aware DNS results
+      debug:
+        var: site_aware_dns.stdout_lines
+
+    - name: Summary
+      debug:
+        msg: |
+          DNS Configuration Complete!
+
+          On-Prem VMs → DC01 (192.168.80.2), DC02 (192.168.80.3)
+          Azure VMs → AZDC01 (10.10.4.4), AZDC02 (10.10.4.5)
+          AZRODC01 → DC01, DC02 (cross-site replication)

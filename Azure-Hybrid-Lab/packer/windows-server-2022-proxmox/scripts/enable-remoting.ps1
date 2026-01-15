@@ -10,9 +10,24 @@ Write-Host "========================================" -ForegroundColor Cyan
 Write-Host "Enabling PowerShell Remoting..." -ForegroundColor Cyan
 Write-Host "========================================" -ForegroundColor Cyan
 
-# Enable PowerShell Remoting
-Write-Host "Enabling PS Remoting..." -ForegroundColor Yellow
-Enable-PSRemoting -Force -SkipNetworkProfileCheck
+# Check if PS Remoting is already enabled (avoid restarting WinRM if already configured)
+$remotingEnabled = $false
+try {
+    $winrmService = Get-Service WinRM -ErrorAction Stop
+    $listener = Get-WSManInstance -ResourceURI winrm/config/listener -SelectorSet @{Address="*";Transport="HTTP"} -ErrorAction SilentlyContinue
+    if ($winrmService.Status -eq 'Running' -and $listener) {
+        $remotingEnabled = $true
+        Write-Host "PS Remoting is already enabled, skipping Enable-PSRemoting to avoid connection drop" -ForegroundColor Green
+    }
+} catch {
+    Write-Host "WinRM not configured, will enable..." -ForegroundColor Yellow
+}
+
+# Enable PowerShell Remoting (only if not already enabled)
+if (-not $remotingEnabled) {
+    Write-Host "Enabling PS Remoting..." -ForegroundColor Yellow
+    Enable-PSRemoting -Force -SkipNetworkProfileCheck
+}
 
 # Configure TrustedHosts to allow all hosts (for lab environment)
 Write-Host "Configuring TrustedHosts..." -ForegroundColor Yellow
@@ -26,9 +41,13 @@ try {
     Write-Host "Execution policy note: $($_.Exception.Message)" -ForegroundColor Yellow
 }
 
-# Configure PSSessionConfiguration for remoting
-Write-Host "Configuring PSSessionConfiguration..." -ForegroundColor Yellow
-Set-PSSessionConfiguration -Name Microsoft.PowerShell -ShowSecurityDescriptorUI:$false -Force
+# Configure PSSessionConfiguration for remoting (skip if already running to avoid restart)
+if (-not $remotingEnabled) {
+    Write-Host "Configuring PSSessionConfiguration..." -ForegroundColor Yellow
+    Set-PSSessionConfiguration -Name Microsoft.PowerShell -ShowSecurityDescriptorUI:$false -Force
+} else {
+    Write-Host "Skipping PSSessionConfiguration (already configured)" -ForegroundColor Green
+}
 
 # Enable CredSSP for double-hop authentication (useful for domain environments)
 Write-Host "Enabling CredSSP Server..." -ForegroundColor Yellow
@@ -43,9 +62,9 @@ Set-Item WSMan:\localhost\Shell\MaxMemoryPerShellMB 1024
 # Set MaxConcurrentOperationsPerUser
 Set-Item WSMan:\localhost\Service\MaxConcurrentOperationsPerUser 4294967295
 
-# Restart WinRM to apply all changes
-Write-Host "Restarting WinRM..." -ForegroundColor Yellow
-Restart-Service WinRM
+# Note: Not restarting WinRM here to avoid breaking Packer connection
+# WinRM will pick up changes on next connection
+Write-Host "WinRM configuration updated (no restart needed)" -ForegroundColor Yellow
 
 # Test local PSSession
 Write-Host "Testing local PSSession..." -ForegroundColor Yellow

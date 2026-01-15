@@ -228,16 +228,18 @@ source "proxmox-iso" "ws2022" {
       "${path.root}/autounattend.xml",
       "${path.root}/scripts/setup-winrm.ps1",
       "${path.root}/scripts/enable-remoting.ps1",
-      "${path.root}/scripts/install-virtio.ps1"
+      "${path.root}/scripts/install-virtio.ps1",
+      "${path.root}/sysprep-unattend.xml"
     ]
     cd_label         = "OEMDRV"
     iso_storage_pool = var.proxmox_iso_storage
     unmount          = true
   }
 
-  # Boot Configuration (wait for Windows installer to read autounattend)
-  boot_wait    = "2s"
-  boot_command = ["<spacebar>"]  # Press any key to boot from CD
+  # Boot Configuration
+  boot         = "order=ide2"  # Boot from CD first (Windows ISO)
+  boot_wait    = "3s"
+  boot_command = ["<spacebar><spacebar><spacebar>"]  # Press any key to boot from CD
 
   # WinRM Communicator
   communicator   = "winrm"
@@ -338,17 +340,45 @@ build {
       # Enable ICMP (ping)
       "New-NetFirewallRule -DisplayName 'ICMPv4' -Protocol ICMPv4 -IcmpType 8 -Direction Inbound -Action Allow -ErrorAction SilentlyContinue",
 
-      # Clear temp files
-      "Remove-Item -Path $env:TEMP\\* -Recurse -Force -ErrorAction SilentlyContinue",
+      # Clear temp files (skip user temp to avoid breaking WinRM)
       "Remove-Item -Path C:\\Windows\\Temp\\* -Recurse -Force -ErrorAction SilentlyContinue"
     ]
   }
 
-  # Generalize with Sysprep for cloning
+  # Copy sysprep unattend file for post-clone OOBE automation
   provisioner "powershell" {
     inline = [
-      "Write-Host 'Running Sysprep...'",
-      "& $env:SystemRoot\\System32\\Sysprep\\Sysprep.exe /generalize /oobe /shutdown /quiet"
+      "Write-Host 'Copying sysprep unattend file for post-clone automation...'",
+      "# Find the OEMDRV drive (CD with our files)",
+      "$oem = Get-Volume | Where-Object { $_.FileSystemLabel -eq 'OEMDRV' } | Select-Object -First 1",
+      "if ($oem) {",
+      "    $driveLetter = $oem.DriveLetter + ':'",
+      "    $unattendSrc = Join-Path $driveLetter 'sysprep-unattend.xml'",
+      "    $unattendDst = 'C:\\Windows\\System32\\Sysprep\\unattend.xml'",
+      "    if (Test-Path $unattendSrc) {",
+      "        Copy-Item -Path $unattendSrc -Destination $unattendDst -Force",
+      "        Write-Host \"Copied sysprep unattend file to $unattendDst\"",
+      "    } else {",
+      "        Write-Host \"WARNING: sysprep-unattend.xml not found on OEMDRV drive at $unattendSrc\"",
+      "    }",
+      "} else {",
+      "    Write-Host 'WARNING: OEMDRV drive not found'",
+      "}"
+    ]
+  }
+
+  # Generalize with Sysprep for cloning (with unattend file for OOBE automation)
+  provisioner "powershell" {
+    inline = [
+      "Write-Host 'Running Sysprep with unattend file...'",
+      "$unattendPath = 'C:\\Windows\\System32\\Sysprep\\unattend.xml'",
+      "if (Test-Path $unattendPath) {",
+      "    Write-Host \"Using unattend file: $unattendPath\"",
+      "    & $env:SystemRoot\\System32\\Sysprep\\Sysprep.exe /generalize /oobe /shutdown /quiet /unattend:$unattendPath",
+      "} else {",
+      "    Write-Host 'WARNING: Unattend file not found, running sysprep without it (VMs will show OOBE)'",
+      "    & $env:SystemRoot\\System32\\Sysprep\\Sysprep.exe /generalize /oobe /shutdown /quiet",
+      "}"
     ]
   }
 }

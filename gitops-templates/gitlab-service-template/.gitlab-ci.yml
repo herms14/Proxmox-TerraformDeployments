@@ -1,0 +1,501 @@
+# GitOps Deployment Pipeline for Homelab Services
+# This pipeline automatically deploys services when changes are pushed to main
+#
+# Required CI/CD Variables (Group or Project level):
+#   SSH_PRIVATE_KEY          - SSH key for deployment (file type)
+#   DISCORD_WEBHOOK_URL      - Discord webhook for notifications
+#   OPNSENSE_API_KEY         - OPNsense API key for DNS
+#   OPNSENSE_API_SECRET      - OPNsense API secret for DNS
+#
+# Optional per-service variables:
+#   <SERVICE>_SECRET_NAME    - Service-specific secrets
+
+stages:
+  - validate
+  - deploy
+  - configure
+  - verify
+  - notify
+
+variables:
+  DOMAIN: hrmsmrflrii.xyz
+  # These are parsed from service.yml in the parse job
+  SERVICE_NAME: ""
+  DISPLAY_NAME: ""
+  TARGET_HOST: ""
+  TARGET_IP: ""
+  INSTALL_PATH: ""
+  PORT: ""
+  SUBDOMAIN: ""
+
+# Default settings for all jobs
+default:
+  tags:
+    - homelab
+    - docker
+
+# Only run on main branch pushes or manual triggers
+workflow:
+  rules:
+    - if: $CI_COMMIT_BRANCH == "main"
+    - if: $CI_PIPELINE_SOURCE == "web"
+    - if: $CI_PIPELINE_SOURCE == "trigger"
+
+# ===========================================
+# STAGE: Validate
+# ===========================================
+validate:service-yml:
+  stage: validate
+  image: mikefarah/yq:4
+  script:
+    - echo "Validating service.yml..."
+    - yq eval '.' service.yml > /dev/null
+    - |
+      # Check required fields
+      SERVICE_NAME=$(yq '.service.name' service.yml)
+      TARGET_HOST=$(yq '.deployment.target_host' service.yml)
+      PORT=$(yq '.deployment.port' service.yml)
+
+      if [ "$SERVICE_NAME" = "null" ] || [ -z "$SERVICE_NAME" ]; then
+        echo "ERROR: service.name is required"
+        exit 1
+      fi
+
+      if [ "$TARGET_HOST" = "null" ] || [ -z "$TARGET_HOST" ]; then
+        echo "ERROR: deployment.target_host is required"
+        exit 1
+      fi
+
+      if [ "$PORT" = "null" ] || [ -z "$PORT" ]; then
+        echo "ERROR: deployment.port is required"
+        exit 1
+      fi
+
+      echo "Validation passed!"
+      echo "  Service: $SERVICE_NAME"
+      echo "  Target: $TARGET_HOST"
+      echo "  Port: $PORT"
+  rules:
+    - changes:
+        - service.yml
+        - config/**/*
+
+validate:docker-compose:
+  stage: validate
+  image: docker:24
+  services:
+    - docker:24-dind
+  script:
+    - docker compose -f config/docker-compose.yml config --quiet
+    - echo "Docker Compose validation passed!"
+  rules:
+    - changes:
+        - config/docker-compose.yml
+
+# ===========================================
+# STAGE: Deploy
+# ===========================================
+deploy:container:
+  stage: deploy
+  image: alpine:3.19
+  before_script:
+    - apk add --no-cache openssh-client bash curl python3 py3-pip yq jq
+    - pip3 install pyyaml --break-system-packages
+    # Setup SSH
+    - mkdir -p ~/.ssh
+    - echo "$SSH_PRIVATE_KEY" > ~/.ssh/id_ed25519
+    - chmod 600 ~/.ssh/id_ed25519
+    - ssh-keyscan -H 192.168.40.11 192.168.40.12 192.168.40.13 192.168.40.14 192.168.40.20 192.168.40.21 >> ~/.ssh/known_hosts 2>/dev/null || true
+
+  script:
+    - |
+      # Parse service configuration
+      SERVICE_NAME=$(yq '.service.name' service.yml)
+      DISPLAY_NAME=$(yq '.service.display_name' service.yml)
+      TARGET_HOST=$(yq '.deployment.target_host' service.yml)
+      INSTALL_PATH=$(yq '.deployment.install_path // "/opt/" + .service.name' service.yml)
+      PORT=$(yq '.deployment.port' service.yml)
+      SUBDOMAIN=$(yq '.traefik.subdomain // .service.name' service.yml)
+
+      # Map host to IP and SSH user
+      case "$TARGET_HOST" in
+        docker-lxc-media)
+          TARGET_IP="192.168.40.11"
+          SSH_USER="hermes-admin"
+          ;;
+        docker-lxc-glance)
+          TARGET_IP="192.168.40.12"
+          SSH_USER="root"
+          ;;
+        docker-vm-core-utilities01)
+          TARGET_IP="192.168.40.13"
+          SSH_USER="hermes-admin"
+          ;;
+        docker-lxc-bots)
+          TARGET_IP="192.168.40.14"
+          SSH_USER="root"
+          ;;
+        traefik-lxc)
+          TARGET_IP="192.168.40.20"
+          SSH_USER="root"
+          ;;
+        authentik-lxc)
+          TARGET_IP="192.168.40.21"
+          SSH_USER="root"
+          ;;
+        *)
+          echo "ERROR: Unknown target host: $TARGET_HOST"
+          exit 1
+          ;;
+      esac
+
+      # Determine sudo prefix
+      SUDO=""
+      if [ "$SSH_USER" != "root" ]; then
+        SUDO="sudo"
+      fi
+
+      echo "Deploying $DISPLAY_NAME to $SSH_USER@$TARGET_IP:$INSTALL_PATH"
+
+      # Generate .env file from secrets
+      python3 << PYTHON_SCRIPT
+      import yaml
+      import os
+
+      with open('service.yml') as f:
+          config = yaml.safe_load(f)
+
+      env_vars = config.get('deployment', {}).get('environment', {})
+      secrets = config.get('deployment', {}).get('secrets', [])
+      port = config.get('deployment', {}).get('port', 8080)
+
+      with open('config/.env', 'w') as f:
+          f.write(f"SERVICE_PORT={port}\n")
+          for key, value in env_vars.items():
+              f.write(f"{key}={value}\n")
+          for secret in secrets:
+              source = secret['source']
+              name = secret['name']
+              value = os.environ.get(source, '')
+              if value:
+                  f.write(f"{name}={value}\n")
+      PYTHON_SCRIPT
+
+      # Create directory on target
+      ssh -i ~/.ssh/id_ed25519 ${SSH_USER}@${TARGET_IP} "$SUDO mkdir -p ${INSTALL_PATH}"
+
+      # Backup existing configuration
+      ssh -i ~/.ssh/id_ed25519 ${SSH_USER}@${TARGET_IP} "
+        if [ -f ${INSTALL_PATH}/docker-compose.yml ]; then
+          $SUDO cp ${INSTALL_PATH}/docker-compose.yml ${INSTALL_PATH}/docker-compose.yml.bak
+        fi
+        if [ -f ${INSTALL_PATH}/.env ]; then
+          $SUDO cp ${INSTALL_PATH}/.env ${INSTALL_PATH}/.env.bak
+        fi
+      "
+
+      # Copy files to target
+      scp -i ~/.ssh/id_ed25519 config/docker-compose.yml ${SSH_USER}@${TARGET_IP}:/tmp/${SERVICE_NAME}-compose.yml
+      scp -i ~/.ssh/id_ed25519 config/.env ${SSH_USER}@${TARGET_IP}:/tmp/${SERVICE_NAME}.env
+
+      # Deploy container
+      ssh -i ~/.ssh/id_ed25519 ${SSH_USER}@${TARGET_IP} << REMOTE
+      $SUDO mv /tmp/${SERVICE_NAME}-compose.yml ${INSTALL_PATH}/docker-compose.yml
+      $SUDO mv /tmp/${SERVICE_NAME}.env ${INSTALL_PATH}/.env
+      $SUDO chmod 600 ${INSTALL_PATH}/.env
+      cd ${INSTALL_PATH}
+      $SUDO docker compose pull
+      $SUDO docker compose up -d --remove-orphans
+      $SUDO docker compose ps
+      REMOTE
+
+      # Save variables for subsequent jobs
+      echo "SERVICE_NAME=${SERVICE_NAME}" >> deploy.env
+      echo "DISPLAY_NAME=${DISPLAY_NAME}" >> deploy.env
+      echo "TARGET_IP=${TARGET_IP}" >> deploy.env
+      echo "SSH_USER=${SSH_USER}" >> deploy.env
+      echo "INSTALL_PATH=${INSTALL_PATH}" >> deploy.env
+      echo "PORT=${PORT}" >> deploy.env
+      echo "SUBDOMAIN=${SUBDOMAIN}" >> deploy.env
+
+  artifacts:
+    reports:
+      dotenv: deploy.env
+  rules:
+    - changes:
+        - service.yml
+        - config/**/*
+    - if: $CI_PIPELINE_SOURCE == "web"
+
+# ===========================================
+# STAGE: Configure (Traefik & DNS)
+# ===========================================
+configure:traefik:
+  stage: configure
+  image: alpine:3.19
+  needs:
+    - job: deploy:container
+      artifacts: true
+  before_script:
+    - apk add --no-cache openssh-client bash curl yq
+    - mkdir -p ~/.ssh
+    - echo "$SSH_PRIVATE_KEY" > ~/.ssh/id_ed25519
+    - chmod 600 ~/.ssh/id_ed25519
+    - ssh-keyscan -H 192.168.40.20 >> ~/.ssh/known_hosts 2>/dev/null || true
+
+  script:
+    - |
+      TRAEFIK_ENABLED=$(yq '.traefik.enabled // true' service.yml)
+
+      if [ "$TRAEFIK_ENABLED" != "true" ]; then
+        echo "Traefik routing disabled, skipping..."
+        exit 0
+      fi
+
+      echo "Configuring Traefik route for ${SUBDOMAIN}.${DOMAIN}"
+
+      # Generate Traefik config
+      cat > /tmp/traefik-${SERVICE_NAME}.yml << EOF
+      # Auto-generated by GitLab CI/CD GitOps
+      # Service: ${SERVICE_NAME}
+      # Pipeline: ${CI_PIPELINE_ID}
+      # Generated: $(date -u +%Y-%m-%dT%H:%M:%SZ)
+
+      http:
+        routers:
+          ${SERVICE_NAME}:
+            rule: "Host(\`${SUBDOMAIN}.${DOMAIN}\`)"
+            service: ${SERVICE_NAME}
+            entryPoints:
+              - websecure
+            tls:
+              certResolver: letsencrypt
+
+        services:
+          ${SERVICE_NAME}:
+            loadBalancer:
+              servers:
+                - url: "http://${TARGET_IP}:${PORT}"
+      EOF
+
+      # Deploy to Traefik
+      scp -i ~/.ssh/id_ed25519 /tmp/traefik-${SERVICE_NAME}.yml \
+        root@192.168.40.20:/opt/traefik/config/dynamic/${SERVICE_NAME}.yml
+
+      echo "Traefik route configured: https://${SUBDOMAIN}.${DOMAIN}"
+
+configure:dns:
+  stage: configure
+  image: alpine:3.19
+  needs:
+    - job: deploy:container
+      artifacts: true
+  before_script:
+    - apk add --no-cache curl jq yq
+
+  script:
+    - |
+      DNS_ENABLED=$(yq '.dns.enabled // true' service.yml)
+
+      if [ "$DNS_ENABLED" != "true" ]; then
+        echo "DNS auto-configuration disabled, skipping..."
+        exit 0
+      fi
+
+      echo "Checking DNS record for ${SUBDOMAIN}.${DOMAIN}"
+
+      # Check if record exists
+      EXISTING=$(curl -sk -u "${OPNSENSE_API_KEY}:${OPNSENSE_API_SECRET}" \
+        "https://192.168.91.30/api/unbound/settings/searchHostOverride" \
+        -d "searchPhrase=${SUBDOMAIN}" | jq -r '.rows | length')
+
+      if [ "$EXISTING" -gt "0" ]; then
+        echo "DNS record already exists, skipping..."
+        exit 0
+      fi
+
+      echo "Adding DNS record: ${SUBDOMAIN}.${DOMAIN} -> 192.168.40.20"
+
+      # Add DNS record
+      curl -sk -X POST \
+        -u "${OPNSENSE_API_KEY}:${OPNSENSE_API_SECRET}" \
+        -H "Content-Type: application/json" \
+        -d "{
+          \"host\": {
+            \"enabled\": \"1\",
+            \"hostname\": \"${SUBDOMAIN}\",
+            \"domain\": \"${DOMAIN}\",
+            \"rr\": \"A\",
+            \"server\": \"192.168.40.20\",
+            \"description\": \"GitLab GitOps - Pipeline ${CI_PIPELINE_ID}\"
+          }
+        }" \
+        "https://192.168.91.30/api/unbound/settings/addHostOverride"
+
+      # Apply DNS changes
+      curl -sk -X POST \
+        -u "${OPNSENSE_API_KEY}:${OPNSENSE_API_SECRET}" \
+        -H "Content-Type: application/json" \
+        -d "{}" \
+        "https://192.168.91.30/api/unbound/service/reconfigure"
+
+      echo "DNS record added successfully"
+
+# ===========================================
+# STAGE: Verify
+# ===========================================
+verify:health:
+  stage: verify
+  image: alpine:3.19
+  needs:
+    - job: deploy:container
+      artifacts: true
+    - job: configure:traefik
+  before_script:
+    - apk add --no-cache curl yq
+
+  script:
+    - |
+      HEALTHCHECK_ENABLED=$(yq '.deployment.healthcheck.enabled // true' service.yml)
+      HEALTHCHECK_ENDPOINT=$(yq '.deployment.healthcheck.endpoint // "/health"' service.yml)
+
+      if [ "$HEALTHCHECK_ENABLED" != "true" ]; then
+        echo "Health check disabled, skipping..."
+        exit 0
+      fi
+
+      echo "Waiting for ${SERVICE_NAME} to be healthy..."
+      echo "Endpoint: http://${TARGET_IP}:${PORT}${HEALTHCHECK_ENDPOINT}"
+
+      for i in $(seq 1 30); do
+        if curl -sf "http://${TARGET_IP}:${PORT}${HEALTHCHECK_ENDPOINT}" > /dev/null 2>&1; then
+          echo "Service is healthy!"
+          exit 0
+        fi
+        echo "Attempt $i/30 - waiting 5 seconds..."
+        sleep 5
+      done
+
+      echo "Health check failed after 30 attempts"
+      exit 1
+
+# ===========================================
+# STAGE: Notify
+# ===========================================
+notify:success:
+  stage: notify
+  image: alpine:3.19
+  needs:
+    - job: deploy:container
+      artifacts: true
+    - job: verify:health
+  before_script:
+    - apk add --no-cache curl
+
+  script:
+    - |
+      URL="https://${SUBDOMAIN}.${DOMAIN}"
+
+      curl -sS -H "Content-Type: application/json" \
+        -d "{
+          \"username\": \"GitLab GitOps\",
+          \"avatar_url\": \"https://about.gitlab.com/images/press/press-kit-icon.png\",
+          \"embeds\": [{
+            \"title\": \":white_check_mark: Deployed: ${DISPLAY_NAME}\",
+            \"description\": \"Service deployed successfully via GitLab CI/CD\",
+            \"color\": 3066993,
+            \"fields\": [
+              {\"name\": \":globe_with_meridians: URL\", \"value\": \"[${URL}](${URL})\", \"inline\": true},
+              {\"name\": \":link: Pipeline\", \"value\": \"[#${CI_PIPELINE_ID}](${CI_PIPELINE_URL})\", \"inline\": true},
+              {\"name\": \":bust_in_silhouette: Triggered by\", \"value\": \"${GITLAB_USER_NAME}\", \"inline\": true}
+            ],
+            \"footer\": {\"text\": \"GitLab GitOps\"},
+            \"timestamp\": \"$(date -u +%Y-%m-%dT%H:%M:%SZ)\"
+          }]
+        }" \
+        "${DISCORD_WEBHOOK_URL}"
+  when: on_success
+
+notify:failure:
+  stage: notify
+  image: alpine:3.19
+  needs:
+    - job: deploy:container
+      artifacts: true
+  before_script:
+    - apk add --no-cache curl yq
+
+  script:
+    - |
+      SERVICE_NAME=$(yq '.service.name' service.yml)
+      DISPLAY_NAME=$(yq '.service.display_name' service.yml)
+
+      curl -sS -H "Content-Type: application/json" \
+        -d "{
+          \"username\": \"GitLab GitOps\",
+          \"avatar_url\": \"https://about.gitlab.com/images/press/press-kit-icon.png\",
+          \"embeds\": [{
+            \"title\": \":x: Deployment Failed: ${DISPLAY_NAME}\",
+            \"description\": \"Check pipeline logs for details\",
+            \"color\": 15158332,
+            \"fields\": [
+              {\"name\": \":link: Pipeline\", \"value\": \"[#${CI_PIPELINE_ID}](${CI_PIPELINE_URL})\", \"inline\": true},
+              {\"name\": \":bust_in_silhouette: Triggered by\", \"value\": \"${GITLAB_USER_NAME}\", \"inline\": true}
+            ],
+            \"footer\": {\"text\": \"GitLab GitOps\"},
+            \"timestamp\": \"$(date -u +%Y-%m-%dT%H:%M:%SZ)\"
+          }]
+        }" \
+        "${DISCORD_WEBHOOK_URL}"
+  when: on_failure
+
+# ===========================================
+# Manual Jobs
+# ===========================================
+rollback:
+  stage: deploy
+  image: alpine:3.19
+  before_script:
+    - apk add --no-cache openssh-client bash yq
+    - mkdir -p ~/.ssh
+    - echo "$SSH_PRIVATE_KEY" > ~/.ssh/id_ed25519
+    - chmod 600 ~/.ssh/id_ed25519
+
+  script:
+    - |
+      # Parse service configuration
+      SERVICE_NAME=$(yq '.service.name' service.yml)
+      TARGET_HOST=$(yq '.deployment.target_host' service.yml)
+      INSTALL_PATH=$(yq '.deployment.install_path // "/opt/" + .service.name' service.yml)
+
+      # Map host to IP
+      case "$TARGET_HOST" in
+        docker-lxc-media) TARGET_IP="192.168.40.11"; SSH_USER="hermes-admin" ;;
+        docker-lxc-glance) TARGET_IP="192.168.40.12"; SSH_USER="root" ;;
+        docker-vm-core-utilities01) TARGET_IP="192.168.40.13"; SSH_USER="hermes-admin" ;;
+        docker-lxc-bots) TARGET_IP="192.168.40.14"; SSH_USER="root" ;;
+        *) echo "Unknown host"; exit 1 ;;
+      esac
+
+      ssh-keyscan -H ${TARGET_IP} >> ~/.ssh/known_hosts 2>/dev/null
+
+      SUDO=""
+      if [ "$SSH_USER" != "root" ]; then SUDO="sudo"; fi
+
+      echo "Rolling back ${SERVICE_NAME} on ${TARGET_IP}..."
+
+      ssh -i ~/.ssh/id_ed25519 ${SSH_USER}@${TARGET_IP} << REMOTE
+      cd ${INSTALL_PATH}
+      if [ -f docker-compose.yml.bak ]; then
+        $SUDO mv docker-compose.yml.bak docker-compose.yml
+        $SUDO mv .env.bak .env 2>/dev/null || true
+        $SUDO docker compose pull
+        $SUDO docker compose up -d --remove-orphans
+        echo "Rollback completed"
+      else
+        echo "No backup found, cannot rollback"
+        exit 1
+      fi
+      REMOTE
+  when: manual
+  allow_failure: true

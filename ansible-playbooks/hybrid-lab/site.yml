@@ -1,0 +1,62 @@
+# =============================================================================
+# Hybrid Lab Master Deployment Playbook
+# =============================================================================
+# This is the master playbook that orchestrates the full hybrid lab deployment
+#
+# Order of Operations:
+#   1. Install AD Forest on DC01
+#   2. Promote DC02 to Domain Controller
+#   3. Join all member servers to domain
+#   4. Configure File Servers
+#   5. Install SQL Server
+#   6. Install Entra Connect
+#   7. Install Password Protection
+#
+# Prerequisites:
+#   - All VMs deployed via Terraform
+#   - VLAN 80 configured on OPNsense
+#   - DNS pointing to DC01 (192.168.80.2) once forest is created
+#
+# Usage:
+#   Full deployment:
+#     ansible-playbook -i inventory.yml site.yml
+#
+#   Specific phases:
+#     ansible-playbook -i inventory.yml site.yml --tags "ad-forest"
+#     ansible-playbook -i inventory.yml site.yml --tags "domain-join"
+#     ansible-playbook -i inventory.yml site.yml --tags "sql"
+#
+# =============================================================================
+
+---
+# Phase 1: Domain Controllers
+- name: "Phase 1a: Install AD Forest on DC01"
+  import_playbook: install-ad-forest.yml
+  tags: [ad-forest, domain-controllers, phase1]
+
+- name: "Phase 1b: Promote DC02 to Domain Controller"
+  import_playbook: promote-dc02.yml
+  tags: [promote-dc02, domain-controllers, phase1]
+
+# Phase 2: Domain Join
+- name: "Phase 2: Join Member Servers and Clients to Domain"
+  import_playbook: domain-join.yml
+  tags: [domain-join, phase2]
+
+# Phase 3: Server Configuration
+- name: "Phase 3a: Configure File Servers"
+  import_playbook: configure-file-servers.yml
+  tags: [file-servers, phase3]
+
+- name: "Phase 3b: Install SQL Server"
+  import_playbook: install-sql.yml
+  tags: [sql, phase3]
+
+# Phase 4: Identity Services
+- name: "Phase 4a: Install Entra Connect"
+  import_playbook: install-adconnect.yml
+  tags: [entra-connect, identity, phase4]
+
+- name: "Phase 4b: Install Password Protection"
+  import_playbook: install-password-protection.yml
+  tags: [password-protection, identity, phase4]

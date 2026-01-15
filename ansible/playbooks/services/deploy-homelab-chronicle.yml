@@ -1,0 +1,289 @@
+---
+# Homelab Chronicle Deployment Playbook
+# Deploys the homelab timeline visualization app
+#
+# Prerequisites:
+#   1. LXC container created at 192.168.40.15 with Docker installed
+#   2. Container added to Ansible inventory as docker-lxc-chronicle
+#   3. Authentik application created for homelab-chronicle
+#   4. Environment variables set (see vars below)
+#
+# Usage:
+#   # Set environment variables first:
+#   export CHRONICLE_NEXTAUTH_SECRET=$(openssl rand -base64 32)
+#   export CHRONICLE_AUTHENTIK_CLIENT_ID="your-client-id"
+#   export CHRONICLE_AUTHENTIK_CLIENT_SECRET="your-client-secret"
+#
+#   # Run playbook:
+#   ansible-playbook services/deploy-homelab-chronicle.yml
+#
+# Alternative: Run with extra vars:
+#   ansible-playbook services/deploy-homelab-chronicle.yml \
+#     -e "nextauth_secret=your-secret" \
+#     -e "authentik_client_id=your-id" \
+#     -e "authentik_client_secret=your-secret"
+
+- name: Deploy Homelab Chronicle
+  hosts: docker-lxc-chronicle
+  become: yes
+  vars:
+    app_name: homelab-chronicle
+    app_dir: /opt/homelab-chronicle
+    app_url: https://chronicle.hrmsmrflrii.xyz
+    app_ip: 192.168.40.15
+    app_port: 3000
+
+    # Authentik configuration
+    authentik_issuer: https://auth.hrmsmrflrii.xyz/application/o/homelab-chronicle/
+
+    # Secrets from environment (or override via extra-vars)
+    nextauth_secret: "{{ lookup('env', 'CHRONICLE_NEXTAUTH_SECRET') | default(lookup('password', '/dev/null chars=ascii_letters,digits length=32'), true) }}"
+    authentik_client_id: "{{ lookup('env', 'CHRONICLE_AUTHENTIK_CLIENT_ID') | default('', true) }}"
+    authentik_client_secret: "{{ lookup('env', 'CHRONICLE_AUTHENTIK_CLIENT_SECRET') | default('', true) }}"
+
+  tasks:
+    - name: Ensure Docker is installed
+      apt:
+        name:
+          - docker.io
+          - docker-compose
+        state: present
+        update_cache: yes
+      when: ansible_os_family == "Debian"
+
+    - name: Start and enable Docker service
+      systemd:
+        name: docker
+        state: started
+        enabled: yes
+
+    - name: Create application directory
+      file:
+        path: "{{ app_dir }}"
+        state: directory
+        mode: '0755'
+
+    - name: Create data directories
+      file:
+        path: "{{ item }}"
+        state: directory
+        mode: '0755'
+      loop:
+        - "{{ app_dir }}/data"
+        - "{{ app_dir }}/uploads"
+        - "{{ app_dir }}/prisma"
+
+    - name: Copy Prisma schema
+      copy:
+        dest: "{{ app_dir }}/prisma/schema.prisma"
+        mode: '0644'
+        content: |
+          generator client {
+            provider = "prisma-client-js"
+          }
+
+          datasource db {
+            provider = "sqlite"
+            url      = env("DATABASE_URL")
+          }
+
+          model Event {
+            id        String   @id @default(cuid())
+            title     String
+            date      DateTime
+            content   String
+            category  String
+            icon      String?
+            tags      String   @default("[]")
+            source    String?
+            sourceRef String?
+            images    Image[]
+            createdAt DateTime @default(now())
+            updatedAt DateTime @updatedAt
+          }
+
+          model Image {
+            id        String   @id @default(cuid())
+            filename  String
+            path      String
+            altText   String?
+            eventId   String
+            event     Event    @relation(fields: [eventId], references: [id], onDelete: Cascade)
+            createdAt DateTime @default(now())
+          }
+
+          model Category {
+            id    String @id @default(cuid())
+            name  String @unique
+            color String
+            icon  String
+          }
+
+          model Account {
+            id                String  @id @default(cuid())
+            userId            String
+            type              String
+            provider          String
+            providerAccountId String
+            refresh_token     String?
+            access_token      String?
+            expires_at        Int?
+            token_type        String?
+            scope             String?
+            id_token          String?
+            session_state     String?
+            user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+            @@unique([provider, providerAccountId])
+          }
+
+          model Session {
+            id           String   @id @default(cuid())
+            sessionToken String   @unique
+            userId       String
+            expires      DateTime
+            user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+          }
+
+          model User {
+            id            String    @id @default(cuid())
+            name          String?
+            email         String?   @unique
+            emailVerified DateTime?
+            image         String?
+            accounts      Account[]
+            sessions      Session[]
+          }
+
+          model VerificationToken {
+            identifier String
+            token      String   @unique
+            expires    DateTime
+            @@unique([identifier, token])
+          }
+
+    - name: Create docker-compose.yml
+      copy:
+        dest: "{{ app_dir }}/docker-compose.yml"
+        mode: '0644'
+        content: |
+          services:
+            homelab-chronicle:
+              image: ghcr.io/herms14/homelab-chronicle:latest
+              container_name: homelab-chronicle
+              restart: unless-stopped
+              ports:
+                - "{{ app_port }}:3000"
+              environment:
+                - DATABASE_URL=file:/data/chronicle.db
+                - NEXTAUTH_URL={{ app_url }}
+                - NEXTAUTH_SECRET=${NEXTAUTH_SECRET}
+                - AUTHENTIK_CLIENT_ID=${AUTHENTIK_CLIENT_ID}
+                - AUTHENTIK_CLIENT_SECRET=${AUTHENTIK_CLIENT_SECRET}
+                - AUTHENTIK_ISSUER={{ authentik_issuer }}
+              volumes:
+                - ./data:/data
+                - ./uploads:/app/public/uploads
+                - ./prisma:/app/prisma
+              healthcheck:
+                test: ["CMD", "wget", "-q", "--spider", "http://localhost:3000/api/events"]
+                interval: 30s
+                timeout: 10s
+                retries: 3
+                start_period: 40s
+              security_opt:
+                - apparmor=unconfined
+
+    - name: Create .env file
+      copy:
+        dest: "{{ app_dir }}/.env"
+        mode: '0600'
+        content: |
+          NEXTAUTH_SECRET={{ nextauth_secret }}
+          AUTHENTIK_CLIENT_ID={{ authentik_client_id }}
+          AUTHENTIK_CLIENT_SECRET={{ authentik_client_secret }}
+      no_log: true
+
+    - name: Pull and start application (local build)
+      block:
+        - name: Check if image exists on GHCR
+          command: docker pull ghcr.io/herms14/homelab-chronicle:latest
+          register: pull_result
+          failed_when: false
+          changed_when: pull_result.rc == 0
+
+        - name: Build image locally if not on GHCR
+          when: pull_result.rc != 0
+          block:
+            - name: Clone repo for local build
+              git:
+                repo: https://github.com/herms14/homelab-infra-automation-project.git
+                dest: "{{ app_dir }}/src"
+                version: master
+                depth: 1
+
+            - name: Build Docker image locally
+              community.docker.docker_image:
+                name: homelab-chronicle
+                tag: latest
+                source: build
+                build:
+                  path: "{{ app_dir }}/src/apps/homelab-chronicle"
+                state: present
+
+            - name: Update docker-compose to use local image
+              lineinfile:
+                path: "{{ app_dir }}/docker-compose.yml"
+                regexp: 'image: ghcr.io/herms14/homelab-chronicle:latest'
+                line: '      image: homelab-chronicle:latest'
+
+    - name: Start application with Docker Compose
+      community.docker.docker_compose_v2:
+        project_src: "{{ app_dir }}"
+        state: present
+      register: compose_result
+
+    - name: Wait for application to be healthy
+      uri:
+        url: "http://localhost:{{ app_port }}/api/events"
+        method: GET
+        status_code: [200, 401]
+      register: health_check
+      until: health_check.status in [200, 401]
+      retries: 30
+      delay: 10
+
+    - name: Run database migrations
+      command: docker exec homelab-chronicle npx prisma migrate deploy
+      register: migrate_result
+      failed_when: false
+      changed_when: "'applied' in migrate_result.stdout"
+
+    - name: Display deployment status
+      debug:
+        msg: |
+          ═══════════════════════════════════════════════════════════
+          Homelab Chronicle deployed successfully!
+          ═══════════════════════════════════════════════════════════
+
+          URL: {{ app_url }}
+          Local: http://{{ app_ip }}:{{ app_port }}
+
+          To seed the database with historical events:
+            docker exec homelab-chronicle npm run db:seed
+
+          To import from CHANGELOG:
+            docker exec homelab-chronicle npm run import:changelog
+
+          Note: Authentik SSO requires the application to be configured:
+            1. Create OAuth2 provider in Authentik
+            2. Create Application linked to the provider
+            3. Set redirect URIs to: {{ app_url }}/api/auth/callback/authentik
+
+          ═══════════════════════════════════════════════════════════
+
+  handlers:
+    - name: Restart chronicle
+      community.docker.docker_compose_v2:
+        project_src: "{{ app_dir }}"
+        state: present
+        recreate: always

@@ -10,9 +10,9 @@
   hosts: DC01
   gather_facts: no
   vars:
-    domain_name: "hrmsmrflrii.xyz"
-    netbios_name: "HRMSMRFLRII"
-    safe_mode_password: "{{ vault_safe_mode_password | default('P@ssw0rd123!') }}"
+    domain_name: "azurelab.local"
+    netbios_name: "AZURELAB"
+    safe_mode_password: "{{ vault_safe_mode_password | default('CHANGE_ME_BEFORE_USE') }}"
     forest_mode: "WinThreshold"  # Windows Server 2016 forest mode
     domain_mode: "WinThreshold"
 

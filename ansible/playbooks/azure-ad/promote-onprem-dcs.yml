@@ -1,0 +1,271 @@
+---
+# Promote On-Premises Windows Servers to Domain Controllers
+# Joins existing hrmsmrflrii.xyz domain hosted on Azure
+#
+# Prerequisites:
+#   - Azure DCs (AZDC01, AZDC02) already deployed and healthy
+#   - VPN connectivity between on-prem (192.168.80.0/24) and Azure (10.10.4.0/24)
+#   - WinRM enabled on DC01 and DC02
+#
+# Run with:
+#   ansible-playbook -i inventory-hybrid.yml promote-onprem-dcs.yml
+
+- name: "Pre-Flight: Verify VPN Connectivity to Azure DCs"
+  hosts: onprem_dcs
+  gather_facts: no
+  tasks:
+    - name: Test connectivity to Azure Primary DC (AZDC01)
+      win_shell: |
+        $result = Test-NetConnection -ComputerName 10.10.4.4 -Port 389 -WarningAction SilentlyContinue
+        if ($result.TcpTestSucceeded) {
+          Write-Output "SUCCESS: Can reach AZDC01 on port 389 (LDAP)"
+        } else {
+          Write-Output "FAILED: Cannot reach AZDC01 - Check VPN connectivity"
+          exit 1
+        }
+      register: vpn_test
+      changed_when: false
+
+    - name: Display VPN test result
+      debug:
+        var: vpn_test.stdout_lines
+
+    - name: Test DNS resolution of domain
+      win_shell: |
+        $dns = Resolve-DnsName -Name "hrmsmrflrii.xyz" -Server 10.10.4.4 -ErrorAction SilentlyContinue
+        if ($dns) {
+          Write-Output "SUCCESS: Domain hrmsmrflrii.xyz resolves via Azure DC"
+          $dns | Format-Table -AutoSize | Out-String
+        } else {
+          Write-Output "WARNING: Cannot resolve domain - will configure DNS first"
+        }
+      register: dns_test
+      changed_when: false
+      ignore_errors: yes
+
+- name: "Phase 1: Configure DNS on On-Prem DCs to Point to Azure"
+  hosts: onprem_dcs
+  gather_facts: no
+  tasks:
+    - name: Set DNS servers to Azure DCs (temporary for domain join)
+      win_dns_client:
+        adapter_names: '*'
+        dns_servers:
+          - 10.10.4.4
+          - 10.10.4.5
+
+    - name: Verify domain resolution after DNS change
+      win_shell: |
+        Start-Sleep -Seconds 5
+        $dns = Resolve-DnsName -Name "hrmsmrflrii.xyz" -ErrorAction SilentlyContinue
+        if ($dns) {
+          Write-Output "SUCCESS: Domain resolves correctly"
+          Write-Output "IP: $($dns.IPAddress)"
+        } else {
+          Write-Output "FAILED: Domain still not resolving"
+          exit 1
+        }
+      register: dns_verify
+      changed_when: false
+
+    - name: Display DNS verification
+      debug:
+        var: dns_verify.stdout_lines
+
+- name: "Phase 2: Install AD DS Role on On-Prem DCs"
+  hosts: onprem_dcs
+  gather_facts: no
+  tasks:
+    - name: Install AD DS and DNS Windows Features
+      win_feature:
+        name:
+          - AD-Domain-Services
+          - DNS
+          - RSAT-AD-Tools
+          - RSAT-DNS-Server
+        state: present
+        include_management_tools: yes
+      register: feature_install
+
+    - name: Reboot if required after feature installation
+      win_reboot:
+        reboot_timeout: 600
+      when: feature_install.reboot_required
+
+    - name: Wait for WinRM to come back
+      wait_for_connection:
+        timeout: 300
+
+- name: "Phase 3: Promote DC01 as First On-Prem Domain Controller"
+  hosts: onprem_primary_dc
+  gather_facts: no
+  vars:
+    domain_name: "hrmsmrflrii.xyz"
+    safe_mode_password: "CHANGE_ME_BEFORE_USE"
+    domain_admin_user: "HRMSMRFLRII\\azureadmin"
+    domain_admin_password: "CHANGE_ME_BEFORE_USE"
+  tasks:
+    - name: Check if already a domain controller
+      win_shell: |
+        try {
+          $dc = Get-ADDomainController -Identity $env:COMPUTERNAME -ErrorAction Stop
+          Write-Output "ISDC"
+        } catch {
+          Write-Output "NOTDC"
+        }
+      register: dc_check
+      ignore_errors: yes
+      changed_when: false
+
+    - name: Promote DC01 to Domain Controller (join existing domain)
+      win_shell: |
+        $secpasswd = ConvertTo-SecureString "{{ domain_admin_password }}" -AsPlainText -Force
+        $cred = New-Object System.Management.Automation.PSCredential ("{{ domain_admin_user }}", $secpasswd)
+
+        Import-Module ADDSDeployment
+        Install-ADDSDomainController `
+          -DomainName "{{ domain_name }}" `
+          -Credential $cred `
+          -SafeModeAdministratorPassword (ConvertTo-SecureString "{{ safe_mode_password }}" -AsPlainText -Force) `
+          -InstallDns:$true `
+          -DatabasePath "C:\Windows\NTDS" `
+          -LogPath "C:\Windows\NTDS" `
+          -SysvolPath "C:\Windows\SYSVOL" `
+          -SiteName "Default-First-Site-Name" `
+          -ReplicationSourceDC "AZDC01.hrmsmrflrii.xyz" `
+          -NoRebootOnCompletion:$false `
+          -Force:$true
+      when: dc_check.stdout is defined and "NOTDC" in dc_check.stdout
+      register: dc01_promote
+      async: 900
+      poll: 0
+
+    - name: Wait for DC01 promotion to complete
+      async_status:
+        jid: "{{ dc01_promote.ansible_job_id }}"
+      register: job_result
+      until: job_result.finished
+      retries: 90
+      delay: 10
+      when: dc01_promote.ansible_job_id is defined
+
+    - name: Wait for server to reboot after DC promotion
+      wait_for_connection:
+        timeout: 600
+        delay: 60
+      when: dc01_promote is changed
+
+    - name: Wait for AD services to stabilize
+      pause:
+        seconds: 120
+      when: dc01_promote is changed
+
+- name: "Phase 4: Promote DC02 as Second On-Prem Domain Controller"
+  hosts: onprem_secondary_dc
+  gather_facts: no
+  serial: 1
+  vars:
+    domain_name: "hrmsmrflrii.xyz"
+    safe_mode_password: "CHANGE_ME_BEFORE_USE"
+    domain_admin_user: "HRMSMRFLRII\\azureadmin"
+    domain_admin_password: "CHANGE_ME_BEFORE_USE"
+  tasks:
+    - name: Set DNS to point to DC01 (now promoted)
+      win_dns_client:
+        adapter_names: '*'
+        dns_servers:
+          - 192.168.80.2
+          - 10.10.4.4
+
+    - name: Check if already a domain controller
+      win_shell: |
+        try {
+          $dc = Get-ADDomainController -Identity $env:COMPUTERNAME -ErrorAction Stop
+          Write-Output "ISDC"
+        } catch {
+          Write-Output "NOTDC"
+        }
+      register: dc_check
+      ignore_errors: yes
+      changed_when: false
+
+    - name: Promote DC02 to Domain Controller
+      win_shell: |
+        $secpasswd = ConvertTo-SecureString "{{ domain_admin_password }}" -AsPlainText -Force
+        $cred = New-Object System.Management.Automation.PSCredential ("{{ domain_admin_user }}", $secpasswd)
+
+        Import-Module ADDSDeployment
+        Install-ADDSDomainController `
+          -DomainName "{{ domain_name }}" `
+          -Credential $cred `
+          -SafeModeAdministratorPassword (ConvertTo-SecureString "{{ safe_mode_password }}" -AsPlainText -Force) `
+          -InstallDns:$true `
+          -DatabasePath "C:\Windows\NTDS" `
+          -LogPath "C:\Windows\NTDS" `
+          -SysvolPath "C:\Windows\SYSVOL" `
+          -SiteName "Default-First-Site-Name" `
+          -ReplicationSourceDC "DC01.hrmsmrflrii.xyz" `
+          -NoRebootOnCompletion:$false `
+          -Force:$true
+      when: dc_check.stdout is defined and "NOTDC" in dc_check.stdout
+      register: dc02_promote
+      async: 900
+      poll: 0
+
+    - name: Wait for DC02 promotion to complete
+      async_status:
+        jid: "{{ dc02_promote.ansible_job_id }}"
+      register: job_result
+      until: job_result.finished
+      retries: 90
+      delay: 10
+      when: dc02_promote.ansible_job_id is defined
+
+    - name: Wait for server to reboot after DC promotion
+      wait_for_connection:
+        timeout: 600
+        delay: 60
+      when: dc02_promote is changed
+
+- name: "Phase 5: Verify On-Prem DC Promotion"
+  hosts: onprem_primary_dc
+  gather_facts: no
+  tasks:
+    - name: List all Domain Controllers
+      win_shell: |
+        Get-ADDomainController -Filter * |
+        Select-Object Name, Site, IsGlobalCatalog, IsReadOnly, IPv4Address, OperatingSystem |
+        Format-Table -AutoSize | Out-String -Width 200
+      register: dc_list
+      changed_when: false
+
+    - name: Display all Domain Controllers
+      debug:
+        var: dc_list.stdout_lines
+
+    - name: Test AD Replication
+      win_shell: |
+        Write-Output "=== Replication Summary ==="
+        repadmin /replsummary
+        Write-Output ""
+        Write-Output "=== Replication Status ==="
+        repadmin /showrepl DC01 | Select-Object -First 50
+      register: repl_status
+      changed_when: false
+
+    - name: Display Replication Status
+      debug:
+        var: repl_status.stdout_lines
+
+    - name: Verify DNS records for new DCs
+      win_shell: |
+        Write-Output "=== DNS SRV Records for DC01 ==="
+        Resolve-DnsName -Name "_ldap._tcp.dc._msdcs.hrmsmrflrii.xyz" -Type SRV |
+        Where-Object { $_.NameTarget -like "*DC01*" -or $_.NameTarget -like "*DC02*" } |
+        Format-Table -AutoSize | Out-String
+      register: dns_records
+      changed_when: false
+
+    - name: Display DNS Records
+      debug:
+        var: dns_records.stdout_lines

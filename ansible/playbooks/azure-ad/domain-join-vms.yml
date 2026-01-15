@@ -1,0 +1,317 @@
+---
+# Domain Join On-Premises Windows VMs
+# Joins servers and workstations to hrmsmrflrii.xyz domain
+#
+# Target VMs:
+#   - FS01, FS02 (File Servers)
+#   - SQL01 (SQL Server)
+#   - AADCON01 (Entra ID Connect)
+#   - AADPP01, AADPP02 (Password Protection)
+#   - IIS01, IIS02 (Web Servers)
+#   - CLIENT01, CLIENT02 (Workstations)
+#
+# Run with:
+#   ansible-playbook -i inventory-hybrid.yml domain-join-vms.yml
+
+- name: "Pre-Flight: Configure DNS on Target VMs"
+  hosts: domain_join_targets
+  gather_facts: no
+  tasks:
+    - name: Configure DNS to use on-prem DCs
+      win_dns_client:
+        adapter_names: '*'
+        dns_servers:
+          - 192.168.80.2
+          - 192.168.80.3
+
+    - name: Verify domain resolution
+      win_shell: |
+        $result = Resolve-DnsName -Name "hrmsmrflrii.xyz" -ErrorAction SilentlyContinue
+        if ($result) {
+          Write-Output "SUCCESS: Domain resolves to $($result.IPAddress)"
+        } else {
+          Write-Output "FAILED: Cannot resolve domain"
+          exit 1
+        }
+      register: dns_check
+      changed_when: false
+
+    - name: Display DNS check
+      debug:
+        var: dns_check.stdout_lines
+
+    - name: Test DC connectivity
+      win_shell: |
+        $dc = Test-NetConnection -ComputerName 192.168.80.2 -Port 389 -WarningAction SilentlyContinue
+        if ($dc.TcpTestSucceeded) {
+          Write-Output "SUCCESS: Can reach DC01 on LDAP port"
+        } else {
+          Write-Output "FAILED: Cannot reach DC01"
+          exit 1
+        }
+      register: dc_check
+      changed_when: false
+
+- name: "Phase 1: Domain Join File Servers"
+  hosts: file_servers
+  gather_facts: no
+  serial: 1
+  vars:
+    domain_name: "hrmsmrflrii.xyz"
+    domain_admin_user: "HRMSMRFLRII\\azureadmin"
+    domain_admin_password: "CHANGE_ME_BEFORE_USE"
+    target_ou: "OU=File Servers,OU=Servers,OU=Tier 1,DC=hrmsmrflrii,DC=xyz"
+  tasks:
+    - name: Check current domain membership
+      win_shell: |
+        $cs = Get-WmiObject -Class Win32_ComputerSystem
+        if ($cs.PartOfDomain) {
+          Write-Output "JOINED:$($cs.Domain)"
+        } else {
+          Write-Output "WORKGROUP:$($cs.Workgroup)"
+        }
+      register: domain_status
+      changed_when: false
+
+    - name: Display domain status
+      debug:
+        var: domain_status.stdout
+
+    - name: Join file server to domain
+      win_domain_membership:
+        dns_domain_name: "{{ domain_name }}"
+        domain_admin_user: "{{ domain_admin_user }}"
+        domain_admin_password: "{{ domain_admin_password }}"
+        domain_ou_path: "{{ target_ou }}"
+        state: domain
+      register: domain_join
+      when: "'WORKGROUP' in domain_status.stdout"
+
+    - name: Reboot after domain join
+      win_reboot:
+        reboot_timeout: 600
+      when: domain_join is changed and domain_join.reboot_required
+
+    - name: Wait for WinRM
+      wait_for_connection:
+        timeout: 300
+      when: domain_join is changed
+
+- name: "Phase 2: Domain Join SQL Server"
+  hosts: sql_servers
+  gather_facts: no
+  serial: 1
+  vars:
+    domain_name: "hrmsmrflrii.xyz"
+    domain_admin_user: "HRMSMRFLRII\\azureadmin"
+    domain_admin_password: "CHANGE_ME_BEFORE_USE"
+    target_ou: "OU=Database Servers,OU=Servers,OU=Tier 1,DC=hrmsmrflrii,DC=xyz"
+  tasks:
+    - name: Check current domain membership
+      win_shell: |
+        $cs = Get-WmiObject -Class Win32_ComputerSystem
+        if ($cs.PartOfDomain) {
+          Write-Output "JOINED:$($cs.Domain)"
+        } else {
+          Write-Output "WORKGROUP:$($cs.Workgroup)"
+        }
+      register: domain_status
+      changed_when: false
+
+    - name: Join SQL server to domain
+      win_domain_membership:
+        dns_domain_name: "{{ domain_name }}"
+        domain_admin_user: "{{ domain_admin_user }}"
+        domain_admin_password: "{{ domain_admin_password }}"
+        domain_ou_path: "{{ target_ou }}"
+        state: domain
+      register: domain_join
+      when: "'WORKGROUP' in domain_status.stdout"
+
+    - name: Reboot after domain join
+      win_reboot:
+        reboot_timeout: 600
+      when: domain_join is changed and domain_join.reboot_required
+
+    - name: Wait for WinRM
+      wait_for_connection:
+        timeout: 300
+      when: domain_join is changed
+
+- name: "Phase 3: Domain Join Identity Servers"
+  hosts: identity_servers
+  gather_facts: no
+  serial: 1
+  vars:
+    domain_name: "hrmsmrflrii.xyz"
+    domain_admin_user: "HRMSMRFLRII\\azureadmin"
+    domain_admin_password: "CHANGE_ME_BEFORE_USE"
+    target_ou: "OU=Application Servers,OU=Servers,OU=Tier 1,DC=hrmsmrflrii,DC=xyz"
+  tasks:
+    - name: Check current domain membership
+      win_shell: |
+        $cs = Get-WmiObject -Class Win32_ComputerSystem
+        if ($cs.PartOfDomain) {
+          Write-Output "JOINED:$($cs.Domain)"
+        } else {
+          Write-Output "WORKGROUP:$($cs.Workgroup)"
+        }
+      register: domain_status
+      changed_when: false
+
+    - name: Join identity server to domain
+      win_domain_membership:
+        dns_domain_name: "{{ domain_name }}"
+        domain_admin_user: "{{ domain_admin_user }}"
+        domain_admin_password: "{{ domain_admin_password }}"
+        domain_ou_path: "{{ target_ou }}"
+        state: domain
+      register: domain_join
+      when: "'WORKGROUP' in domain_status.stdout"
+
+    - name: Reboot after domain join
+      win_reboot:
+        reboot_timeout: 600
+      when: domain_join is changed and domain_join.reboot_required
+
+    - name: Wait for WinRM
+      wait_for_connection:
+        timeout: 300
+      when: domain_join is changed
+
+- name: "Phase 4: Domain Join Web Servers"
+  hosts: web_servers
+  gather_facts: no
+  serial: 1
+  vars:
+    domain_name: "hrmsmrflrii.xyz"
+    domain_admin_user: "HRMSMRFLRII\\azureadmin"
+    domain_admin_password: "CHANGE_ME_BEFORE_USE"
+    target_ou: "OU=Web Servers,OU=Servers,OU=Tier 1,DC=hrmsmrflrii,DC=xyz"
+  tasks:
+    - name: Check current domain membership
+      win_shell: |
+        $cs = Get-WmiObject -Class Win32_ComputerSystem
+        if ($cs.PartOfDomain) {
+          Write-Output "JOINED:$($cs.Domain)"
+        } else {
+          Write-Output "WORKGROUP:$($cs.Workgroup)"
+        }
+      register: domain_status
+      changed_when: false
+
+    - name: Join web server to domain
+      win_domain_membership:
+        dns_domain_name: "{{ domain_name }}"
+        domain_admin_user: "{{ domain_admin_user }}"
+        domain_admin_password: "{{ domain_admin_password }}"
+        domain_ou_path: "{{ target_ou }}"
+        state: domain
+      register: domain_join
+      when: "'WORKGROUP' in domain_status.stdout"
+
+    - name: Reboot after domain join
+      win_reboot:
+        reboot_timeout: 600
+      when: domain_join is changed and domain_join.reboot_required
+
+    - name: Wait for WinRM
+      wait_for_connection:
+        timeout: 300
+      when: domain_join is changed
+
+- name: "Phase 5: Domain Join Workstations"
+  hosts: onprem_workstations
+  gather_facts: no
+  serial: 1
+  vars:
+    domain_name: "hrmsmrflrii.xyz"
+    domain_admin_user: "HRMSMRFLRII\\azureadmin"
+    domain_admin_password: "CHANGE_ME_BEFORE_USE"
+    target_ou: "OU=Windows 11,OU=Workstations,OU=Tier 2,DC=hrmsmrflrii,DC=xyz"
+  tasks:
+    - name: Check current domain membership
+      win_shell: |
+        $cs = Get-WmiObject -Class Win32_ComputerSystem
+        if ($cs.PartOfDomain) {
+          Write-Output "JOINED:$($cs.Domain)"
+        } else {
+          Write-Output "WORKGROUP:$($cs.Workgroup)"
+        }
+      register: domain_status
+      changed_when: false
+
+    - name: Join workstation to domain
+      win_domain_membership:
+        dns_domain_name: "{{ domain_name }}"
+        domain_admin_user: "{{ domain_admin_user }}"
+        domain_admin_password: "{{ domain_admin_password }}"
+        domain_ou_path: "{{ target_ou }}"
+        state: domain
+      register: domain_join
+      when: "'WORKGROUP' in domain_status.stdout"
+
+    - name: Reboot after domain join
+      win_reboot:
+        reboot_timeout: 600
+      when: domain_join is changed and domain_join.reboot_required
+
+    - name: Wait for WinRM
+      wait_for_connection:
+        timeout: 300
+      when: domain_join is changed
+
+- name: "Phase 6: Verify Domain Membership"
+  hosts: domain_join_targets
+  gather_facts: no
+  tasks:
+    - name: Verify domain membership
+      win_shell: |
+        $cs = Get-WmiObject -Class Win32_ComputerSystem
+        Write-Output "Computer: $($cs.Name)"
+        Write-Output "Domain: $($cs.Domain)"
+        Write-Output "Part of Domain: $($cs.PartOfDomain)"
+      register: final_status
+      changed_when: false
+
+    - name: Display final status
+      debug:
+        var: final_status.stdout_lines
+
+- name: "Summary: List All Domain Computers"
+  hosts: onprem_primary_dc
+  gather_facts: no
+  tasks:
+    - name: Get all domain computers
+      win_shell: |
+        Write-Output "=== Domain Computers ==="
+        Get-ADComputer -Filter * -Properties OperatingSystem, IPv4Address |
+        Select-Object Name, OperatingSystem, IPv4Address, Enabled |
+        Sort-Object Name |
+        Format-Table -AutoSize | Out-String -Width 200
+      register: domain_computers
+      changed_when: false
+
+    - name: Display domain computers
+      debug:
+        var: domain_computers.stdout_lines
+
+    - name: Count computers by OU
+      win_shell: |
+        Write-Output "=== Computers by OU ==="
+        Write-Output ""
+        Write-Output "Tier 0 (Domain Controllers):"
+        (Get-ADComputer -Filter * -SearchBase "OU=Domain Controllers,DC=hrmsmrflrii,DC=xyz" -ErrorAction SilentlyContinue | Measure-Object).Count
+        Write-Output ""
+        Write-Output "Tier 1 (Servers):"
+        (Get-ADComputer -Filter * -SearchBase "OU=Servers,OU=Tier 1,DC=hrmsmrflrii,DC=xyz" -ErrorAction SilentlyContinue | Measure-Object).Count
+        Write-Output ""
+        Write-Output "Tier 2 (Workstations):"
+        (Get-ADComputer -Filter * -SearchBase "OU=Workstations,OU=Tier 2,DC=hrmsmrflrii,DC=xyz" -ErrorAction SilentlyContinue | Measure-Object).Count
+      register: ou_count
+      changed_when: false
+      ignore_errors: yes
+
+    - name: Display OU counts
+      debug:
+        var: ou_count.stdout_lines

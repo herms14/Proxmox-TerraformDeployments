@@ -42,7 +42,7 @@ See [docs/TERRAFORM.md](../docs/TERRAFORM.md) for complete guide.
    - Add container to `CONTAINER_HOSTS` in Update Manager (`/opt/update-manager/update_manager.py`)
    - Add VM to `VM_MAPPING` in Argus bot (`/opt/sysadmin-bot/sysadmin-bot.py`)
    - Configure webhooks to Download Monitor (for media services)
-7. **Update Documentation**: All three locations (docs/, wiki, Obsidian)
+7. **Update Documentation**: Technical Manual and Book (both in Obsidian vault)
 
 ---
 
@@ -83,61 +83,51 @@ When adding issues to [docs/TROUBLESHOOTING.md](../docs/TROUBLESHOOTING.md):
 
 ## Documentation Sync Guide
 
-**IMPORTANT: When the user says "update all documentation" or "update all docs", you MUST update ALL of the following locations:**
-
-### Required Documentation Locations (ALL must be updated)
-
-| Location | Path | Purpose |
-|----------|------|---------|
-| **docs/** | `docs/*.md` | Git-tracked technical reference |
-| **GitHub Wiki** | `Proxmox-TerraformDeployments.wiki/*.md` | Public beginner-friendly wiki |
-| **Obsidian Vault** | `C:\Users\herms14\OneDrive\Obsidian Vault\Hermes's Life Knowledge Base\07 HomeLab Things\Claude Managed Homelab\` | Personal notes with credentials |
-| **Technical Manual** | `38 - Homelab Technical Manual.md` in Obsidian Vault | Comprehensive reference manual (Version 2.x) |
-| **.claude/context.md** | `.claude/context.md` | Infrastructure context for Claude sessions |
-| **CHANGELOG.md** | `CHANGELOG.md` | Change history |
-
-### Full Documentation Update Checklist
-
-When updating documentation, check ALL of these:
-
-1. **docs/** - Update relevant technical documentation files
-2. **Proxmox-TerraformDeployments.wiki/** - Update corresponding wiki pages
-3. **Obsidian Vault** - Update corresponding Obsidian notes
-4. **Technical Manual** - Update `38 - Homelab Technical Manual.md` (increment version in Document History)
-5. **.claude/context.md** - Update infrastructure context if relevant
-6. **CHANGELOG.md** - Add entry for significant changes
-
-### Documentation Maintained in Three Primary Locations
-
-| Location | Purpose | Format |
-|----------|---------|--------|
-| `docs/` | Git-tracked technical reference | Concise, technical |
-| `Proxmox-TerraformDeployments.wiki/` | GitHub wiki (public) | Beginner-friendly |
-| `~/OneDrive/Obsidian Vault/.../Claude Managed Homelab/` | Personal vault | Internal, credentials |
+**IMPORTANT: When the user says "update all documentation" or "update all docs", update ALL of the following Obsidian locations:**
 
 ### Obsidian Vault Path
 
 ```
-C:\Users\herms\OneDrive\Obsidian Vault\Hermes's Life Knowledge Base\07 HomeLab Things\Claude Managed Homelab\
+C:\Users\herms14\OneDrive\Obsidian Vault\Hermes's Life Knowledge Base\07 HomeLab Things\Claude Managed Homelab\
 ```
 
-### Document Mapping
+### 1. Individual Numbered Files (Modular Documentation)
 
-| docs/ File | Wiki Page | Obsidian File |
-|------------|-----------|---------------|
-| NETWORKING.md | Network-Architecture.md | 01 - Network Architecture.md |
-| PROXMOX.md | Proxmox-Cluster.md | 02 - Proxmox Cluster.md |
-| STORAGE.md | Storage-Architecture.md | 03 - Storage Architecture.md |
-| TERRAFORM.md | Terraform-Basics.md | 05 - Terraform Configuration.md |
-| SERVICES.md | Services-Overview.md | 07 - Deployed Services.md |
-| APPLICATION_CONFIGURATIONS.md | Application-Configurations.md | 21 - Application Configurations.md |
-| ANSIBLE.md | Ansible-Basics.md | 06 - Ansible Automation.md |
-| OBSERVABILITY.md | Observability.md | 18 - Observability Stack.md |
-| WATCHTOWER.md | Watchtower.md | 19 - Watchtower Updates.md |
-| CICD.md | GitLab-CICD.md | 20 - GitLab CI-CD Automation.md |
-| SERVICE_ONBOARDING.md | Service-Onboarding.md | 22 - Service Onboarding Workflow.md |
-| PBS_MONITORING.md | PBS-Monitoring.md | 23 - PBS Monitoring.md |
-| TROUBLESHOOTING.md | Troubleshooting.md | 12 - Troubleshooting.md |
+Update the relevant numbered files for specific topics. Create new numbered files for new categories.
+
+| File | Topic |
+|------|-------|
+| `00 - Homelab Index.md` | Master index |
+| `01 - Network Architecture.md` | VLANs, topology, DNS |
+| `02 - Proxmox Cluster.md` | Cluster configuration |
+| `03 - Storage Architecture.md` | NAS, NFS, storage |
+| `04 - Kubernetes Cluster.md` | K8s setup |
+| `05 - Terraform Configuration.md` | IaC |
+| `06 - Ansible Automation.md` | Configuration management |
+| `07 - Deployed Services.md` | Service inventory |
+| ... | ... |
+| `41 - Omada ACL Implementation Guide.md` | Network ACL rules |
+
+### 2. Consolidated Documents (Must Stay Synced)
+
+| Document | Style | Purpose |
+|----------|-------|---------|
+| **Hermes Homelab Technical Manual.md** | Reference tables, commands | Quick lookup, operations |
+| **Book - The Complete Homelab Guide.md** | Narrative chapters, tutorials | Learning guide, explanations |
+
+### DO NOT Update
+
+- `docs/` folder in this repository (legacy, no longer maintained)
+- `wiki/` folder
+- `.claude/context.md` - only update if explicitly requested
+- `CHANGELOG.md` - only update if explicitly requested
+
+### Sync Workflow
+
+1. **Update numbered file(s)** for the specific topic
+2. **Sync to Technical Manual** - add/update relevant section with tables and commands
+3. **Sync to Book** - add/update corresponding chapter with narrative explanation
+4. **Create new numbered file** if topic doesn't exist (use next available number)
 
 ### Documentation Content Requirements
 

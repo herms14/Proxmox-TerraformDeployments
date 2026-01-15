@@ -1,0 +1,109 @@
+# GitOps Service Definition
+# This file defines how the service is deployed, routed, and monitored
+# Modify this file for your specific service
+
+service:
+  name: example-service              # Unique identifier (lowercase, hyphens only)
+  display_name: Example Service      # Human-readable name for notifications
+  description: "A brief description of what this service does"
+  category: utility                  # Category: monitoring, media, utility, api, infrastructure
+  version: "1.0.0"                   # Current version (for tracking)
+
+deployment:
+  target_host: docker-vm-core-utilities01  # Target Docker host
+  # Available hosts:
+  #   - docker-lxc-media (192.168.40.11) - Media services (Jellyfin, *arr stack)
+  #   - docker-lxc-glance (192.168.40.12) - Dashboard and APIs
+  #   - docker-vm-core-utilities01 (192.168.40.13) - Monitoring and utilities
+  #   - docker-lxc-bots (192.168.40.14) - Discord bots
+  #   - traefik-lxc (192.168.40.20) - Reverse proxy only
+  #   - authentik-lxc (192.168.40.21) - SSO only
+
+  port: 8080                         # Port exposed on host
+  container_port: 8080               # Port inside container (usually same as port)
+  install_path: /opt/example-service # Installation directory on host
+
+  # Environment variables (non-sensitive)
+  environment:
+    TZ: America/New_York
+    # Add your environment variables here
+
+  # Secrets - pulled from GitHub Secrets during deployment
+  # Format: name = env var name in container, source = GitHub Secret name
+  secrets: []
+  # Example:
+  # secrets:
+  #   - name: API_KEY
+  #     source: EXAMPLE_SERVICE_API_KEY
+  #   - name: DATABASE_PASSWORD
+  #     source: EXAMPLE_SERVICE_DB_PASSWORD
+
+  # Health check configuration
+  healthcheck:
+    enabled: true
+    endpoint: /health                # Health check endpoint path
+    port: 8080                       # Port to check (usually same as container_port)
+    interval: 30                     # Seconds between checks
+    timeout: 10                      # Seconds to wait for response
+    retries: 3                       # Number of retries before marking unhealthy
+    expected_status: [200]           # Expected HTTP status codes
+
+# Traefik reverse proxy configuration
+traefik:
+  enabled: true
+  subdomain: example                 # Creates: example.hrmsmrflrii.xyz
+  entrypoints:
+    - websecure                      # HTTPS (default)
+  tls:
+    enabled: true
+    cert_resolver: letsencrypt       # Let's Encrypt certificate
+  middlewares: []                    # Optional: add middleware names
+  # Example middlewares:
+  #   - authentik-auth               # Require Authentik SSO login
+  #   - rate-limit                   # Rate limiting
+  headers:
+    frame_deny: true                 # Set to false if embedding in iframes (Glance)
+
+# DNS configuration (auto-add to OPNsense)
+dns:
+  enabled: true
+  hostname: example                  # Same as traefik.subdomain
+  # IP defaults to Traefik (192.168.40.20) - usually don't change
+
+# Authentik SSO integration
+authentik:
+  enabled: false                     # Set to true to require SSO login
+  method: forward_auth               # forward_auth, proxy, or oidc
+  # Forward auth is recommended for most services
+
+# Glance dashboard integration
+glance:
+  enabled: false                     # Set to true to add to Glance dashboard
+  page: home                         # Glance page: home, compute, media, network, storage
+  bookmark:
+    enabled: true
+    group: Utilities                 # Bookmark group name
+    description: "Short description for bookmark"
+  monitor:
+    enabled: true
+    widget: monitor                  # Widget type: monitor, iframe, custom
+    health_endpoint: /health
+
+# Container update monitoring (Watchtower)
+watchtower:
+  enabled: true                      # Monitor for image updates
+  notify_on_update: true             # Send Discord notification on update
+
+# Discord notifications
+notifications:
+  discord:
+    enabled: true                    # Send deployment notifications to Discord
+    channel: deployment-notifications
+
+# Metadata
+metadata:
+  maintainer: hermes
+  repository: ""                     # Auto-filled by GitHub
+  docs: ""                           # Link to service documentation
+  tags:
+    - utility

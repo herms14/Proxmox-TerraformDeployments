@@ -1,0 +1,171 @@
+# =============================================================================
+# Configure File Servers (FS01 and FS02)
+# =============================================================================
+# This playbook configures Windows File Server roles on FS01 and FS02
+#
+# Prerequisites:
+#   - Servers must be domain joined
+#
+# Usage:
+#   ansible-playbook -i inventory.yml configure-file-servers.yml
+# =============================================================================
+
+---
+- name: Configure File Servers
+  hosts: file_servers
+  gather_facts: yes
+  vars:
+    domain_name: hrmsmrflrii.xyz
+    domain_netbios: HRMSMRFLRII
+    shares_root: "C:\\Shares"
+
+  tasks:
+    - name: Install File Server role and features
+      win_feature:
+        name:
+          - FS-FileServer
+          - FS-Resource-Manager
+          - FS-DFS-Namespace
+          - FS-DFS-Replication
+          - RSAT-DFS-Mgmt-Con
+        state: present
+        include_management_tools: yes
+      register: fs_role_install
+
+    - name: Reboot if role installation requires
+      win_reboot:
+        reboot_timeout: 600
+      when: fs_role_install.reboot_required
+
+    - name: Create shares root directory
+      win_file:
+        path: "{{ shares_root }}"
+        state: directory
+
+    - name: Create department share directories
+      win_file:
+        path: "{{ shares_root }}\\{{ item }}"
+        state: directory
+      loop:
+        - IT
+        - HR
+        - Finance
+        - Marketing
+        - Shared
+
+    - name: Create home drives directory
+      win_file:
+        path: "{{ shares_root }}\\HomeDrives"
+        state: directory
+
+    - name: Configure IT share
+      win_share:
+        name: IT$
+        path: "{{ shares_root }}\\IT"
+        state: present
+        full: "{{ domain_netbios }}\\Domain Admins"
+        change: "{{ domain_netbios }}\\IT Department"
+        read: ""
+        description: "IT Department Share"
+      ignore_errors: yes
+
+    - name: Configure HR share
+      win_share:
+        name: HR$
+        path: "{{ shares_root }}\\HR"
+        state: present
+        full: "{{ domain_netbios }}\\Domain Admins"
+        change: "{{ domain_netbios }}\\HR Department"
+        read: ""
+        description: "HR Department Share"
+      ignore_errors: yes
+
+    - name: Configure Finance share
+      win_share:
+        name: Finance$
+        path: "{{ shares_root }}\\Finance"
+        state: present
+        full: "{{ domain_netbios }}\\Domain Admins"
+        change: "{{ domain_netbios }}\\Finance Department"
+        read: ""
+        description: "Finance Department Share"
+      ignore_errors: yes
+
+    - name: Configure Marketing share
+      win_share:
+        name: Marketing$
+        path: "{{ shares_root }}\\Marketing"
+        state: present
+        full: "{{ domain_netbios }}\\Domain Admins"
+        change: "{{ domain_netbios }}\\Marketing Department"
+        read: ""
+        description: "Marketing Department Share"
+      ignore_errors: yes
+
+    - name: Configure Shared folder (company-wide)
+      win_share:
+        name: Shared
+        path: "{{ shares_root }}\\Shared"
+        state: present
+        full: "{{ domain_netbios }}\\Domain Admins"
+        change: "{{ domain_netbios }}\\Domain Users"
+        read: ""
+        description: "Company Shared Folder"
+      ignore_errors: yes
+
+    - name: Configure Home Drives share
+      win_share:
+        name: HomeDrives$
+        path: "{{ shares_root }}\\HomeDrives"
+        state: present
+        full: "{{ domain_netbios }}\\Domain Admins"
+        change: ""
+        read: ""
+        description: "User Home Drives"
+      ignore_errors: yes
+
+    - name: Configure Windows Firewall for File Sharing
+      win_firewall_rule:
+        name: "{{ item }}"
+        state: present
+        enabled: yes
+        action: allow
+        direction: in
+      loop:
+        - "File and Printer Sharing (SMB-In)"
+        - "File and Printer Sharing (NB-Session-In)"
+        - "File and Printer Sharing (NB-Name-In)"
+        - "File and Printer Sharing (NB-Datagram-In)"
+
+    - name: Enable Volume Shadow Copy on C: drive
+      win_shell: |
+        $volume = Get-WmiObject Win32_Volume | Where-Object { $_.DriveLetter -eq 'C:' }
+        $shadow = Get-WmiObject Win32_ShadowCopy | Where-Object { $_.VolumeName -eq $volume.DeviceID }
+        if (-not $shadow) {
+          vssadmin add shadowstorage /for=C: /on=C: /maxsize=10%
+          vssadmin create shadow /for=C:
+          Write-Output "Shadow copy enabled"
+        } else {
+          Write-Output "Shadow copy already configured"
+        }
+      register: vss_config
+      ignore_errors: yes
+
+    - name: Display file server configuration
+      debug:
+        msg: |
+          File Server Configuration Complete
+          ===================================
+          Server: {{ inventory_hostname }}
+          Shares Root: {{ shares_root }}
+
+          Shares Created:
+          - \\{{ inventory_hostname }}\IT$ (IT Department)
+          - \\{{ inventory_hostname }}\HR$ (HR Department)
+          - \\{{ inventory_hostname }}\Finance$ (Finance Department)
+          - \\{{ inventory_hostname }}\Marketing$ (Marketing Department)
+          - \\{{ inventory_hostname }}\Shared (Company-wide)
+          - \\{{ inventory_hostname }}\HomeDrives$ (User Home Drives)
+
+          Note: Department groups (IT Department, HR Department, etc.)
+          need to be created in AD before shares are fully functional.

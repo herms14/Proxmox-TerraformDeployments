@@ -1,0 +1,300 @@
+---
+# Transfer FSMO Roles from Azure DC to On-Premises DC
+# Moves all 5 FSMO roles from AZDC01 (10.10.4.4) to DC01 (192.168.80.2)
+#
+# FSMO Roles:
+#   - Schema Master (Forest-wide)
+#   - Domain Naming Master (Forest-wide)
+#   - PDC Emulator (Domain-wide)
+#   - RID Master (Domain-wide)
+#   - Infrastructure Master (Domain-wide)
+#
+# Run with:
+#   ansible-playbook -i inventory-hybrid.yml transfer-fsmo-roles.yml
+
+- name: "Pre-Flight: Verify Current FSMO Role Holders"
+  hosts: onprem_primary_dc
+  gather_facts: no
+  tasks:
+    - name: Get current FSMO role holders
+      win_shell: |
+        Write-Output "=== Current FSMO Role Holders ==="
+        netdom query fsmo
+      register: current_fsmo
+      changed_when: false
+
+    - name: Display current FSMO holders
+      debug:
+        var: current_fsmo.stdout_lines
+
+    - name: Verify DC01 is a domain controller
+      win_shell: |
+        $dc = Get-ADDomainController -Identity DC01 -ErrorAction Stop
+        Write-Output "DC01 Status:"
+        Write-Output "  - IsGlobalCatalog: $($dc.IsGlobalCatalog)"
+        Write-Output "  - Site: $($dc.Site)"
+        Write-Output "  - IPv4Address: $($dc.IPv4Address)"
+        Write-Output "  - Ready to receive FSMO roles"
+      register: dc01_status
+      changed_when: false
+
+    - name: Display DC01 status
+      debug:
+        var: dc01_status.stdout_lines
+
+- name: "Phase 1: Create AD Sites for Hybrid Topology"
+  hosts: onprem_primary_dc
+  gather_facts: no
+  tasks:
+    - name: Check existing AD Sites
+      win_shell: |
+        Get-ADReplicationSite -Filter * | Select-Object Name, Description | Format-Table -AutoSize | Out-String
+      register: existing_sites
+      changed_when: false
+
+    - name: Display existing sites
+      debug:
+        var: existing_sites.stdout_lines
+
+    - name: Create OnPrem AD Site
+      win_shell: |
+        $siteName = "OnPrem-Site"
+        $existingSite = Get-ADReplicationSite -Filter "Name -eq '$siteName'" -ErrorAction SilentlyContinue
+
+        if (-not $existingSite) {
+          New-ADReplicationSite -Name $siteName -Description "On-Premises Proxmox Infrastructure"
+          Write-Output "CREATED: Site '$siteName' created"
+        } else {
+          Write-Output "EXISTS: Site '$siteName' already exists"
+        }
+      register: create_site
+
+    - name: Display site creation result
+      debug:
+        var: create_site.stdout_lines
+
+    - name: Create subnet for On-Prem (192.168.80.0/24)
+      win_shell: |
+        $subnet = "192.168.80.0/24"
+        $siteName = "OnPrem-Site"
+
+        $existingSubnet = Get-ADReplicationSubnet -Filter "Name -eq '$subnet'" -ErrorAction SilentlyContinue
+
+        if (-not $existingSubnet) {
+          New-ADReplicationSubnet -Name $subnet -Site $siteName -Description "On-Prem Windows Lab VLAN 80"
+          Write-Output "CREATED: Subnet '$subnet' linked to '$siteName'"
+        } else {
+          Write-Output "EXISTS: Subnet '$subnet' already exists"
+        }
+      register: create_subnet
+
+    - name: Display subnet creation result
+      debug:
+        var: create_subnet.stdout_lines
+
+    - name: Create Azure AD Site
+      win_shell: |
+        $siteName = "Azure-Site"
+        $existingSite = Get-ADReplicationSite -Filter "Name -eq '$siteName'" -ErrorAction SilentlyContinue
+
+        if (-not $existingSite) {
+          New-ADReplicationSite -Name $siteName -Description "Azure Cloud Infrastructure"
+          Write-Output "CREATED: Site '$siteName' created"
+        } else {
+          Write-Output "EXISTS: Site '$siteName' already exists"
+        }
+      register: create_azure_site
+
+    - name: Create subnet for Azure (10.10.4.0/24)
+      win_shell: |
+        $subnet = "10.10.4.0/24"
+        $siteName = "Azure-Site"
+
+        $existingSubnet = Get-ADReplicationSubnet -Filter "Name -eq '$subnet'" -ErrorAction SilentlyContinue
+
+        if (-not $existingSubnet) {
+          New-ADReplicationSubnet -Name $subnet -Site $siteName -Description "Azure VNet AD Subnet"
+          Write-Output "CREATED: Subnet '$subnet' linked to '$siteName'"
+        } else {
+          Write-Output "EXISTS: Subnet '$subnet' already exists"
+        }
+      register: create_azure_subnet
+
+    - name: Create Site Link between OnPrem and Azure
+      win_shell: |
+        $linkName = "OnPrem-Azure-Link"
+        $existingLink = Get-ADReplicationSiteLink -Filter "Name -eq '$linkName'" -ErrorAction SilentlyContinue
+
+        if (-not $existingLink) {
+          # First create the link with default site
+          New-ADReplicationSiteLink -Name $linkName `
+            -SitesIncluded "OnPrem-Site","Azure-Site" `
+            -Cost 100 `
+            -ReplicationFrequencyInMinutes 15 `
+            -Description "VPN Link between On-Prem and Azure"
+          Write-Output "CREATED: Site Link '$linkName' created"
+        } else {
+          # Update existing link to include both sites
+          Set-ADReplicationSiteLink -Identity $linkName -SitesIncluded "OnPrem-Site","Azure-Site"
+          Write-Output "UPDATED: Site Link '$linkName' updated"
+        }
+      register: create_link
+      ignore_errors: yes
+
+- name: "Phase 2: Move DCs to Correct Sites"
+  hosts: onprem_primary_dc
+  gather_facts: no
+  tasks:
+    - name: Move DC01 to OnPrem-Site
+      win_shell: |
+        $dc = Get-ADDomainController -Identity "DC01"
+        if ($dc.Site -ne "OnPrem-Site") {
+          Move-ADDirectoryServer -Identity "DC01" -Site "OnPrem-Site"
+          Write-Output "MOVED: DC01 moved to OnPrem-Site"
+        } else {
+          Write-Output "EXISTS: DC01 already in OnPrem-Site"
+        }
+      register: move_dc01
+      ignore_errors: yes
+
+    - name: Move DC02 to OnPrem-Site
+      win_shell: |
+        $dc = Get-ADDomainController -Identity "DC02"
+        if ($dc.Site -ne "OnPrem-Site") {
+          Move-ADDirectoryServer -Identity "DC02" -Site "OnPrem-Site"
+          Write-Output "MOVED: DC02 moved to OnPrem-Site"
+        } else {
+          Write-Output "EXISTS: DC02 already in OnPrem-Site"
+        }
+      register: move_dc02
+      ignore_errors: yes
+
+    - name: Move Azure DCs to Azure-Site
+      win_shell: |
+        $azureDCs = @("AZDC01", "AZDC02", "AZRODC01", "AZRODC02")
+        foreach ($dcName in $azureDCs) {
+          try {
+            $dc = Get-ADDomainController -Identity $dcName -ErrorAction SilentlyContinue
+            if ($dc -and $dc.Site -ne "Azure-Site") {
+              Move-ADDirectoryServer -Identity $dcName -Site "Azure-Site"
+              Write-Output "MOVED: $dcName moved to Azure-Site"
+            } elseif ($dc) {
+              Write-Output "EXISTS: $dcName already in Azure-Site"
+            }
+          } catch {
+            Write-Output "SKIP: $dcName not found or not accessible"
+          }
+        }
+      register: move_azure_dcs
+      ignore_errors: yes
+
+    - name: Display DC site assignments
+      win_shell: |
+        Get-ADDomainController -Filter * |
+        Select-Object Name, Site, IPv4Address |
+        Format-Table -AutoSize | Out-String
+      register: dc_sites
+      changed_when: false
+
+    - name: Show DC site assignments
+      debug:
+        var: dc_sites.stdout_lines
+
+- name: "Phase 3: Transfer FSMO Roles to DC01"
+  hosts: onprem_primary_dc
+  gather_facts: no
+  tasks:
+    - name: Transfer all FSMO roles to DC01
+      win_shell: |
+        Write-Output "=== Transferring FSMO Roles to DC01 ==="
+
+        # Transfer all 5 FSMO roles
+        $roles = @(
+          "SchemaMaster",
+          "DomainNamingMaster",
+          "PDCEmulator",
+          "RIDMaster",
+          "InfrastructureMaster"
+        )
+
+        foreach ($role in $roles) {
+          try {
+            Write-Output "Transferring $role..."
+            Move-ADDirectoryServerOperationMasterRole -Identity "DC01" -OperationMasterRole $role -Force -ErrorAction Stop
+            Write-Output "  SUCCESS: $role transferred to DC01"
+          } catch {
+            if ($_.Exception.Message -like "*already owns*" -or $_.Exception.Message -like "*role owner*DC01*") {
+              Write-Output "  EXISTS: DC01 already holds $role"
+            } else {
+              Write-Output "  ERROR: Failed to transfer $role - $($_.Exception.Message)"
+            }
+          }
+        }
+
+        Write-Output ""
+        Write-Output "=== FSMO Transfer Complete ==="
+      register: fsmo_transfer
+
+    - name: Display FSMO transfer results
+      debug:
+        var: fsmo_transfer.stdout_lines
+
+- name: "Phase 4: Verify FSMO Role Transfer"
+  hosts: onprem_primary_dc
+  gather_facts: no
+  tasks:
+    - name: Verify new FSMO role holders
+      win_shell: |
+        Write-Output "=== Verifying FSMO Role Holders ==="
+        netdom query fsmo
+      register: new_fsmo
+      changed_when: false
+
+    - name: Display new FSMO holders
+      debug:
+        var: new_fsmo.stdout_lines
+
+    - name: Verify with PowerShell
+      win_shell: |
+        Write-Output "=== PowerShell Verification ==="
+
+        $forest = Get-ADForest
+        $domain = Get-ADDomain
+
+        Write-Output "Forest-Wide Roles:"
+        Write-Output "  Schema Master: $($forest.SchemaMaster)"
+        Write-Output "  Domain Naming Master: $($forest.DomainNamingMaster)"
+        Write-Output ""
+        Write-Output "Domain-Wide Roles:"
+        Write-Output "  PDC Emulator: $($domain.PDCEmulator)"
+        Write-Output "  RID Master: $($domain.RIDMaster)"
+        Write-Output "  Infrastructure Master: $($domain.InfrastructureMaster)"
+      register: ps_verify
+      changed_when: false
+
+    - name: Display PowerShell verification
+      debug:
+        var: ps_verify.stdout_lines
+
+    - name: Force replication after FSMO transfer
+      win_shell: |
+        Write-Output "=== Forcing AD Replication ==="
+        repadmin /syncall /A /e /P
+        Write-Output "Replication triggered across all DCs"
+      register: repl_sync
+      ignore_errors: yes
+
+    - name: Wait for replication to propagate
+      pause:
+        seconds: 30
+
+    - name: Final replication status
+      win_shell: |
+        Write-Output "=== Final Replication Summary ==="
+        repadmin /replsummary
+      register: final_repl
+      changed_when: false
+
+    - name: Display final replication status
+      debug:
+        var: final_repl.stdout_lines

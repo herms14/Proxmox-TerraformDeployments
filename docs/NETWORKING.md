@@ -95,6 +95,55 @@ The infrastructure uses two primary VLANs:
 | **VLAN 20** | 192.168.20.0/24 | 192.168.20.1 | Kubernetes Infrastructure | K8s control plane, worker nodes, Ansible |
 | **VLAN 40** | 192.168.40.0/24 | 192.168.40.1 | Services & Management | Docker hosts, logging, automation |
 
+## Network Segmentation with ACLs
+
+Gateway ACL rules on the Omada OC300 controller enforce inter-VLAN traffic policies. All rules are **Gateway ACL** (Layer 3) since they control routing between VLANs.
+
+### ACL Configuration Summary
+
+| Rule Set | Rules | Purpose |
+|----------|-------|---------|
+| DNS Access | 1-2 | Allow all VLANs to reach Pi-hole (192.168.90.53) and OPNsense (192.168.91.30) |
+| Guest Isolation | 3-9 | Block Guest (VLAN 50) from accessing any internal network |
+| IoT Isolation | 10-14 | Block IoT (VLAN 30) from trusted networks |
+| Management PC | 15-18 | Full unrestricted access for Kratos (192.168.10.10) |
+| Internal Workstations | 19-28 | Limited access for other VLAN 10 devices via Traefik |
+| Infrastructure | 29-39 | Proxmox cluster, K8s communication, Ansible SSH |
+| Services Dependencies | 40-48 | NFS mounts, Prometheus scraping, Sentinel SSH |
+| Traefik Backend | 49-56 | Reverse proxy access to all backend services |
+| Sonos | 57-60 | Speaker control and NAS music access |
+| Default Deny | 61-62 | Catch-all blocks with logging enabled |
+
+### IP Groups (17 total)
+
+| Group | IPs | Purpose |
+|-------|-----|---------|
+| PROXMOX_NODES | 192.168.20.20-22 | Proxmox cluster |
+| K8S_CONTROLLERS | 192.168.20.32-34 | K8s control plane |
+| K8S_WORKERS | 192.168.20.40-45 | K8s workers |
+| SYNOLOGY_NAS | 192.168.20.31 | NAS storage |
+| DOCKER_MEDIA | 192.168.40.11 | Media stack |
+| DOCKER_UTILITIES | 192.168.40.13 | Monitoring stack |
+| TRAEFIK | 192.168.40.20 | Reverse proxy |
+| MANAGEMENT_PC | 192.168.10.10 | Kratos admin PC |
+| PIHOLE | 192.168.90.53 | DNS server |
+
+### Key Security Features
+
+- **62 Gateway ACL rules** control all inter-VLAN traffic
+- **Default-deny** approach with explicit allows
+- **Kratos full access** for emergency administration
+- **Logging enabled** on default deny rules for troubleshooting
+
+### Rule Processing Order
+
+```
+DNS Allow (1-2) → Guest/IoT Deny (3-14) → Management PC (15-18) →
+Specific Allows (19-60) → Default Deny (61-62)
+```
+
+> **Full Implementation Guide**: See Obsidian vault `41 - Omada ACL Implementation Guide` for complete rule definitions, testing procedures, and troubleshooting.
+
 ## Switch Port Configuration
 
 ### Morpheus Switch (Proxmox Connectivity)

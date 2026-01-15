@@ -1,0 +1,217 @@
+---
+# ==============================================================================
+# Configure DNS Forwarders on Domain Controllers
+# ==============================================================================
+# The on-prem Windows VMs use DC01/DC02 as DNS servers. For internet access,
+# the DCs need to forward external DNS queries to upstream DNS servers.
+#
+# This playbook configures:
+#   - DNS forwarders on DC01 and DC02
+#   - Forwarder timeout settings
+#   - Root hints as fallback
+#
+# Usage:
+#   ansible-playbook configure-dns-forwarders.yml -i inventory-onprem-windows.yml
+#
+# ==============================================================================
+
+- name: Configure DNS Forwarders on Domain Controllers
+  hosts: domain_controllers
+  gather_facts: false
+
+  vars:
+    # DNS forwarders in order of preference
+    dns_forwarders:
+      - "192.168.90.53"   # Pi-hole (primary)
+      - "8.8.8.8"         # Google DNS (fallback)
+      - "1.1.1.1"         # Cloudflare DNS (fallback)
+    forwarder_timeout: 3  # seconds
+
+  tasks:
+    # -------------------------------------------------------------------------
+    # Pre-check: Verify DNS Server Role
+    # -------------------------------------------------------------------------
+    - name: Check if DNS Server role is installed
+      win_shell: |
+        $dns = Get-WindowsFeature DNS
+        if ($dns.Installed) { "DNS_INSTALLED" } else { "DNS_NOT_INSTALLED" }
+      register: dns_check
+
+    - name: Fail if DNS Server not installed
+      fail:
+        msg: "DNS Server role is not installed on {{ inventory_hostname }}"
+      when: "'DNS_NOT_INSTALLED' in dns_check.stdout"
+
+    # -------------------------------------------------------------------------
+    # Step 1: Get Current Forwarder Configuration
+    # -------------------------------------------------------------------------
+    - name: Get current DNS forwarder configuration
+      win_shell: |
+        $forwarders = Get-DnsServerForwarder
+        @{
+            ForwarderIPAddresses = $forwarders.IPAddress.IPAddressToString
+            Timeout = $forwarders.Timeout
+            UseRootHint = $forwarders.UseRootHint
+        } | ConvertTo-Json
+      register: current_forwarders
+
+    - name: Display current forwarder configuration
+      debug:
+        msg: "Current forwarders: {{ current_forwarders.stdout }}"
+
+    # -------------------------------------------------------------------------
+    # Step 2: Configure DNS Forwarders
+    # -------------------------------------------------------------------------
+    - name: Remove existing forwarders
+      win_shell: |
+        # Get all current forwarders and remove them
+        $current = (Get-DnsServerForwarder).IPAddress.IPAddressToString
+        foreach ($ip in $current) {
+            Remove-DnsServerForwarder -IPAddress $ip -Force -ErrorAction SilentlyContinue
+        }
+        "Existing forwarders removed"
+      register: remove_result
+
+    - name: Add DNS forwarders
+      win_shell: |
+        # Add forwarders in order
+        $forwarders = @("{{ dns_forwarders | join('", "') }}")
+        foreach ($forwarder in $forwarders) {
+            Add-DnsServerForwarder -IPAddress $forwarder -PassThru | Out-Null
+            Write-Output "Added forwarder: $forwarder"
+        }
+      register: add_forwarders
+
+    - name: Display forwarder addition results
+      debug:
+        msg: "{{ add_forwarders.stdout_lines }}"
+
+    # -------------------------------------------------------------------------
+    # Step 3: Configure Forwarder Settings
+    # -------------------------------------------------------------------------
+    - name: Configure forwarder timeout and root hints
+      win_shell: |
+        # Set forwarder timeout
+        Set-DnsServerForwarder -Timeout {{ forwarder_timeout }}
+
+        # Enable use of root hints if forwarders fail
+        Set-DnsServerForwarder -UseRootHint $true
+
+        "Forwarder settings configured: Timeout={{ forwarder_timeout }}s, UseRootHint=True"
+      register: settings_result
+
+    - name: Display settings result
+      debug:
+        msg: "{{ settings_result.stdout }}"
+
+    # -------------------------------------------------------------------------
+    # Step 4: Verify Configuration
+    # -------------------------------------------------------------------------
+    - name: Verify new forwarder configuration
+      win_shell: |
+        $forwarders = Get-DnsServerForwarder
+        @{
+            ForwarderIPAddresses = $forwarders.IPAddress.IPAddressToString
+            Timeout = $forwarders.Timeout
+            UseRootHint = $forwarders.UseRootHint
+        } | ConvertTo-Json
+      register: new_forwarders
+
+    - name: Display new configuration
+      debug:
+        msg: "New forwarders: {{ new_forwarders.stdout }}"
+
+    # -------------------------------------------------------------------------
+    # Step 5: Test DNS Resolution
+    # -------------------------------------------------------------------------
+    - name: Test internal DNS resolution (AD domain)
+      win_shell: |
+        try {
+            $result = Resolve-DnsName "dc01.hrmsmrflrii.xyz" -ErrorAction Stop
+            "INTERNAL_DNS_OK"
+        } catch {
+            "INTERNAL_DNS_FAIL: $_"
+        }
+      register: internal_dns_test
+
+    - name: Test external DNS resolution
+      win_shell: |
+        try {
+            $result = Resolve-DnsName "www.microsoft.com" -ErrorAction Stop
+            "EXTERNAL_DNS_OK: $($result[0].IPAddress)"
+        } catch {
+            "EXTERNAL_DNS_FAIL: $_"
+        }
+      register: external_dns_test
+
+    - name: Test Google DNS resolution
+      win_shell: |
+        try {
+            $result = Resolve-DnsName "www.google.com" -ErrorAction Stop
+            "GOOGLE_DNS_OK: $($result[0].IPAddress)"
+        } catch {
+            "GOOGLE_DNS_FAIL: $_"
+        }
+      register: google_dns_test
+
+    # -------------------------------------------------------------------------
+    # Results Summary
+    # -------------------------------------------------------------------------
+    - name: Display DNS test results
+      debug:
+        msg: |
+          ========================================
+          {{ inventory_hostname }} - DNS Forwarder Results
+          ========================================
+          Configured Forwarders: {{ dns_forwarders | join(', ') }}
+
+          DNS Resolution Tests:
+          - Internal (AD): {{ internal_dns_test.stdout | trim }}
+          - External (Microsoft): {{ external_dns_test.stdout | trim }}
+          - External (Google): {{ google_dns_test.stdout | trim }}
+          ========================================
+
+# ==============================================================================
+# Test DNS from Member Servers
+# ==============================================================================
+- name: Verify DNS on Member Servers
+  hosts: onprem_windows:!domain_controllers
+  gather_facts: false
+
+  tasks:
+    - name: Clear DNS cache
+      win_shell: |
+        Clear-DnsClientCache
+        "DNS cache cleared"
+      register: cache_clear
+
+    - name: Test external DNS resolution from member server
+      win_shell: |
+        try {
+            $result = Resolve-DnsName "www.microsoft.com" -ErrorAction Stop
+            "DNS_OK: $($result[0].IPAddress)"
+        } catch {
+            "DNS_FAIL: $_"
+        }
+      register: member_dns_test
+
+    - name: Test internet connectivity from member server
+      win_shell: |
+        try {
+            $response = Invoke-WebRequest -Uri "https://www.microsoft.com" -UseBasicParsing -TimeoutSec 10 -ErrorAction Stop
+            if ($response.StatusCode -eq 200) { "HTTPS_OK" } else { "HTTPS_FAIL" }
+        } catch {
+            "HTTPS_FAIL: $_"
+        }
+      register: member_https_test
+      ignore_errors: true
+
+    - name: Display member server results
+      debug:
+        msg: |
+          ========================================
+          {{ inventory_hostname }} - Internet Access Test
+          ========================================
+          DNS Resolution: {{ member_dns_test.stdout | trim }}
+          HTTPS Test:     {{ member_https_test.stdout | default('NOT_RUN') | trim }}
+          ========================================

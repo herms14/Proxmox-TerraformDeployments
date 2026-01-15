@@ -1,0 +1,124 @@
+---
+# ==============================================================================
+# Check On-Prem Windows VM Internet Connectivity
+# ==============================================================================
+# Verifies internet access on the Proxmox-hosted Windows VMs in VLAN 80
+# These VMs need internet for:
+#   - Windows Updates
+#   - Azure Arc agent (if planned)
+#   - Azure Monitor Agent
+#
+# Usage:
+#   ansible-playbook check-onprem-windows-internet.yml -i inventory-onprem-windows.yml
+#
+# ==============================================================================
+
+- name: Check On-Prem Windows VM Internet Connectivity
+  hosts: onprem_windows
+  gather_facts: false
+
+  vars:
+    test_urls:
+      - name: "Microsoft"
+        url: "www.microsoft.com"
+      - name: "Google DNS"
+        url: "8.8.8.8"
+      - name: "Azure Management"
+        url: "management.azure.com"
+
+  tasks:
+    # -------------------------------------------------------------------------
+    # Connectivity Tests
+    # -------------------------------------------------------------------------
+    - name: Test DNS resolution
+      win_shell: |
+        try {
+            $result = Resolve-DnsName "www.microsoft.com" -ErrorAction Stop
+            Write-Output "DNS_OK"
+        } catch {
+            Write-Output "DNS_FAIL: $_"
+        }
+      register: dns_test
+
+    - name: Test internet connectivity (ping)
+      win_shell: |
+        $result = Test-Connection -ComputerName 8.8.8.8 -Count 2 -Quiet
+        if ($result) { "PING_OK" } else { "PING_FAIL" }
+      register: ping_test
+
+    - name: Test HTTPS connectivity to Microsoft
+      win_shell: |
+        try {
+            $response = Invoke-WebRequest -Uri "https://www.microsoft.com" -UseBasicParsing -TimeoutSec 10 -ErrorAction Stop
+            if ($response.StatusCode -eq 200) { "HTTPS_OK" } else { "HTTPS_FAIL" }
+        } catch {
+            Write-Output "HTTPS_FAIL: $_"
+        }
+      register: https_test
+      ignore_errors: true
+
+    - name: Test Azure endpoint connectivity
+      win_shell: |
+        try {
+            $tcp = Test-NetConnection -ComputerName "management.azure.com" -Port 443 -WarningAction SilentlyContinue
+            if ($tcp.TcpTestSucceeded) { "AZURE_OK" } else { "AZURE_FAIL" }
+        } catch {
+            Write-Output "AZURE_FAIL: $_"
+        }
+      register: azure_test
+      ignore_errors: true
+
+    # -------------------------------------------------------------------------
+    # Network Configuration Check
+    # -------------------------------------------------------------------------
+    - name: Get network configuration
+      win_shell: |
+        $config = Get-NetIPConfiguration | Where-Object { $_.IPv4DefaultGateway } | Select-Object -First 1
+        @{
+            IPAddress = $config.IPv4Address.IPAddress
+            Gateway = $config.IPv4DefaultGateway.NextHop
+            DNS = ($config.DNSServer.ServerAddresses -join ",")
+        } | ConvertTo-Json
+      register: network_config
+
+    # -------------------------------------------------------------------------
+    # Results Summary
+    # -------------------------------------------------------------------------
+    - name: Display connectivity results
+      debug:
+        msg: |
+          ================================================
+          Connectivity Results for {{ inventory_hostname }}
+          ================================================
+          DNS Resolution:    {{ dns_test.stdout | trim }}
+          Ping (8.8.8.8):   {{ ping_test.stdout | trim }}
+          HTTPS (Microsoft): {{ https_test.stdout | default('HTTPS_FAIL') | trim }}
+          Azure Endpoint:    {{ azure_test.stdout | default('AZURE_FAIL') | trim }}
+
+          Network Config:
+          {{ network_config.stdout }}
+          ================================================
+
+    # -------------------------------------------------------------------------
+    # Fix Internet Connectivity (if needed)
+    # -------------------------------------------------------------------------
+    - name: Check if gateway is configured
+      win_shell: |
+        $gateway = (Get-NetIPConfiguration | Where-Object { $_.IPv4DefaultGateway }).IPv4DefaultGateway.NextHop
+        if ($gateway) { "GATEWAY_OK: $gateway" } else { "NO_GATEWAY" }
+      register: gateway_check
+
+    - name: Display troubleshooting info if no internet
+      debug:
+        msg: |
+          ========================================
+          TROUBLESHOOTING FOR {{ inventory_hostname }}
+          ========================================
+          1. Check that the VM's gateway (192.168.80.1) is correctly configured
+          2. Verify the OPNsense firewall allows outbound traffic from VLAN 80
+          3. Check DNS is set to Pi-hole (192.168.90.53) or a public DNS
+          4. Ensure no Windows Firewall rules are blocking outbound traffic
+
+          Current Gateway: {{ gateway_check.stdout | trim }}
+          ========================================
+      when: "'PING_FAIL' in ping_test.stdout or 'HTTPS_FAIL' in https_test.stdout"

@@ -1,7 +1,11 @@
 # Azure Sentinel Setup Guide
 
 > **Purpose**: Centralized SIEM for homelab security monitoring and learning
-> **Status**: Phase 1 - Syslog Integration
+> **Status**: ✅ Fully Deployed via Terraform
+>
+> **See Also**: [Azure Sentinel Learning Lab](./AZURE_SENTINEL_LEARNING_LAB.md) - Comprehensive tutorial with learning scenarios, architecture diagrams, and KQL queries
+
+> **Note**: This document describes the manual setup process. The current deployment uses Terraform for infrastructure-as-code. See `terraform/azure/sentinel-learning/` for the IaC implementation.
 
 ---
 

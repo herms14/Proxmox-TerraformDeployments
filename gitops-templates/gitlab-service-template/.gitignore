@@ -1,0 +1,22 @@
+# Environment files (generated during deployment)
+.env
+config/.env
+
+# Backup files
+*.bak
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+
+# Local test data
+data/

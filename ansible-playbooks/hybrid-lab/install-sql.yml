@@ -1,0 +1,161 @@
+# =============================================================================
+# Install SQL Server 2022 on SQL01
+# =============================================================================
+# This playbook installs SQL Server 2022 Standard Edition
+#
+# Prerequisites:
+#   - SQL01 must be domain joined
+#   - SQL Server ISO must be mounted or accessible
+#
+# Usage:
+#   ansible-playbook -i inventory.yml install-sql.yml
+# =============================================================================
+
+---
+- name: Install SQL Server 2022
+  hosts: sql_servers
+  gather_facts: yes
+  vars:
+    sql_iso_path: "D:\\"  # Mounted SQL ISO
+    sql_edition: Standard
+    sql_instance: MSSQLSERVER
+    sql_sa_password: "SQL-P@ss2025!"
+    sql_service_account: "NT AUTHORITY\\SYSTEM"
+    sql_agent_service_account: "NT AUTHORITY\\SYSTEM"
+    domain_admin_user: "HRMSMRFLRII\\Administrator"
+    sql_features: "SQLENGINE,REPLICATION,FULLTEXT,CONN,IS,BC,SDK"
+
+  tasks:
+    - name: Ensure .NET Framework 4.8 is installed
+      win_feature:
+        name: NET-Framework-45-Features
+        state: present
+        include_sub_features: yes
+      register: dotnet_install
+
+    - name: Reboot if .NET installation requires
+      win_reboot:
+        reboot_timeout: 600
+      when: dotnet_install.reboot_required
+
+    - name: Create SQL Server service accounts (if domain accounts)
+      win_shell: |
+        # Skip if using SYSTEM accounts
+        Write-Output "Using built-in service accounts"
+      when: "'SYSTEM' in sql_service_account"
+
+    - name: Create SQL Server directories
+      win_file:
+        path: "{{ item }}"
+        state: directory
+      loop:
+        - C:\SQLData
+        - C:\SQLLogs
+        - C:\SQLBackup
+        - C:\SQLTempDB
+
+    - name: Check if SQL Server is already installed
+      win_shell: |
+        $service = Get-Service -Name 'MSSQLSERVER' -ErrorAction SilentlyContinue
+        if ($service) {
+          Write-Output "installed"
+        } else {
+          Write-Output "not_installed"
+        }
+      register: sql_check
+      changed_when: false
+
+    - name: Install SQL Server 2022
+      win_shell: |
+        $setupPath = "{{ sql_iso_path }}\setup.exe"
+        if (-not (Test-Path $setupPath)) {
+          Write-Error "SQL Setup not found at $setupPath"
+          exit 1
+        }
+
+        $args = @(
+          "/Q"
+          "/ACTION=Install"
+          "/FEATURES={{ sql_features }}"
+          "/INSTANCENAME={{ sql_instance }}"
+          "/SQLSVCACCOUNT=`"{{ sql_service_account }}`""
+          "/AGTSVCACCOUNT=`"{{ sql_agent_service_account }}`""
+          "/SQLSYSADMINACCOUNTS=`"{{ domain_admin_user }}`" `"BUILTIN\Administrators`""
+          "/SECURITYMODE=SQL"
+          "/SAPWD=`"{{ sql_sa_password }}`""
+          "/SQLUSERDBDIR=C:\SQLData"
+          "/SQLUSERDBLOGDIR=C:\SQLLogs"
+          "/SQLBACKUPDIR=C:\SQLBackup"
+          "/SQLTEMPDBDIR=C:\SQLTempDB"
+          "/SQLTEMPDBLOGDIR=C:\SQLTempDB"
+          "/TCPENABLED=1"
+          "/NPENABLED=0"
+          "/IACCEPTSQLSERVERLICENSETERMS"
+          "/INDICATEPROGRESS"
+        )
+
+        $process = Start-Process -FilePath $setupPath -ArgumentList $args -Wait -PassThru -NoNewWindow
+
+        if ($process.ExitCode -eq 0 -or $process.ExitCode -eq 3010) {
+          Write-Output "SQL Server installation completed"
+          exit 0
+        } else {
+          Write-Error "SQL Server installation failed with exit code: $($process.ExitCode)"
+          exit $process.ExitCode
+        }
+      when: "'not_installed' in sql_check.stdout"
+      register: sql_install
+      async: 3600
+      poll: 60
+
+    - name: Reboot after SQL installation
+      win_reboot:
+        reboot_timeout: 600
+      when: sql_install is changed
+
+    - name: Start SQL Server services
+      win_service:
+        name: "{{ item }}"
+        state: started
+        start_mode: auto
+      loop:
+        - MSSQLSERVER
+        - SQLSERVERAGENT
+      ignore_errors: yes
+
+    - name: Configure SQL Server for remote connections
+      win_shell: |
+        Import-Module SqlServer -ErrorAction SilentlyContinue
+
+        # Enable TCP/IP
+        $smo = 'Microsoft.SqlServer.Management.Smo.'
+        $wmi = New-Object ($smo + 'Wmi.ManagedComputer')
+        $uri = "ManagedComputer[@Name='$env:COMPUTERNAME']/ServerInstance[@Name='MSSQLSERVER']/ServerProtocol[@Name='Tcp']"
+        $tcp = $wmi.GetSmoObject($uri)
+        $tcp.IsEnabled = $true
+        $tcp.Alter()
+
+        Write-Output "TCP/IP enabled for SQL Server"
+      ignore_errors: yes
+
+    - name: Configure Windows Firewall for SQL Server
+      win_firewall_rule:
+        name: "SQL Server (TCP-In)"
+        localport: 1433
+        action: allow
+        direction: in
+        protocol: tcp
+        state: present
+        enabled: yes
+
+    - name: Verify SQL Server installation
+      win_shell: |
+        $query = "SELECT @@VERSION AS Version, SERVERPROPERTY('ProductVersion') AS ProductVersion, SERVERPROPERTY('Edition') AS Edition"
+        Invoke-Sqlcmd -Query $query -ServerInstance "localhost" | Format-List
+      register: sql_version
+      ignore_errors: yes
+
+    - name: Display SQL Server version
+      debug:
+        var: sql_version.stdout
+      when: sql_version is defined

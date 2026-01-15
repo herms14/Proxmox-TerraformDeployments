@@ -133,6 +133,7 @@ Before tokens exhaust, write a handoff:
 | **Discord Bots** | [docs/DISCORD_BOTS.md](./docs/DISCORD_BOTS.md) |
 | **Azure Environment** | [docs/AZURE_ENVIRONMENT.md](./docs/AZURE_ENVIRONMENT.md) |
 | **Azure Hybrid Lab** | [docs/AZURE_HYBRID_LAB.md](./docs/AZURE_HYBRID_LAB.md) |
+| **Azure Sentinel Learning Lab** | [docs/AZURE_SENTINEL_LEARNING_LAB.md](./docs/AZURE_SENTINEL_LEARNING_LAB.md) |
 | **PBS Monitoring** | [docs/PBS_MONITORING.md](./docs/PBS_MONITORING.md) |
 | **Troubleshooting** | [docs/TROUBLESHOOTING.md](./docs/TROUBLESHOOTING.md) |
 
@@ -214,18 +215,48 @@ ssh docker-vm-core-utilities01    # Docker utilities host
 
 ## Documentation Update Protocol
 
-**CRITICAL: When user says "update all documentation" or "update all docs", you MUST update ALL of these locations:**
+**CRITICAL: When user says "update all documentation" or "update all docs", update these Obsidian locations:**
 
-| Location | Path | What to Update |
-|----------|------|----------------|
-| **docs/** | `docs/*.md` | Technical reference files |
-| **GitHub Wiki** | `wiki/*.md` | Corresponding wiki pages |
-| **Obsidian Vault** | See path below | Corresponding Obsidian notes |
-| **Technical Manual** | `38 - Homelab Technical Manual.md` in Obsidian | Comprehensive reference manual |
-| **.claude/context.md** | `.claude/context.md` | Infrastructure context |
-| **CHANGELOG.md** | `CHANGELOG.md` | Add change entry |
+### 1. Individual Numbered Files (Modular Documentation)
 
-This is NOT optional - ALL 6 locations must be updated for documentation consistency.
+Update the relevant numbered files (00-XX) for specific topics:
+
+| File Pattern | Purpose |
+|--------------|---------|
+| `00 - Homelab Index.md` | Master index |
+| `01 - Network Architecture.md` | Network/VLAN/DNS |
+| `02 - Proxmox Cluster.md` | Proxmox configuration |
+| `03 - Storage Architecture.md` | NAS/NFS storage |
+| ... | ... |
+| `41 - Omada ACL Implementation Guide.md` | ACL rules |
+
+**Create new numbered files** for new categories (e.g., `42 - New Topic.md`).
+
+### 2. Consolidated Documents (Must Stay Synced)
+
+| Document | Purpose |
+|----------|---------|
+| **Hermes Homelab Technical Manual.md** | Comprehensive reference (tables, commands, quick lookup) |
+| **Book - The Complete Homelab Guide.md** | Narrative tutorials (chapters, explanations, "why") |
+
+### Obsidian Vault Location
+```
+C:\Users\herms14\OneDrive\Obsidian Vault\Hermes's Life Knowledge Base\07 HomeLab Things\Claude Managed Homelab\
+```
+
+### DO NOT Update
+- `docs/` folder in this repository (legacy, no longer maintained)
+- `wiki/` folder
+
+### Book and Technical Manual Sync Requirement
+
+**IMPORTANT**: The **Technical Manual** and **Complete Homelab Guide (Book)** must ALWAYS be kept in sync:
+
+- When updating the Technical Manual, also update the corresponding chapter in the Book
+- When adding new sections to the Technical Manual, add a corresponding chapter to the Book
+- Both documents should reflect the same information, but:
+  - **Technical Manual**: Reference-style, quick lookup, tables, commands
+  - **Book**: Narrative-style, comprehensive explanations, tutorials, diagrams
 
 See `.claude/conventions.md` for full sync guide and document mapping.
 

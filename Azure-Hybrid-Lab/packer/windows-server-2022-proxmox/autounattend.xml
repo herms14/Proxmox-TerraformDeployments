@@ -204,7 +204,7 @@
 
             <UserAccounts>
                 <AdministratorPassword>
-                    <Value>c@llimachus14</Value>
+                    <Value>CHANGE_ME_BEFORE_USE</Value>
                     <PlainText>true</PlainText>
                 </AdministratorPassword>
             </UserAccounts>
@@ -212,7 +212,7 @@
             <!-- Auto Logon for initial setup -->
             <AutoLogon>
                 <Password>
-                    <Value>c@llimachus14</Value>
+                    <Value>CHANGE_ME_BEFORE_USE</Value>
                     <PlainText>true</PlainText>
                 </Password>
                 <Enabled>true</Enabled>
@@ -230,24 +230,30 @@
                 </SynchronousCommand>
                 <SynchronousCommand wcm:action="add">
                     <Order>2</Order>
+                    <CommandLine>powershell -ExecutionPolicy Bypass -Command "Set-MpPreference -DisableRealtimeMonitoring $true -EA 0; Add-MpPreference -ExclusionPath 'C:\Windows\Temp' -EA 0"</CommandLine>
+                    <Description>Disable Windows Defender for Packer</Description>
+                    <RequiresUserInput>false</RequiresUserInput>
+                </SynchronousCommand>
+                <SynchronousCommand wcm:action="add">
+                    <Order>3</Order>
                     <CommandLine>powershell -ExecutionPolicy Bypass -Command "$a=Get-NetAdapter|?{$_.Status -eq 'Up'}|Select -First 1; Remove-NetIPAddress -InterfaceIndex $a.ifIndex -Confirm:$false -EA 0; Remove-NetRoute -InterfaceIndex $a.ifIndex -Confirm:$false -EA 0; New-NetIPAddress -InterfaceIndex $a.ifIndex -IPAddress 192.168.80.99 -PrefixLength 24 -DefaultGateway 192.168.80.1; Set-DnsClientServerAddress -InterfaceIndex $a.ifIndex -ServerAddresses 8.8.8.8"</CommandLine>
                     <Description>Configure Static IP for Packer build</Description>
                     <RequiresUserInput>false</RequiresUserInput>
                 </SynchronousCommand>
                 <SynchronousCommand wcm:action="add">
-                    <Order>3</Order>
+                    <Order>4</Order>
                     <CommandLine>powershell -ExecutionPolicy Bypass -Command "$drives = @('D','E','F','G'); foreach($d in $drives){$p=\"${d}:\install-virtio.ps1\"; if(Test-Path $p){&amp; $p; break}}"</CommandLine>
                     <Description>Install VirtIO Drivers and Guest Agent</Description>
                     <RequiresUserInput>false</RequiresUserInput>
                 </SynchronousCommand>
                 <SynchronousCommand wcm:action="add">
-                    <Order>4</Order>
+                    <Order>5</Order>
                     <CommandLine>powershell -ExecutionPolicy Bypass -Command "$drives = @('D','E','F','G'); foreach($d in $drives){$p=\"${d}:\setup-winrm.ps1\"; if(Test-Path $p){&amp; $p; break}}"</CommandLine>
                     <Description>Setup WinRM for Packer</Description>
                     <RequiresUserInput>false</RequiresUserInput>
                 </SynchronousCommand>
                 <SynchronousCommand wcm:action="add">
-                    <Order>5</Order>
+                    <Order>6</Order>
                     <CommandLine>powershell -ExecutionPolicy Bypass -Command "$drives = @('D','E','F','G'); foreach($d in $drives){$p=\"${d}:\enable-remoting.ps1\"; if(Test-Path $p){&amp; $p; break}}"</CommandLine>
                     <Description>Enable PowerShell Remoting</Description>
                     <RequiresUserInput>false</RequiresUserInput>

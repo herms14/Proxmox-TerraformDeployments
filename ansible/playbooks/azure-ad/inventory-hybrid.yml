@@ -1,0 +1,171 @@
+# Hybrid Active Directory Lab Inventory
+# Azure DCs + On-Premises Windows VMs
+#
+# Azure DCs: hrmsmrflrii.xyz domain (existing)
+# On-Prem VMs: VLAN 80 - 192.168.80.0/24 (to be joined)
+
+all:
+  vars:
+    # WinRM Connection Settings
+    ansible_user: azureadmin
+    ansible_password: "CHANGE_ME_BEFORE_USE"
+    ansible_connection: winrm
+    ansible_winrm_transport: ntlm
+    ansible_winrm_server_cert_validation: ignore
+    ansible_port: 5985
+
+    # Domain Settings
+    domain_name: "hrmsmrflrii.xyz"
+    domain_netbios: "HRMSMRFLRII"
+    domain_dn: "DC=hrmsmrflrii,DC=xyz"
+    domain_admin_user: "HRMSMRFLRII\\azureadmin"
+    domain_admin_password: "CHANGE_ME_BEFORE_USE"
+    safe_mode_password: "CHANGE_ME_BEFORE_USE"
+
+  children:
+    # ============================================
+    # AZURE DOMAIN CONTROLLERS (Existing)
+    # ============================================
+    azure_dcs:
+      children:
+        azure_primary_dc:
+          hosts:
+            AZDC01:
+              ansible_host: 10.10.4.4
+              dc_role: "PrimaryDC"
+              dns_servers:
+                - 10.10.4.4
+                - 10.10.4.5
+
+        azure_secondary_dcs:
+          hosts:
+            AZDC02:
+              ansible_host: 10.10.4.5
+              dc_role: "SecondaryDC"
+              dns_servers:
+                - 10.10.4.4
+                - 10.10.4.5
+
+        azure_rodcs:
+          hosts:
+            AZRODC01:
+              ansible_host: 10.10.4.6
+              dc_role: "RODC"
+              # Points to on-prem for cross-site replication
+              dns_servers:
+                - 192.168.80.2
+                - 192.168.80.3
+            AZRODC02:
+              ansible_host: 10.10.4.7
+              dc_role: "RODC"
+              dns_servers:
+                - 10.10.4.4
+                - 10.10.4.5
+
+    # ============================================
+    # ON-PREMISES DOMAIN CONTROLLERS (To Promote)
+    # ============================================
+    onprem_dcs:
+      children:
+        onprem_primary_dc:
+          hosts:
+            DC01:
+              ansible_host: 192.168.80.2
+              dc_role: "PrimaryDC-OnPrem"
+              fsmo_holder: true
+              dns_servers:
+                - 127.0.0.1  # Itself after promotion
+                - 192.168.80.3
+
+        onprem_secondary_dc:
+          hosts:
+            DC02:
+              ansible_host: 192.168.80.3
+              dc_role: "SecondaryDC-OnPrem"
+              dns_servers:
+                - 192.168.80.2
+                - 127.0.0.1
+
+    # ============================================
+    # ON-PREMISES MEMBER SERVERS (To Domain Join)
+    # ============================================
+    onprem_servers:
+      children:
+        file_servers:
+          hosts:
+            FS01:
+              ansible_host: 192.168.80.4
+              server_role: "FileServer"
+            FS02:
+              ansible_host: 192.168.80.5
+              server_role: "FileServer"
+
+        sql_servers:
+          hosts:
+            SQL01:
+              ansible_host: 192.168.80.6
+              server_role: "SQLServer"
+            SQL-FABRIC:
+              ansible_host: 192.168.80.14
+              server_role: "SQLServer-Fabric"
+
+        identity_servers:
+          hosts:
+            AADCON01:
+              ansible_host: 192.168.80.7
+              server_role: "EntraConnect"
+            AADPP01:
+              ansible_host: 192.168.80.8
+              server_role: "PasswordProtection"
+            AADPP02:
+              ansible_host: 192.168.80.9
+              server_role: "PasswordProtection"
+
+        web_servers:
+          hosts:
+            IIS01:
+              ansible_host: 192.168.80.10
+              server_role: "WebServer"
+            IIS02:
+              ansible_host: 192.168.80.11
+              server_role: "WebServer"
+
+    # ============================================
+    # ON-PREMISES WORKSTATIONS (To Domain Join)
+    # ============================================
+    onprem_workstations:
+      hosts:
+        CLIENT01:
+          ansible_host: 192.168.80.12
+          workstation_type: "Standard"
+        CLIENT02:
+          ansible_host: 192.168.80.13
+          workstation_type: "Standard"
+
+    # ============================================
+    # LOGICAL GROUPS
+    # ============================================
+
+    # All Domain Controllers
+    all_dcs:
+      children:
+        azure_dcs:
+        onprem_dcs:
+
+    # All On-Prem VMs (for DNS and Arc config)
+    all_onprem:
+      children:
+        onprem_dcs:
+        onprem_servers:
+        onprem_workstations:
+      vars:
+        # On-prem VMs use on-prem DCs for DNS
+        dns_servers:
+          - 192.168.80.2
+          - 192.168.80.3
+
+    # VMs to Domain Join (excludes DCs which are promoted separately)
+    domain_join_targets:
+      children:
+        onprem_servers:
+        onprem_workstations:

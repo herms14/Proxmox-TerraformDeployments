@@ -1,0 +1,194 @@
+---
+# Deploy SMART Health API for PBS Drive Monitoring
+# Monitors drive health (SMART status) for PBS storage drives
+#
+# Usage:
+#   ansible-playbook -i inventory.ini glance/deploy-smart-health-api.yml
+#
+# API Endpoint: http://192.168.20.22:9101/health
+# Monitored Drives:
+#   - /dev/sda (Seagate 4TB HDD - main datastore)
+#   - /dev/nvme1n1 (Kingston 1TB NVMe - daily datastore)
+
+- name: Deploy SMART Health API on node03
+  hosts: node03
+  become: yes
+  vars:
+    api_path: /opt/smart-health-api
+    api_port: 9101
+
+  tasks:
+    - name: Install smartmontools
+      apt:
+        name: smartmontools
+        state: present
+        update_cache: yes
+
+    - name: Install Python3 if not present
+      apt:
+        name:
+          - python3
+          - python3-pip
+        state: present
+
+    - name: Create API directory
+      file:
+        path: "{{ api_path }}"
+        state: directory
+        owner: root
+        group: root
+        mode: '0755'
+
+    - name: Create SMART Health API script
+      copy:
+        dest: "{{ api_path }}/smart-health.py"
+        content: |
+          #!/usr/bin/env python3
+          """
+          SMART Health API
+          Reports SMART health status for PBS storage drives
+          """
+
+          from http.server import HTTPServer, BaseHTTPRequestHandler
+          import subprocess
+          import json
+          import re
+
+          # Drives to monitor
+          DRIVES = [
+              {"device": "/dev/sda", "name": "Seagate 4TB HDD", "datastore": "main"},
+              {"device": "/dev/nvme1n1", "name": "Kingston 1TB NVMe", "datastore": "daily"}
+          ]
+
+          class HealthHandler(BaseHTTPRequestHandler):
+              def do_GET(self):
+                  if self.path == '/health':
+                      self.send_response(200)
+                      self.send_header('Content-Type', 'application/json')
+                      self.send_header('Access-Control-Allow-Origin', '*')
+                      self.end_headers()
+
+                      drives = []
+                      for drive in DRIVES:
+                          status = self.check_smart_health(drive["device"])
+                          drives.append({
+                              "device": drive["device"],
+                              "name": drive["name"],
+                              "datastore": drive["datastore"],
+                              "healthy": status["healthy"],
+                              "status": status["status"]
+                          })
+
+                      response = {"drives": drives}
+                      self.wfile.write(json.dumps(response).encode())
+
+                  elif self.path == '/':
+                      self.send_response(200)
+                      self.send_header('Content-Type', 'application/json')
+                      self.end_headers()
+                      self.wfile.write(json.dumps({"service": "smart-health-api", "status": "running"}).encode())
+
+                  else:
+                      self.send_response(404)
+                      self.end_headers()
+
+              def check_smart_health(self, device):
+                  """Check SMART health status for a device"""
+                  try:
+                      # Run smartctl with JSON output
+                      result = subprocess.run(
+                          ["smartctl", "-H", "-j", device],
+                          capture_output=True,
+                          text=True,
+                          timeout=30
+                      )
+
+                      try:
+                          data = json.loads(result.stdout)
+                          smart_status = data.get("smart_status", {})
+                          passed = smart_status.get("passed", False)
+
+                          return {
+                              "healthy": passed,
+                              "status": "PASSED" if passed else "FAILED"
+                          }
+                      except json.JSONDecodeError:
+                          # Fallback to text parsing
+                          if "PASSED" in result.stdout:
+                              return {"healthy": True, "status": "PASSED"}
+                          elif "FAILED" in result.stdout:
+                              return {"healthy": False, "status": "FAILED"}
+                          else:
+                              return {"healthy": True, "status": "UNKNOWN"}
+
+                  except subprocess.TimeoutExpired:
+                      return {"healthy": False, "status": "TIMEOUT"}
+                  except Exception as e:
+                      return {"healthy": False, "status": f"ERROR: {str(e)[:50]}"}
+
+              def log_message(self, format, *args):
+                  # Suppress HTTP request logging
+                  pass
+
+          if __name__ == '__main__':
+              server = HTTPServer(('0.0.0.0', 9101), HealthHandler)
+              print(f"SMART Health API running on port 9101")
+              server.serve_forever()
+        mode: '0755'
+
+    - name: Create systemd service
+      copy:
+        dest: /etc/systemd/system/smart-health-api.service
+        content: |
+          [Unit]
+          Description=SMART Health API for PBS Drive Monitoring
+          After=network.target
+
+          [Service]
+          Type=simple
+          ExecStart=/usr/bin/python3 /opt/smart-health-api/smart-health.py
+          Restart=always
+          RestartSec=10
+
+          [Install]
+          WantedBy=multi-user.target
+        mode: '0644'
+
+    - name: Reload systemd
+      systemd:
+        daemon_reload: yes
+
+    - name: Enable and start SMART Health API
+      systemd:
+        name: smart-health-api
+        enabled: yes
+        state: restarted
+
+    - name: Wait for API to be ready
+      uri:
+        url: "http://localhost:{{ api_port }}/health"
+        status_code: 200
+      register: result
+      until: result.status == 200
+      retries: 5
+      delay: 2
+
+    - name: Test API endpoint
+      uri:
+        url: "http://localhost:{{ api_port }}/health"
+        return_content: yes
+      register: api_response
+
+    - name: Display deployment info
+      debug:
+        msg: |
+          SMART Health API deployed successfully!
+
+          API Endpoint: http://192.168.20.22:{{ api_port }}/health
+          Service: smart-health-api.service
+
+          Test with:
+            curl http://192.168.20.22:{{ api_port }}/health
+
+          Current Status:
+          {{ api_response.content }}

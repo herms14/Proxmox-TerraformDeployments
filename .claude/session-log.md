@@ -5,6 +5,175 @@
 
 ---
 
+## 2026-01-14
+
+### Hybrid Active Directory Extension - Phase 1 Implementation
+**Status**: Completed (Playbooks Created)
+**Request**: Extend Azure AD domain to on-prem, transfer FSMO roles, configure DNS, deploy Azure Arc, forward logs via VPN
+
+**Work Completed**:
+
+1. **Created Ansible Inventory & Playbooks**:
+   - `ansible/playbooks/azure-ad/inventory-hybrid.yml` - Combined inventory for Azure + On-Prem VMs
+   - `ansible/playbooks/azure-ad/promote-onprem-dcs.yml` - Promote DC01/DC02 to domain controllers
+   - `ansible/playbooks/azure-ad/transfer-fsmo-roles.yml` - Transfer all 5 FSMO roles to DC01
+   - `ansible/playbooks/azure-ad/configure-dns.yml` - Configure hybrid DNS resolution
+   - `ansible/playbooks/azure-ad/domain-join-vms.yml` - Domain join 10 member servers/workstations
+   - `ansible/playbooks/azure-arc/deploy-arc-agent-windows.yml` - Azure Arc onboarding for Windows VMs
+
+2. **Updated Terraform for SQL-FABRIC VM**:
+   - Added SQL-FABRIC to `Azure-Hybrid-Lab/terraform/proxmox/main.tf` (192.168.80.14, VMID 312)
+   - Added hardware specs in `main-from-template.tf` (4 cores, 16GB RAM)
+
+3. **Created Windows DCR for Log Analytics**:
+   - `terraform/azure/sentinel/windows-dcr.tf` - Data Collection Rules for Windows Security/System events
+   - DCE for Windows VMs
+   - Sentinel alert rules for brute force, new admin users, privileged logons
+
+**Architecture Summary**:
+```
+Azure (hrmsmrflrii.xyz domain):
+  - AZDC01 (10.10.4.4) - Was FSMO holder
+  - AZDC02 (10.10.4.5) - Secondary DC
+  - AZRODC01/02 - Read-Only DCs
+
+On-Prem (VLAN 80 - 192.168.80.0/24):
+  - DC01 (192.168.80.2) - Will hold all FSMO roles
+  - DC02 (192.168.80.3) - Secondary on-prem DC
+  - FS01, FS02, SQL01, SQL-FABRIC, AADCON01, AADPP01/02, IIS01/02, CLIENT01/02
+  - All VMs → Azure Arc → Log Analytics (via VPN)
+```
+
+**Files Created**:
+- `ansible/playbooks/azure-ad/inventory-hybrid.yml`
+- `ansible/playbooks/azure-ad/promote-onprem-dcs.yml`
+- `ansible/playbooks/azure-ad/transfer-fsmo-roles.yml`
+- `ansible/playbooks/azure-ad/configure-dns.yml`
+- `ansible/playbooks/azure-ad/domain-join-vms.yml`
+- `ansible/playbooks/azure-arc/deploy-arc-agent-windows.yml`
+- `terraform/azure/sentinel/windows-dcr.tf`
+
+**Files Modified**:
+- `Azure-Hybrid-Lab/terraform/proxmox/main.tf` - Added SQL-FABRIC
+- `Azure-Hybrid-Lab/terraform/proxmox/main-from-template.tf` - Added SQL-FABRIC hardware specs
+
+**Next Steps** (for user to execute):
+1. Verify VPN connectivity: `Test-NetConnection -ComputerName 10.10.4.4 -Port 389`
+2. Run playbooks in order:
+   - `ansible-playbook -i inventory-hybrid.yml promote-onprem-dcs.yml`
+   - `ansible-playbook -i inventory-hybrid.yml transfer-fsmo-roles.yml`
+   - `ansible-playbook -i inventory-hybrid.yml configure-dns.yml`
+   - `ansible-playbook -i inventory-hybrid.yml domain-join-vms.yml`
+3. Deploy SQL-FABRIC: `terraform apply -var="use_template=true"`
+4. Create Azure Service Principal for Arc onboarding
+5. Run Arc deployment: `ansible-playbook -i inventory-hybrid.yml ../azure-arc/deploy-arc-agent-windows.yml`
+6. Deploy Windows DCR: `terraform apply` in sentinel directory
+
+---
+
+### Immich Backup Configuration & Restore Documentation
+**Status**: Completed
+**Request**: Configure application-level backup for Immich and create restore documentation
+
+**Work Completed**:
+
+1. **Created Ansible Playbook for Database Backup**
+   - `ansible/playbooks/backup/configure-immich-backup.yml`
+   - Deploys backup script (`/opt/immich/backup-db.sh`)
+   - Deploys restore script (`/opt/immich/restore-db.sh`)
+   - Configures cron job at 02:30 daily (before PBS at 03:00)
+   - 7-day retention, stores dumps on NFS share
+
+2. **Created Obsidian Documentation**
+   - `42 - Immich Backup and Restore.md` - Comprehensive guide
+   - Covers VM-level and database-level backup
+   - Recovery scenarios with time estimates
+   - Quick reference commands
+
+3. **Updated Technical Manual (v5.6)**
+   - Added "Immich Backup and Restore" section
+   - Architecture diagram showing backup strategy
+   - Backup commands and restore procedures
+   - Recovery scenarios table
+
+4. **Updated Book - The Complete Homelab Guide**
+   - Added "Application-Level Backups: Immich Photo Management" subsection
+   - Within Chapter 26: Backup and Disaster Recovery
+   - Explains why application-level backup, recovery procedures
+
+5. **Updated Index Files**
+   - `00 - Homelab Index.md` - Added link to new doc
+   - `26 - Tutorials Index.md` - Added to Infrastructure section
+
+**Backup Strategy Summary**:
+| Component | Method | Schedule | Location |
+|-----------|--------|----------|----------|
+| Immich VM | PBS Snapshot | 03:00 daily | pbs-daily (NVMe) |
+| PostgreSQL DB | pg_dumpall | 02:30 daily | NAS /db-backups/ |
+| Photos | Hyper Backup | User config | Backblaze B2 |
+
+**Key Files Created/Modified**:
+- `ansible/playbooks/backup/configure-immich-backup.yml` (NEW)
+- Obsidian: `42 - Immich Backup and Restore.md` (NEW)
+- Obsidian: `Hermes Homelab Technical Manual.md` (v5.6)
+- Obsidian: `Book - The Complete Homelab Guide.md`
+- Obsidian: `00 - Homelab Index.md`
+- Obsidian: `26 - Tutorials Index.md`
+
+---
+
+### Azure Hybrid Lab - Windows Template Builds & VM Deployment
+**Status**: Paused - Needs Template Fix for Full Automation
+**Request**: Continue Windows 11 template creation and deploy Hybrid Lab VMs
+
+**Work Completed**:
+
+1. **Windows 11 Packer Build Started**
+   - Created autounattend ISO on Ansible controller (Windows lacks ISO tools)
+   - Uploaded `win11-autounattend.iso` to node03 ISOs storage
+   - Updated Packer template to use pre-built ISO
+   - Started build - VM 9011 running, waiting for WinRM at 192.168.20.97
+
+2. **Hybrid Lab VM Deployment Attempted**
+   - Found WS2022 template (9022) exists on node03
+   - Fixed Terraform configs:
+     - Changed all VMs to deploy on node03 (template location)
+     - Fixed BIOS mode (seabios, not ovmf)
+     - Fixed output heredoc syntax errors
+   - Deployed 3/12 VMs: DC02 (301), CLIENT01 (308), CLIENT02 (309)
+   - Remaining 9 VMs failed with CFS lock timeout errors
+
+3. **Discovered OOBE Issue**
+   - Cloned VMs boot to Windows OOBE setup screen
+   - Requires manual intervention (region, language, admin password)
+   - Root cause: Sysprep command missing `/unattend:` flag
+
+4. **Created Fix for Future Automation**
+   - Created `sysprep-unattend.xml` with:
+     - SkipMachineOOBE/SkipUserOOBE = true
+     - Administrator password preset
+     - WinRM auto-enabled via FirstLogonCommands
+   - File ready at: `Azure-Hybrid-Lab/packer/windows-server-2022-proxmox/sysprep-unattend.xml`
+
+**Blocked On**:
+- WS2022 template (9022) needs rebuild with unattend automation
+- User wants ZERO manual intervention
+
+**Next Steps** (documented in active-tasks.md):
+1. Update Packer template to copy sysprep-unattend.xml before sysprep
+2. Update sysprep command with `/unattend:` flag
+3. Delete template 9022 and existing VMs (301, 308, 309)
+4. Rebuild template (~30-45 min)
+5. Deploy all 12 VMs via Terraform
+
+**Key Files Modified**:
+- `packer/windows-11-proxmox/windows-11.pkr.hcl` - Changed to use pre-built ISO
+- `Azure-Hybrid-Lab/terraform/proxmox/main.tf` - All VMs on node03
+- `Azure-Hybrid-Lab/terraform/proxmox/main-from-template.tf` - Fixed BIOS
+- `Azure-Hybrid-Lab/packer/windows-server-2022-proxmox/sysprep-unattend.xml` - NEW
+
+---
+
 ## 2026-01-11
 
 ### Homelab Chronicle Timeline App Created

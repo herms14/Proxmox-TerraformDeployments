@@ -1,0 +1,161 @@
+---
+# ==============================================================================
+# Configure Syslog Forwarding to Azure Sentinel
+# ==============================================================================
+# This playbook configures rsyslog on homelab hosts to forward logs to the
+# centralized syslog server (linux-syslog-server01) which sends to Azure Sentinel.
+#
+# Targets:
+#   - Proxmox nodes (192.168.20.20-22)
+#   - Docker hosts (192.168.40.11-13)
+#   - Ansible controller (192.168.20.30)
+#
+# Usage:
+#   ansible-playbook configure-syslog-forwarding.yml -i inventory/hosts.yml
+#
+# ==============================================================================
+
+- name: Configure Syslog Forwarding to Sentinel Collector
+  hosts: all
+  become: true
+  vars:
+    syslog_collector: "192.168.40.5"
+    syslog_port: 514
+    syslog_protocol: "@"  # @ = UDP, @@ = TCP
+
+  tasks:
+    # -------------------------------------------------------------------------
+    # Proxmox Nodes Configuration
+    # -------------------------------------------------------------------------
+    - name: Configure rsyslog forwarding on Proxmox nodes
+      when: "'proxmox' in group_names"
+      block:
+        - name: Create rsyslog forwarding config for Proxmox
+          copy:
+            dest: /etc/rsyslog.d/50-sentinel-forward.conf
+            content: |
+              # ==============================================================================
+              # Forward logs to Azure Sentinel Collector
+              # Configured by Ansible - {{ ansible_date_time.iso8601 }}
+              # ==============================================================================
+
+              # Forward authentication logs
+              auth,authpriv.*     {{ syslog_protocol }}{{ syslog_collector }}:{{ syslog_port }}
+
+              # Forward critical and error logs
+              *.crit              {{ syslog_protocol }}{{ syslog_collector }}:{{ syslog_port }}
+              *.err               {{ syslog_protocol }}{{ syslog_collector }}:{{ syslog_port }}
+
+              # Forward Proxmox-specific logs (pveproxy, pvedaemon)
+              local7.*            {{ syslog_protocol }}{{ syslog_collector }}:{{ syslog_port }}
+
+              # Forward kernel messages
+              kern.*              {{ syslog_protocol }}{{ syslog_collector }}:{{ syslog_port }}
+            mode: '0644'
+            owner: root
+            group: root
+          notify: Restart rsyslog
+
+        - name: Test rsyslog configuration on Proxmox
+          command: rsyslogd -N1
+          changed_when: false
+
+    # -------------------------------------------------------------------------
+    # Docker Hosts Configuration
+    # -------------------------------------------------------------------------
+    - name: Configure rsyslog forwarding on Docker hosts
+      when: "'docker_hosts' in group_names"
+      block:
+        - name: Ensure rsyslog is installed on Docker hosts
+          apt:
+            name: rsyslog
+            state: present
+            update_cache: yes
+
+        - name: Create rsyslog forwarding config for Docker hosts
+          copy:
+            dest: /etc/rsyslog.d/50-sentinel-forward.conf
+            content: |
+              # ==============================================================================
+              # Forward logs to Azure Sentinel Collector
+              # Configured by Ansible - {{ ansible_date_time.iso8601 }}
+              # ==============================================================================
+
+              # Forward authentication logs
+              auth,authpriv.*     {{ syslog_protocol }}{{ syslog_collector }}:{{ syslog_port }}
+
+              # Forward daemon logs (includes Docker)
+              daemon.*            {{ syslog_protocol }}{{ syslog_collector }}:{{ syslog_port }}
+
+              # Forward critical and error logs
+              *.crit              {{ syslog_protocol }}{{ syslog_collector }}:{{ syslog_port }}
+              *.err               {{ syslog_protocol }}{{ syslog_collector }}:{{ syslog_port }}
+
+              # Forward local facilities (for custom applications)
+              local0.*            {{ syslog_protocol }}{{ syslog_collector }}:{{ syslog_port }}
+              local1.*            {{ syslog_protocol }}{{ syslog_collector }}:{{ syslog_port }}
+            mode: '0644'
+            owner: root
+            group: root
+          notify: Restart rsyslog
+
+        - name: Configure Docker to log to syslog
+          copy:
+            dest: /etc/docker/daemon.json
+            content: |
+              {
+                "log-driver": "json-file",
+                "log-opts": {
+                  "max-size": "10m",
+                  "max-file": "3"
+                }
+              }
+            mode: '0644'
+          notify: Restart docker
+
+    # -------------------------------------------------------------------------
+    # Ansible Controller Configuration
+    # -------------------------------------------------------------------------
+    - name: Configure rsyslog forwarding on Ansible controller
+      when: "'ansible' in group_names"
+      block:
+        - name: Create rsyslog forwarding config for Ansible
+          copy:
+            dest: /etc/rsyslog.d/50-sentinel-forward.conf
+            content: |
+              # ==============================================================================
+              # Forward logs to Azure Sentinel Collector
+              # Configured by Ansible - {{ ansible_date_time.iso8601 }}
+              # ==============================================================================
+
+              # Forward authentication logs
+              auth,authpriv.*     {{ syslog_protocol }}{{ syslog_collector }}:{{ syslog_port }}
+
+              # Forward critical logs
+              *.crit              {{ syslog_protocol }}{{ syslog_collector }}:{{ syslog_port }}
+
+              # Forward sudo and su logs
+              local2.*            {{ syslog_protocol }}{{ syslog_collector }}:{{ syslog_port }}
+            mode: '0644'
+            owner: root
+            group: root
+          notify: Restart rsyslog
+
+    # -------------------------------------------------------------------------
+    # Verification
+    # -------------------------------------------------------------------------
+    - name: Send test log message to collector
+      command: logger -p auth.info "Sentinel test from {{ ansible_hostname }} - configured at {{ ansible_date_time.iso8601 }}"
+      changed_when: false
+
+  handlers:
+    - name: Restart rsyslog
+      service:
+        name: rsyslog
+        state: restarted
+
+    - name: Restart docker
+      service:
+        name: docker
+        state: restarted
+      when: "'docker_hosts' in group_names"

@@ -1,0 +1,84 @@
+# GitOps Service Definition for GitLab CI/CD
+# Modify this file for your specific service
+
+service:
+  name: example-service              # Unique identifier (lowercase, hyphens only)
+  display_name: Example Service      # Human-readable name for notifications
+  description: "Brief description of the service"
+  category: utility                  # monitoring, media, utility, api, infrastructure
+  version: "1.0.0"
+
+deployment:
+  target_host: docker-vm-core-utilities01
+  # Available hosts:
+  #   docker-lxc-media (192.168.40.11)       - Media services
+  #   docker-lxc-glance (192.168.40.12)      - Dashboard/APIs
+  #   docker-vm-core-utilities01 (192.168.40.13) - Monitoring/utilities
+  #   docker-lxc-bots (192.168.40.14)        - Discord bots
+
+  port: 8080
+  container_port: 8080
+  install_path: /opt/example-service
+
+  environment:
+    TZ: America/New_York
+
+  # Secrets from GitLab CI/CD Variables
+  secrets: []
+  # Example:
+  #   - name: API_KEY
+  #     source: EXAMPLE_API_KEY  # GitLab variable name
+
+  healthcheck:
+    enabled: true
+    endpoint: /health
+    port: 8080
+    interval: 30
+    timeout: 10
+    retries: 3
+    expected_status: [200]
+
+traefik:
+  enabled: true
+  subdomain: example                 # -> example.hrmsmrflrii.xyz
+  entrypoints: [websecure]
+  tls:
+    enabled: true
+    cert_resolver: letsencrypt
+  middlewares: []
+  headers:
+    frame_deny: true
+
+dns:
+  enabled: true
+  hostname: example
+
+authentik:
+  enabled: false
+  method: forward_auth
+
+glance:
+  enabled: false
+  page: home
+  bookmark:
+    enabled: true
+    group: Utilities
+    description: "Service description"
+  monitor:
+    enabled: true
+    widget: monitor
+    health_endpoint: /health
+
+watchtower:
+  enabled: true
+  notify_on_update: true
+
+notifications:
+  discord:
+    enabled: true
+
+metadata:
+  maintainer: hermes
+  repository: ""
+  docs: ""
+  tags: [utility]

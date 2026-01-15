@@ -1,0 +1,45 @@
+---
+# GitHub Actions Self-Hosted Runner Inventory
+# Used by: ansible/playbooks/github-runner/deploy-github-runner.yml
+
+all:
+  children:
+    # Homelab runners (LXC containers on Proxmox)
+    github_runners:
+      hosts:
+        github-runner-01:
+          ansible_host: 192.168.40.50
+          ansible_user: root
+          runner_labels_override: "homelab,docker,linux,x64,node01"
+          description: "Primary runner on node01 - handles most deployments"
+        github-runner-02:
+          ansible_host: 192.168.40.51
+          ansible_user: root
+          runner_labels_override: "homelab,docker,linux,x64,node02"
+          description: "Secondary runner on node02 - parallel workloads"
+      vars:
+        ansible_python_interpreter: /usr/bin/python3
+        ansible_ssh_private_key_file: ~/.ssh/homelab_ed25519
+
+    # Azure runner (existing ubuntu-deploy-vm)
+    azure_runners:
+      hosts:
+        github-runner-azure:
+          ansible_host: 10.90.10.5
+          ansible_user: hermes-admin
+          runner_labels_override: "azure,terraform,linux,x64"
+          description: "Azure runner for Terraform/Azure CLI workflows"
+      vars:
+        ansible_python_interpreter: /usr/bin/python3
+        ansible_ssh_private_key_file: ~/.ssh/ubuntu-deploy-vm.pem
+
+    # All runners combined
+    all_runners:
+      children:
+        github_runners:
+        azure_runners:
+
+  vars:
+    # Common variables for all runners
+    github_org: herms14
+    runner_version: "2.321.0"

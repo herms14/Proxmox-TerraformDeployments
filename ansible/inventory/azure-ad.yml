@@ -1,0 +1,36 @@
+all:
+  vars:
+    ansible_user: azureadmin
+    ansible_password: "CHANGE_ME_BEFORE_USE"
+    ansible_connection: winrm
+    ansible_winrm_transport: ntlm
+    ansible_winrm_server_cert_validation: ignore
+    ansible_port: 5985
+
+  children:
+    primary_dc:
+      hosts:
+        AZDC01:
+          ansible_host: 10.10.4.4
+          dc_role: "PrimaryDC"
+
+    secondary_dcs:
+      hosts:
+        AZDC02:
+          ansible_host: 10.10.4.5
+          dc_role: "SecondaryDC"
+
+    rodcs:
+      hosts:
+        AZRODC01:
+          ansible_host: 10.10.4.6
+          dc_role: "RODC"
+        AZRODC02:
+          ansible_host: 10.10.4.7
+          dc_role: "RODC"
+
+    domain_controllers:
+      children:
+        primary_dc:
+        secondary_dcs:
+        rodcs:

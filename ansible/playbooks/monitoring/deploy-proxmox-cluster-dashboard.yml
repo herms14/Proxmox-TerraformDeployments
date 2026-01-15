@@ -1,0 +1,58 @@
+---
+# Deploy Proxmox Cluster Health Dashboard to Grafana
+# This playbook deploys the proxmox-cluster-health.json dashboard
+#
+# Usage:
+#   ansible-playbook monitoring/deploy-proxmox-cluster-dashboard.yml
+#
+# Prerequisites:
+#   - Grafana running on docker-vm-utilities01:3030
+#   - Grafana API key or admin credentials
+
+- name: Deploy Proxmox Cluster Health Dashboard
+  hosts: localhost
+  gather_facts: false
+  vars:
+    grafana_host: "192.168.40.13"
+    grafana_port: "3030"
+    grafana_url: "http://{{ grafana_host }}:{{ grafana_port }}"
+    grafana_user: "admin"
+    grafana_password: "admin"
+    dashboard_file: "../../dashboards/proxmox-cluster-health.json"
+
+  tasks:
+    - name: Check Grafana is accessible
+      uri:
+        url: "{{ grafana_url }}/api/health"
+        method: GET
+        status_code: 200
+      register: grafana_health
+      retries: 3
+      delay: 5
+
+    - name: Display Grafana health
+      debug:
+        msg: "Grafana is healthy: {{ grafana_health.json }}"
+
+    - name: Load dashboard JSON from file
+      set_fact:
+        dashboard_json: "{{ lookup('file', dashboard_file) | from_json }}"
+
+    - name: Deploy Proxmox Cluster Health Dashboard
+      uri:
+        url: "{{ grafana_url }}/api/dashboards/db"
+        method: POST
+        user: "{{ grafana_user }}"
+        password: "{{ grafana_password }}"
+        force_basic_auth: true
+        body_format: json
+        body:
+          dashboard: "{{ dashboard_json }}"
+          folderId: 0
+          overwrite: true
+        status_code: 200
+      register: dashboard_result
+
+    - name: Display dashboard URL
+      debug:
+        msg: "Dashboard deployed! Access at: {{ grafana_url }}/d/proxmox-cluster-health/proxmox-cluster-health"

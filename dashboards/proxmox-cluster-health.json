@@ -171,7 +171,7 @@
       "id": 7,
       "options": { "colorMode": "background", "graphMode": "none", "justifyMode": "center", "orientation": "auto", "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }, "textMode": "auto" },
       "pluginVersion": "10.0.0",
-      "targets": [{ "expr": "sum(pve_not_backed_up_total) or vector(0)", "refId": "A" }],
+      "targets": [{ "expr": "max(pve_not_backed_up_total) or vector(0)", "refId": "A" }],
       "title": "Not Backed Up",
       "type": "stat"
     },
@@ -398,8 +398,25 @@
       "gridPos": { "h": 1, "w": 24, "x": 0, "y": 27 },
       "id": 32,
       "panels": [],
-      "title": "VM Resource Usage",
+      "title": "Linux VMs",
       "type": "row"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "PBFA97CFB590B2093" },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "fixedColor": "orange", "mode": "fixed" },
+          "unit": "none"
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 4, "w": 3, "x": 0, "y": 28 },
+      "id": 70,
+      "options": { "colorMode": "background", "graphMode": "none", "justifyMode": "center", "orientation": "auto", "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }, "textMode": "auto" },
+      "pluginVersion": "10.0.0",
+      "targets": [{ "expr": "count(max by (id) (pve_guest_info{type=\"qemu\", name=~\"[a-z].*\"}))", "refId": "A" }],
+      "title": "Linux VMs",
+      "type": "stat"
     },
     {
       "datasource": { "type": "prometheus", "uid": "PBFA97CFB590B2093" },
@@ -413,12 +430,12 @@
         },
         "overrides": []
       },
-      "gridPos": { "h": 10, "w": 12, "x": 0, "y": 28 },
+      "gridPos": { "h": 8, "w": 10, "x": 3, "y": 28 },
       "id": 8,
       "options": { "displayMode": "gradient", "minVizHeight": 10, "minVizWidth": 0, "orientation": "horizontal", "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }, "showUnfilled": true, "valueMode": "color" },
       "pluginVersion": "10.0.0",
-      "targets": [{ "expr": "sort_desc(max by (name) (pve_cpu_usage_ratio{id=~\"qemu/.*\"} * on(id) group_left(name) max by (id, name) (pve_guest_info{type=\"qemu\"})) * 100)", "legendFormat": "{{name}}", "refId": "A", "instant": true }],
-      "title": "Top VMs by CPU Usage",
+      "targets": [{ "expr": "sort_desc(max by (name) (pve_cpu_usage_ratio{id=~\"qemu/.*\"} * on(id) group_left(name) max by (id, name) (pve_guest_info{type=\"qemu\", name=~\"[a-z].*\"})) * 100)", "legendFormat": "{{name}}", "refId": "A", "instant": true }],
+      "title": "Linux VMs - CPU Usage",
       "transformations": [],
       "type": "bargauge"
     },
@@ -434,12 +451,12 @@
         },
         "overrides": []
       },
-      "gridPos": { "h": 10, "w": 12, "x": 12, "y": 28 },
+      "gridPos": { "h": 8, "w": 11, "x": 13, "y": 28 },
       "id": 9,
       "options": { "displayMode": "gradient", "minVizHeight": 10, "minVizWidth": 0, "orientation": "horizontal", "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }, "showUnfilled": true, "valueMode": "color" },
       "pluginVersion": "10.0.0",
-      "targets": [{ "expr": "sort_desc(max by (id) (pve_memory_usage_bytes{id=~\"qemu/.*\"} / pve_memory_size_bytes{id=~\"qemu/.*\"}) * on(id) group_left(name) max by (id, name) (pve_guest_info{type=\"qemu\"}) * 100)", "legendFormat": "{{name}}", "refId": "A", "instant": true }],
-      "title": "Top VMs by Memory Usage",
+      "targets": [{ "expr": "sort_desc(max by (id) (pve_memory_usage_bytes{id=~\"qemu/.*\"} / pve_memory_size_bytes{id=~\"qemu/.*\"}) * on(id) group_left(name) max by (id, name) (pve_guest_info{type=\"qemu\", name=~\"[a-z].*\"}) * 100)", "legendFormat": "{{name}}", "refId": "A", "instant": true }],
+      "title": "Linux VMs - Memory Usage",
       "transformations": [],
       "type": "bargauge"
     },
@@ -456,17 +473,105 @@
         },
         "overrides": []
       },
-      "gridPos": { "h": 10, "w": 24, "x": 0, "y": 38 },
+      "gridPos": { "h": 10, "w": 24, "x": 0, "y": 36 },
       "id": 13,
       "options": { "alignValue": "center", "legend": { "displayMode": "list", "placement": "bottom", "showLegend": false }, "mergeValues": true, "rowHeight": 0.9, "showValue": "never", "tooltip": { "mode": "single", "sort": "none" } },
       "pluginVersion": "10.0.0",
-      "targets": [{ "expr": "max by (name) (pve_up{id=~\"qemu/.*\"} * on(id) group_left(name) max by (id, name) (pve_guest_info{type=\"qemu\"}))", "legendFormat": "{{name}}", "refId": "A", "interval": "1m" }],
-      "title": "VM Status Timeline (1h)",
+      "targets": [{ "expr": "max by (name) (pve_up{id=~\"qemu/.*\"} * on(id) group_left(name) max by (id, name) (pve_guest_info{type=\"qemu\", name=~\"[a-z].*\"}))", "legendFormat": "{{name}}", "refId": "A", "interval": "1m" }],
+      "title": "Linux VMs - Status Timeline",
       "type": "state-timeline"
     },
     {
       "collapsed": false,
-      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 48 },
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 46 },
+      "id": 60,
+      "panels": [],
+      "title": "Windows VMs",
+      "type": "row"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "PBFA97CFB590B2093" },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "fixedColor": "blue", "mode": "fixed" },
+          "unit": "none"
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 4, "w": 3, "x": 0, "y": 47 },
+      "id": 71,
+      "options": { "colorMode": "background", "graphMode": "none", "justifyMode": "center", "orientation": "auto", "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }, "textMode": "auto" },
+      "pluginVersion": "10.0.0",
+      "targets": [{ "expr": "count(max by (id) (pve_guest_info{type=\"qemu\", name=~\"[A-Z].*\"}))", "refId": "A" }],
+      "title": "Windows VMs",
+      "type": "stat"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "PBFA97CFB590B2093" },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "continuous-BlYlRd" },
+          "max": 100,
+          "min": 0,
+          "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }, { "color": "yellow", "value": 70 }, { "color": "red", "value": 90 }] },
+          "unit": "percent"
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 8, "w": 10, "x": 3, "y": 47 },
+      "id": 61,
+      "options": { "displayMode": "gradient", "minVizHeight": 10, "minVizWidth": 0, "orientation": "horizontal", "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }, "showUnfilled": true, "valueMode": "color" },
+      "pluginVersion": "10.0.0",
+      "targets": [{ "expr": "sort_desc(max by (name) (pve_cpu_usage_ratio{id=~\"qemu/.*\"} * on(id) group_left(name) max by (id, name) (pve_guest_info{type=\"qemu\", name=~\"[A-Z].*\"})) * 100)", "legendFormat": "{{name}}", "refId": "A", "instant": true }],
+      "title": "Windows VMs - CPU Usage",
+      "transformations": [],
+      "type": "bargauge"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "PBFA97CFB590B2093" },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "continuous-GrYlRd" },
+          "max": 100,
+          "min": 0,
+          "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }, { "color": "yellow", "value": 70 }, { "color": "red", "value": 90 }] },
+          "unit": "percent"
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 8, "w": 11, "x": 13, "y": 47 },
+      "id": 62,
+      "options": { "displayMode": "gradient", "minVizHeight": 10, "minVizWidth": 0, "orientation": "horizontal", "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }, "showUnfilled": true, "valueMode": "color" },
+      "pluginVersion": "10.0.0",
+      "targets": [{ "expr": "sort_desc(max by (id) (pve_memory_usage_bytes{id=~\"qemu/.*\"} / pve_memory_size_bytes{id=~\"qemu/.*\"}) * on(id) group_left(name) max by (id, name) (pve_guest_info{type=\"qemu\", name=~\"[A-Z].*\"}) * 100)", "legendFormat": "{{name}}", "refId": "A", "instant": true }],
+      "title": "Windows VMs - Memory Usage",
+      "transformations": [],
+      "type": "bargauge"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "PBFA97CFB590B2093" },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "palette-classic" },
+          "custom": { "fillOpacity": 80, "lineWidth": 0, "spanNulls": false },
+          "mappings": [
+            { "options": { "0": { "color": "red", "index": 1, "text": "Stopped" }, "1": { "color": "green", "index": 0, "text": "Running" } }, "type": "value" }
+          ],
+          "thresholds": { "mode": "absolute", "steps": [{ "color": "red", "value": null }, { "color": "green", "value": 1 }] }
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 10, "w": 24, "x": 0, "y": 55 },
+      "id": 63,
+      "options": { "alignValue": "center", "legend": { "displayMode": "list", "placement": "bottom", "showLegend": false }, "mergeValues": true, "rowHeight": 0.9, "showValue": "never", "tooltip": { "mode": "single", "sort": "none" } },
+      "pluginVersion": "10.0.0",
+      "targets": [{ "expr": "max by (name) (pve_up{id=~\"qemu/.*\"} * on(id) group_left(name) max by (id, name) (pve_guest_info{type=\"qemu\", name=~\"[A-Z].*\"}))", "legendFormat": "{{name}}", "refId": "A", "interval": "1m" }],
+      "title": "Windows VMs - Status Timeline",
+      "type": "state-timeline"
+    },
+    {
+      "collapsed": false,
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 65 },
       "id": 33,
       "panels": [],
       "title": "Storage Usage",
@@ -485,7 +590,7 @@
         },
         "overrides": []
       },
-      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 49 },
+      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 66 },
       "id": 14,
       "options": { "displayMode": "gradient", "minVizHeight": 10, "minVizWidth": 0, "orientation": "horizontal", "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }, "showUnfilled": true, "valueMode": "color" },
       "pluginVersion": "10.0.0",

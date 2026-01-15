@@ -1,0 +1,653 @@
+---
+# Deploy PBS Backup Status API for Glance Dashboard
+# Provides comprehensive backup information including per-VM backup times and job durations
+#
+# Usage:
+#   ansible-playbook -i inventory.ini glance/deploy-pbs-backup-api.yml
+#
+# API Endpoints:
+#   - /status         - Overall backup status summary
+#   - /vms            - Per-VM/LXC backup details with last backup time
+#   - /jobs           - Backup job status with durations (daily, main, NAS)
+#   - /health         - Health check
+
+- name: Deploy PBS Backup Status API
+  hosts: docker-vm-core-utilities01
+  become: yes
+  vars:
+    api_path: /opt/pbs-backup-api
+    api_port: 9103
+    pbs_host: 192.168.20.50
+    pbs_api_token_id: "backup@pbs!pve"
+    # Token secret will be loaded from environment
+
+  tasks:
+    - name: Create API directory
+      file:
+        path: "{{ api_path }}"
+        state: directory
+        owner: hermes-admin
+        group: hermes-admin
+        mode: '0755'
+
+    - name: Create Python API script
+      copy:
+        dest: "{{ api_path }}/app.py"
+        content: |
+          #!/usr/bin/env python3
+          """
+          PBS Backup Status API
+          Provides comprehensive backup information for Glance dashboard including:
+          - Per-VM/LXC last backup times
+          - Backup job durations for daily, main, and NAS sync
+          - Overall backup status
+          """
+
+          import subprocess
+          import json
+          import re
+          import time
+          import threading
+          import os
+          import urllib3
+          import requests
+          from datetime import datetime, timedelta
+          from flask import Flask, jsonify
+          from collections import defaultdict
+
+          # Disable SSL warnings for self-signed certs
+          urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+
+          app = Flask(__name__)
+
+          # Configuration
+          PBS_HOST = os.environ.get("PBS_HOST", "192.168.20.50")
+          PBS_API_TOKEN_ID = os.environ.get("PBS_API_TOKEN_ID", "backup@pbs!pve")
+          PBS_API_TOKEN_SECRET = os.environ.get("PBS_API_TOKEN_SECRET", "")
+          PBS_URL = f"https://{PBS_HOST}:8007"
+
+          # SSH Configuration for NAS sync info
+          SSH_KEY = "/root/.ssh/homelab_ed25519"
+          LOG_FILE = "/var/log/pbs-nas-backup.log"
+          LOCK_FILE = "/var/run/pbs-nas-backup.lock"
+          NAS_BACKUP_DIR = "/mnt/nas-backup/pbs-offsite"
+
+          # Cache configuration
+          CACHE_TTL = 300  # 5 minutes
+          CACHE_REFRESH_INTERVAL = 240  # 4 minutes
+          cache = {
+              "vms": {"data": None, "timestamp": 0},
+              "jobs": {"data": None, "timestamp": 0},
+              "status": {"data": None, "timestamp": 0}
+          }
+          cache_lock = threading.Lock()
+          background_thread = None
+          stop_event = threading.Event()
+
+          # VM/CT Name mapping (VMID -> Name)
+          VM_NAMES = {
+              "100": "pbs-server",
+              "101": "docker-lxc-glance",
+              "102": "docker-lxc-lagident",
+              "103": "pihole-lxc",
+              "104": "traefik-lxc",
+              "105": "authentik-lxc",
+              "110": "gitlab-lxc",
+              "111": "immich-lxc",
+              "150": "windows-11-mgmt",
+              "200": "ansible-controller",
+              "201": "docker-media",
+              "202": "docker-vm-core-utilities01",
+              "203": "k8s-controller-01",
+              "204": "k8s-controller-02",
+              "205": "k8s-controller-03",
+              "206": "k8s-worker-01",
+              "207": "k8s-worker-02",
+              "208": "k8s-worker-03",
+              "209": "traefik-vm",
+              "210": "authentik-vm",
+          }
+
+          def pbs_api_request(endpoint):
+              """Make authenticated request to PBS API"""
+              headers = {
+                  "Authorization": f"PBSAPIToken={PBS_API_TOKEN_ID}:{PBS_API_TOKEN_SECRET}"
+              }
+              try:
+                  response = requests.get(
+                      f"{PBS_URL}{endpoint}",
+                      headers=headers,
+                      verify=False,
+                      timeout=30
+                  )
+                  if response.status_code == 200:
+                      return response.json().get("data", [])
+                  return None
+              except Exception as e:
+                  print(f"PBS API error: {e}")
+                  return None
+
+          def run_ssh_command(cmd, timeout=30):
+              """Run command on PBS via SSH"""
+              try:
+                  result = subprocess.run(
+                      ["ssh", "-i", SSH_KEY, "-o", "StrictHostKeyChecking=no",
+                       "-o", "ConnectTimeout=10", f"root@{PBS_HOST}", cmd],
+                      capture_output=True, text=True, timeout=timeout
+                  )
+                  return result.stdout.strip(), result.returncode
+              except Exception as e:
+                  return str(e), 1
+
+          def parse_backup_time(backup_time):
+              """Parse PBS backup timestamp to datetime"""
+              try:
+                  if isinstance(backup_time, int):
+                      return datetime.fromtimestamp(backup_time)
+                  return datetime.strptime(backup_time, "%Y-%m-%dT%H:%M:%SZ")
+              except:
+                  return None
+
+          def format_duration(seconds):
+              """Format seconds into human-readable duration"""
+              if seconds is None or seconds < 0:
+                  return "N/A"
+              if seconds < 60:
+                  return f"{int(seconds)}s"
+              elif seconds < 3600:
+                  minutes = int(seconds // 60)
+                  secs = int(seconds % 60)
+                  return f"{minutes}m {secs}s"
+              else:
+                  hours = int(seconds // 3600)
+                  minutes = int((seconds % 3600) // 60)
+                  return f"{hours}h {minutes}m"
+
+          def get_snapshots_for_datastore(datastore):
+              """Get all snapshots from a datastore via PBS API"""
+              snapshots = pbs_api_request(f"/api2/json/admin/datastore/{datastore}/snapshots")
+              return snapshots or []
+
+          def get_vm_backup_info():
+              """Get backup info for all VMs/LXCs"""
+              vm_backups = defaultdict(lambda: {
+                  "vmid": "",
+                  "name": "Unknown",
+                  "type": "VM",
+                  "daily": {"last_backup": None, "snapshot_count": 0},
+                  "main": {"last_backup": None, "snapshot_count": 0}
+              })
+
+              for datastore in ["daily", "main"]:
+                  snapshots = get_snapshots_for_datastore(datastore)
+
+                  for snap in snapshots:
+                      backup_type = snap.get("backup-type", "")
+                      backup_id = snap.get("backup-id", "")
+                      backup_time = snap.get("backup-time")
+
+                      if backup_type in ["vm", "ct"] and backup_id:
+                          vmid = backup_id
+                          vm_type = "VM" if backup_type == "vm" else "CT"
+
+                          if vmid not in vm_backups:
+                              vm_backups[vmid]["vmid"] = vmid
+                              vm_backups[vmid]["name"] = VM_NAMES.get(vmid, f"VM-{vmid}")
+                              vm_backups[vmid]["type"] = vm_type
+
+                          vm_backups[vmid][datastore]["snapshot_count"] += 1
+
+                          backup_dt = parse_backup_time(backup_time)
+                          if backup_dt:
+                              current = vm_backups[vmid][datastore]["last_backup"]
+                              if current is None or backup_dt > current:
+                                  vm_backups[vmid][datastore]["last_backup"] = backup_dt
+
+              # Format the results
+              result = []
+              for vmid, info in sorted(vm_backups.items(), key=lambda x: int(x[0])):
+                  daily_backup = info["daily"]["last_backup"]
+                  main_backup = info["main"]["last_backup"]
+
+                  # Determine most recent backup
+                  if daily_backup and main_backup:
+                      latest = max(daily_backup, main_backup)
+                      latest_store = "daily" if daily_backup >= main_backup else "main"
+                  elif daily_backup:
+                      latest = daily_backup
+                      latest_store = "daily"
+                  elif main_backup:
+                      latest = main_backup
+                      latest_store = "main"
+                  else:
+                      latest = None
+                      latest_store = None
+
+                  # Check if backup is stale (>24h for daily, >7d for main)
+                  status = "ok"
+                  if latest:
+                      age = datetime.now() - latest
+                      if latest_store == "daily" and age > timedelta(hours=26):
+                          status = "stale"
+                      elif latest_store == "main" and age > timedelta(days=8):
+                          status = "stale"
+
+                  result.append({
+                      "vmid": vmid,
+                      "name": info["name"],
+                      "type": info["type"],
+                      "status": status,
+                      "latest_backup": latest.strftime("%Y-%m-%d %H:%M") if latest else "Never",
+                      "latest_datastore": latest_store,
+                      "daily": {
+                          "last_backup": daily_backup.strftime("%Y-%m-%d %H:%M") if daily_backup else "Never",
+                          "snapshot_count": info["daily"]["snapshot_count"]
+                      },
+                      "main": {
+                          "last_backup": main_backup.strftime("%Y-%m-%d %H:%M") if main_backup else "Never",
+                          "snapshot_count": info["main"]["snapshot_count"]
+                      }
+                  })
+
+              return result
+
+          def get_backup_job_durations():
+              """Get backup job durations from PBS task logs"""
+              jobs = {
+                  "daily": {
+                      "last_run": "Unknown",
+                      "duration": "N/A",
+                      "status": "unknown",
+                      "snapshot_count": 0
+                  },
+                  "main": {
+                      "last_run": "Unknown",
+                      "duration": "N/A",
+                      "status": "unknown",
+                      "snapshot_count": 0
+                  },
+                  "nas_sync": {
+                      "last_run": "Unknown",
+                      "duration": "N/A",
+                      "status": "unknown",
+                      "main_size": "N/A",
+                      "daily_size": "N/A"
+                  }
+              }
+
+              # Get tasks from PBS API
+              tasks = pbs_api_request("/api2/json/nodes/localhost/tasks")
+              if tasks:
+                  # Find most recent backup tasks per datastore
+                  daily_tasks = []
+                  main_tasks = []
+
+                  for task in tasks:
+                      worker_type = task.get("worker_type", "")
+                      worker_id = task.get("worker_id", "")
+                      status = task.get("status", "")
+                      starttime = task.get("starttime", 0)
+                      endtime = task.get("endtime", 0)
+
+                      if worker_type == "backup" and starttime:
+                          task_info = {
+                              "start": starttime,
+                              "end": endtime,
+                              "duration": (endtime - starttime) if endtime and starttime else 0,
+                              "status": status
+                          }
+
+                          if "daily" in worker_id.lower():
+                              daily_tasks.append(task_info)
+                          elif "main" in worker_id.lower():
+                              main_tasks.append(task_info)
+
+                  # Get most recent task for each datastore
+                  if daily_tasks:
+                      latest = max(daily_tasks, key=lambda x: x["start"])
+                      jobs["daily"]["last_run"] = datetime.fromtimestamp(latest["start"]).strftime("%Y-%m-%d %H:%M")
+                      jobs["daily"]["duration"] = format_duration(latest["duration"])
+                      jobs["daily"]["status"] = "ok" if latest["status"] == "OK" else "error"
+
+                  if main_tasks:
+                      latest = max(main_tasks, key=lambda x: x["start"])
+                      jobs["main"]["last_run"] = datetime.fromtimestamp(latest["start"]).strftime("%Y-%m-%d %H:%M")
+                      jobs["main"]["duration"] = format_duration(latest["duration"])
+                      jobs["main"]["status"] = "ok" if latest["status"] == "OK" else "error"
+
+              # Fallback: Get snapshot info from datastores
+              for datastore in ["daily", "main"]:
+                  snapshots = get_snapshots_for_datastore(datastore)
+                  if snapshots:
+                      jobs[datastore]["snapshot_count"] = len(snapshots)
+
+                      # Find most recent backup
+                      latest_time = 0
+                      for snap in snapshots:
+                          bt = snap.get("backup-time", 0)
+                          if bt > latest_time:
+                              latest_time = bt
+
+                      if latest_time and jobs[datastore]["last_run"] == "Unknown":
+                          jobs[datastore]["last_run"] = datetime.fromtimestamp(latest_time).strftime("%Y-%m-%d %H:%M")
+                          jobs[datastore]["status"] = "ok"
+
+              # Get NAS sync info from log file
+              log_output, rc = run_ssh_command(f"tail -50 {LOG_FILE} 2>/dev/null")
+              if rc == 0 and log_output:
+                  lines = log_output.split('\n')
+
+                  # Find start and end times for last sync
+                  start_time = None
+                  end_time = None
+                  main_size = "N/A"
+                  daily_size = "N/A"
+                  status = "unknown"
+
+                  for line in lines:
+                      if "Starting PBS backup to NAS" in line:
+                          match = re.match(r'(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})', line)
+                          if match:
+                              start_time = datetime.strptime(match.group(1), "%Y-%m-%d %H:%M:%S")
+
+                      elif "Backup completed successfully" in line:
+                          match = re.match(r'(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})', line)
+                          if match:
+                              end_time = datetime.strptime(match.group(1), "%Y-%m-%d %H:%M:%S")
+                              status = "ok"
+
+                      elif "ERROR" in line or "FAILED" in line:
+                          status = "error"
+
+                      elif "Main datastore on NAS:" in line:
+                          match = re.search(r'Main datastore on NAS:\s*(\S+)', line)
+                          if match:
+                              main_size = match.group(1)
+
+                      elif "Daily datastore on NAS:" in line:
+                          match = re.search(r'Daily datastore on NAS:\s*(\S+)', line)
+                          if match:
+                              daily_size = match.group(1)
+
+                  if end_time:
+                      jobs["nas_sync"]["last_run"] = end_time.strftime("%Y-%m-%d %H:%M")
+                      jobs["nas_sync"]["status"] = status
+
+                  if start_time and end_time:
+                      duration = (end_time - start_time).total_seconds()
+                      jobs["nas_sync"]["duration"] = format_duration(duration)
+
+                  jobs["nas_sync"]["main_size"] = main_size
+                  jobs["nas_sync"]["daily_size"] = daily_size
+
+              # Check if NAS sync is currently running
+              lock_check, _ = run_ssh_command(f"test -f {LOCK_FILE} && echo 'running' || echo 'not_running'")
+              if lock_check == "running":
+                  jobs["nas_sync"]["status"] = "running"
+
+              return jobs
+
+          def get_overall_status():
+              """Get overall backup system status"""
+              jobs = get_backup_job_durations()
+              vms = get_vm_backup_info()
+
+              # Count VMs with recent backups
+              total_vms = len(vms)
+              backed_up = len([v for v in vms if v["status"] == "ok"])
+              stale = len([v for v in vms if v["status"] == "stale"])
+
+              # Determine overall health
+              if backed_up == total_vms:
+                  health = "healthy"
+              elif stale > 0:
+                  health = "warning"
+              else:
+                  health = "critical"
+
+              return {
+                  "health": health,
+                  "total_vms": total_vms,
+                  "backed_up": backed_up,
+                  "stale": stale,
+                  "jobs": jobs,
+                  "last_updated": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+              }
+
+          def refresh_cache():
+              """Refresh all cache data"""
+              print(f"[{datetime.now()}] Refreshing cache...")
+
+              try:
+                  vms_data = get_vm_backup_info()
+                  with cache_lock:
+                      cache["vms"]["data"] = vms_data
+                      cache["vms"]["timestamp"] = time.time()
+                  print(f"[{datetime.now()}] VMs cache refreshed ({len(vms_data)} items)")
+              except Exception as e:
+                  print(f"[{datetime.now()}] Error refreshing VMs cache: {e}")
+
+              try:
+                  jobs_data = get_backup_job_durations()
+                  with cache_lock:
+                      cache["jobs"]["data"] = jobs_data
+                      cache["jobs"]["timestamp"] = time.time()
+                  print(f"[{datetime.now()}] Jobs cache refreshed")
+              except Exception as e:
+                  print(f"[{datetime.now()}] Error refreshing jobs cache: {e}")
+
+              try:
+                  status_data = get_overall_status()
+                  with cache_lock:
+                      cache["status"]["data"] = status_data
+                      cache["status"]["timestamp"] = time.time()
+                  print(f"[{datetime.now()}] Status cache refreshed")
+              except Exception as e:
+                  print(f"[{datetime.now()}] Error refreshing status cache: {e}")
+
+          def background_cache_refresh():
+              """Background thread to keep cache warm"""
+              print(f"[{datetime.now()}] Starting background cache refresh thread")
+              refresh_cache()
+
+              while not stop_event.is_set():
+                  if stop_event.wait(timeout=CACHE_REFRESH_INTERVAL):
+                      break
+                  refresh_cache()
+
+          def start_background_refresh():
+              """Start the background cache refresh thread"""
+              global background_thread
+              if background_thread is None or not background_thread.is_alive():
+                  stop_event.clear()
+                  background_thread = threading.Thread(target=background_cache_refresh, daemon=True)
+                  background_thread.start()
+
+          def get_cached(key):
+              """Get data from cache"""
+              with cache_lock:
+                  if cache[key]["data"] is not None:
+                      return cache[key]["data"]
+              return None
+
+          @app.route('/status')
+          def status():
+              """Return overall backup status"""
+              try:
+                  data = get_cached("status")
+                  if data is None:
+                      data = get_overall_status()
+                      with cache_lock:
+                          cache["status"]["data"] = data
+                          cache["status"]["timestamp"] = time.time()
+                  return jsonify(data)
+              except Exception as e:
+                  return jsonify({"error": str(e)}), 500
+
+          @app.route('/vms')
+          def vms():
+              """Return per-VM/LXC backup details"""
+              try:
+                  data = get_cached("vms")
+                  if data is None:
+                      data = get_vm_backup_info()
+                      with cache_lock:
+                          cache["vms"]["data"] = data
+                          cache["vms"]["timestamp"] = time.time()
+                  return jsonify({
+                      "vms": data,
+                      "total": len(data),
+                      "vm_count": len([v for v in data if v["type"] == "VM"]),
+                      "ct_count": len([v for v in data if v["type"] == "CT"])
+                  })
+              except Exception as e:
+                  return jsonify({"error": str(e)}), 500
+
+          @app.route('/jobs')
+          def jobs():
+              """Return backup job status with durations"""
+              try:
+                  data = get_cached("jobs")
+                  if data is None:
+                      data = get_backup_job_durations()
+                      with cache_lock:
+                          cache["jobs"]["data"] = data
+                          cache["jobs"]["timestamp"] = time.time()
+                  return jsonify(data)
+              except Exception as e:
+                  return jsonify({"error": str(e)}), 500
+
+          @app.route('/refresh')
+          def refresh():
+              """Force refresh all caches"""
+              refresh_cache()
+              return jsonify({"status": "cache refreshed"})
+
+          @app.route('/health')
+          def health():
+              """Health check endpoint"""
+              return jsonify({
+                  "status": "healthy",
+                  "service": "pbs-backup-api",
+                  "cache": {
+                      "vms_cached": cache["vms"]["data"] is not None,
+                      "jobs_cached": cache["jobs"]["data"] is not None,
+                      "status_cached": cache["status"]["data"] is not None
+                  }
+              })
+
+          # Start background refresh when module loads
+          start_background_refresh()
+
+          if __name__ == '__main__':
+              app.run(host='0.0.0.0', port=9103)
+        mode: '0755'
+
+    - name: Create requirements.txt
+      copy:
+        dest: "{{ api_path }}/requirements.txt"
+        content: |
+          flask==3.0.0
+          gunicorn==21.2.0
+          requests==2.31.0
+          urllib3==2.1.0
+        mode: '0644'
+
+    - name: Create Dockerfile
+      copy:
+        dest: "{{ api_path }}/Dockerfile"
+        content: |
+          FROM python:3.11-slim
+
+          WORKDIR /app
+
+          # Install SSH client for NAS sync info
+          RUN apt-get update && apt-get install -y openssh-client && rm -rf /var/lib/apt/lists/*
+
+          COPY requirements.txt .
+          RUN pip install --no-cache-dir -r requirements.txt
+
+          COPY app.py .
+
+          EXPOSE 9103
+
+          CMD ["gunicorn", "-b", "0.0.0.0:9103", "--timeout", "120", "--workers", "2", "app:app"]
+        mode: '0644'
+
+    - name: Read PBS API token from file
+      slurp:
+        src: /opt/pbs-exporter/.env
+      register: pbs_env_content
+      ignore_errors: yes
+
+    - name: Extract PBS token secret
+      set_fact:
+        pbs_token_secret: "{{ (pbs_env_content.content | b64decode | regex_search('PBS_API_TOKEN=(.+)', '\\1') | first) if pbs_env_content is succeeded else '' }}"
+      when: pbs_env_content is succeeded
+
+    - name: Create .env file for API
+      copy:
+        dest: "{{ api_path }}/.env"
+        content: |
+          PBS_HOST=192.168.20.50
+          PBS_API_TOKEN_ID=backup@pbs!pve
+          PBS_API_TOKEN_SECRET={{ pbs_token_secret | default('') }}
+        mode: '0600'
+      when: pbs_token_secret is defined
+
+    - name: Create Docker Compose file
+      copy:
+        dest: "{{ api_path }}/docker-compose.yml"
+        content: |
+          name: pbs-backup-api
+
+          services:
+            pbs-backup-api:
+              build: .
+              container_name: pbs-backup-api
+              restart: unless-stopped
+              ports:
+                - "9103:9103"
+              volumes:
+                - /home/hermes-admin/.ssh:/root/.ssh:ro
+              env_file:
+                - .env
+              environment:
+                - TZ=America/New_York
+              labels:
+                - "com.centurylinklabs.watchtower.enable=false"
+        mode: '0644'
+
+    - name: Build and deploy container
+      community.docker.docker_compose_v2:
+        project_src: "{{ api_path }}"
+        build: always
+        state: present
+
+    - name: Wait for API to be ready
+      uri:
+        url: "http://localhost:{{ api_port }}/health"
+        status_code: 200
+      register: result
+      until: result.status == 200
+      retries: 15
+      delay: 5
+
+    - name: Display deployment info
+      debug:
+        msg: |
+          PBS Backup Status API deployed successfully!
+
+          API Endpoints:
+            - Status:  http://192.168.40.13:{{ api_port }}/status
+            - VMs:     http://192.168.40.13:{{ api_port }}/vms
+            - Jobs:    http://192.168.40.13:{{ api_port }}/jobs
+            - Health:  http://192.168.40.13:{{ api_port }}/health
+            - Refresh: http://192.168.40.13:{{ api_port }}/refresh
+
+          Test with:
+            curl http://192.168.40.13:{{ api_port }}/status
+            curl http://192.168.40.13:{{ api_port }}/vms
+            curl http://192.168.40.13:{{ api_port }}/jobs
+
+          This API provides comprehensive backup information for the Glance Backup page.

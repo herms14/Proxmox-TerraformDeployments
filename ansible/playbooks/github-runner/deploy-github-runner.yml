@@ -1,0 +1,424 @@
+---
+# Deploy GitHub Actions Self-Hosted Runner
+# Usage: ansible-playbook -i inventory/github_runners.yml deploy-github-runner.yml -e "github_token=YOUR_PAT"
+#
+# Prerequisites:
+#   - GitHub Personal Access Token with 'admin:org' scope (for org runners)
+#   - Or 'repo' scope (for repo-level runners)
+#
+# The PAT is only used during registration - it's not stored on the runner.
+
+- name: Deploy GitHub Actions Self-Hosted Runner
+  hosts: github_runners
+  become: yes
+  vars:
+    runner_version: "2.321.0"
+    github_org: "herms14"
+    runner_user: "github-runner"
+    runner_home: "/opt/actions-runner"
+    runner_work_dir: "/opt/actions-runner/_work"
+    # Labels are set per-host in inventory
+    runner_labels: "{{ runner_labels_override | default('homelab,docker,linux,x64') }}"
+    # Set via: -e "github_token=YOUR_PAT"
+    github_token: ""
+
+  tasks:
+    # ============================================
+    # PHASE 1: System Preparation
+    # ============================================
+    - name: Update apt cache
+      apt:
+        update_cache: yes
+        cache_valid_time: 3600
+
+    - name: Install prerequisite packages
+      apt:
+        name:
+          - apt-transport-https
+          - ca-certificates
+          - curl
+          - gnupg
+          - lsb-release
+          - software-properties-common
+          - git
+          - jq
+          - unzip
+          - python3
+          - python3-pip
+          - python3-venv
+        state: present
+
+    # ============================================
+    # PHASE 2: Docker Installation
+    # ============================================
+    - name: Add Docker GPG key
+      apt_key:
+        url: https://download.docker.com/linux/ubuntu/gpg
+        state: present
+
+    - name: Add Docker repository
+      apt_repository:
+        repo: "deb [arch=amd64] https://download.docker.com/linux/ubuntu {{ ansible_distribution_release }} stable"
+        state: present
+        filename: docker
+
+    - name: Install Docker
+      apt:
+        name:
+          - docker-ce
+          - docker-ce-cli
+          - containerd.io
+          - docker-compose-plugin
+        state: present
+        update_cache: yes
+
+    - name: Start and enable Docker service
+      systemd:
+        name: docker
+        state: started
+        enabled: yes
+
+    # ============================================
+    # PHASE 3: Install Additional Tools
+    # ============================================
+    - name: Install yq (YAML processor)
+      get_url:
+        url: "https://github.com/mikefarah/yq/releases/download/v4.40.5/yq_linux_amd64"
+        dest: /usr/local/bin/yq
+        mode: '0755'
+
+    - name: Install Python packages for workflows
+      pip:
+        name:
+          - pyyaml
+          - jsonschema
+          - requests
+          - docker
+        state: present
+
+    # ============================================
+    # PHASE 4: Runner User Setup
+    # ============================================
+    - name: Create runner user
+      user:
+        name: "{{ runner_user }}"
+        shell: /bin/bash
+        home: "{{ runner_home }}"
+        create_home: yes
+        groups: docker
+        append: yes
+
+    - name: Create runner directories
+      file:
+        path: "{{ item }}"
+        state: directory
+        owner: "{{ runner_user }}"
+        group: "{{ runner_user }}"
+        mode: '0755'
+      loop:
+        - "{{ runner_home }}"
+        - "{{ runner_work_dir }}"
+        - "{{ runner_home }}/.ssh"
+
+    # ============================================
+    # PHASE 5: SSH Key Setup for Deployments
+    # ============================================
+    - name: Copy SSH private key for deployments
+      copy:
+        content: "{{ lookup('file', '~/.ssh/homelab_ed25519') }}"
+        dest: "{{ runner_home }}/.ssh/homelab_ed25519"
+        owner: "{{ runner_user }}"
+        group: "{{ runner_user }}"
+        mode: '0600'
+      when: lookup('file', '~/.ssh/homelab_ed25519', errors='ignore') is truthy
+
+    - name: Create SSH config for easy host access
+      copy:
+        dest: "{{ runner_home }}/.ssh/config"
+        owner: "{{ runner_user }}"
+        group: "{{ runner_user }}"
+        mode: '0600'
+        content: |
+          # Homelab Docker Hosts
+          Host docker-media
+              HostName 192.168.40.11
+              User hermes-admin
+              IdentityFile ~/.ssh/homelab_ed25519
+              StrictHostKeyChecking no
+
+          Host docker-glance
+              HostName 192.168.40.12
+              User root
+              IdentityFile ~/.ssh/homelab_ed25519
+              StrictHostKeyChecking no
+
+          Host docker-utils
+              HostName 192.168.40.13
+              User hermes-admin
+              IdentityFile ~/.ssh/homelab_ed25519
+              StrictHostKeyChecking no
+
+          Host docker-bots
+              HostName 192.168.40.14
+              User root
+              IdentityFile ~/.ssh/homelab_ed25519
+              StrictHostKeyChecking no
+
+          Host traefik
+              HostName 192.168.40.20
+              User root
+              IdentityFile ~/.ssh/homelab_ed25519
+              StrictHostKeyChecking no
+
+          Host authentik
+              HostName 192.168.40.21
+              User root
+              IdentityFile ~/.ssh/homelab_ed25519
+              StrictHostKeyChecking no
+
+          # Proxmox Nodes
+          Host node01
+              HostName 192.168.20.20
+              User root
+              IdentityFile ~/.ssh/homelab_ed25519
+              StrictHostKeyChecking no
+
+          Host node02
+              HostName 192.168.20.21
+              User root
+              IdentityFile ~/.ssh/homelab_ed25519
+              StrictHostKeyChecking no
+
+          Host ansible
+              HostName 192.168.20.30
+              User hermes-admin
+              IdentityFile ~/.ssh/homelab_ed25519
+              StrictHostKeyChecking no
+
+    # ============================================
+    # PHASE 6: Download and Extract Runner
+    # ============================================
+    - name: Download GitHub Actions Runner
+      get_url:
+        url: "https://github.com/actions/runner/releases/download/v{{ runner_version }}/actions-runner-linux-x64-{{ runner_version }}.tar.gz"
+        dest: "/tmp/actions-runner.tar.gz"
+        mode: '0644'
+
+    - name: Extract runner
+      unarchive:
+        src: "/tmp/actions-runner.tar.gz"
+        dest: "{{ runner_home }}"
+        remote_src: yes
+        owner: "{{ runner_user }}"
+        group: "{{ runner_user }}"
+        creates: "{{ runner_home }}/config.sh"
+
+    # ============================================
+    # PHASE 7: Runner Registration
+    # ============================================
+    - name: Get runner registration token
+      uri:
+        url: "https://api.github.com/orgs/{{ github_org }}/actions/runners/registration-token"
+        method: POST
+        headers:
+          Authorization: "Bearer {{ github_token }}"
+          Accept: "application/vnd.github.v3+json"
+        status_code: 201
+      register: registration_token
+      delegate_to: localhost
+      become: no
+      when: github_token != ""
+
+    - name: Display registration token status
+      debug:
+        msg: "Registration token obtained successfully"
+      when: registration_token is defined and registration_token.json is defined
+
+    - name: Check if runner is already configured
+      stat:
+        path: "{{ runner_home }}/.runner"
+      register: runner_config
+
+    - name: Configure runner
+      command: >
+        ./config.sh --url https://github.com/{{ github_org }}
+        --token {{ registration_token.json.token }}
+        --name {{ inventory_hostname }}
+        --labels {{ runner_labels }}
+        --work {{ runner_work_dir }}
+        --unattended
+        --replace
+      args:
+        chdir: "{{ runner_home }}"
+      become_user: "{{ runner_user }}"
+      when:
+        - github_token != ""
+        - registration_token is defined
+        - registration_token.json is defined
+        - not runner_config.stat.exists
+
+    # ============================================
+    # PHASE 8: Install and Start Service
+    # ============================================
+    - name: Install runner service
+      command: ./svc.sh install {{ runner_user }}
+      args:
+        chdir: "{{ runner_home }}"
+        creates: "/etc/systemd/system/actions.runner.{{ github_org }}.{{ inventory_hostname }}.service"
+
+    - name: Start runner service
+      command: ./svc.sh start
+      args:
+        chdir: "{{ runner_home }}"
+      register: start_result
+      changed_when: "'started' in start_result.stdout"
+      failed_when: false
+
+    - name: Check runner service status
+      command: ./svc.sh status
+      args:
+        chdir: "{{ runner_home }}"
+      register: service_status
+      changed_when: false
+
+    - name: Display runner status
+      debug:
+        msg: "{{ service_status.stdout_lines }}"
+
+    # ============================================
+    # PHASE 9: Verification
+    # ============================================
+    - name: Verify Docker is accessible by runner user
+      command: docker ps
+      become_user: "{{ runner_user }}"
+      changed_when: false
+
+    - name: Display completion message
+      debug:
+        msg: |
+          GitHub Actions Runner deployed successfully!
+
+          Host: {{ inventory_hostname }}
+          IP: {{ ansible_host }}
+          Labels: {{ runner_labels }}
+          User: {{ runner_user }}
+          Home: {{ runner_home }}
+
+          The runner should now appear in:
+          https://github.com/organizations/{{ github_org }}/settings/actions/runners
+
+# ============================================
+# Azure Runner Configuration (separate play)
+# ============================================
+- name: Configure Azure Runner (ubuntu-deploy-vm)
+  hosts: azure_runners
+  become: yes
+  vars:
+    runner_version: "2.321.0"
+    github_org: "herms14"
+    runner_user: "hermes-admin"
+    runner_home: "/opt/actions-runner"
+    runner_labels: "azure,terraform,linux,x64"
+    github_token: ""
+
+  tasks:
+    - name: Install prerequisite packages
+      apt:
+        name:
+          - curl
+          - jq
+          - unzip
+          - git
+        state: present
+        update_cache: yes
+
+    - name: Check if Azure CLI is installed
+      command: az version
+      register: az_version
+      changed_when: false
+      failed_when: false
+
+    - name: Display Azure CLI version
+      debug:
+        msg: "Azure CLI version: {{ az_version.stdout | default('Not installed') }}"
+
+    - name: Create runner directory
+      file:
+        path: "{{ runner_home }}"
+        state: directory
+        owner: "{{ runner_user }}"
+        group: "{{ runner_user }}"
+        mode: '0755'
+
+    - name: Download GitHub Actions Runner
+      get_url:
+        url: "https://github.com/actions/runner/releases/download/v{{ runner_version }}/actions-runner-linux-x64-{{ runner_version }}.tar.gz"
+        dest: "/tmp/actions-runner.tar.gz"
+        mode: '0644'
+
+    - name: Extract runner
+      unarchive:
+        src: "/tmp/actions-runner.tar.gz"
+        dest: "{{ runner_home }}"
+        remote_src: yes
+        owner: "{{ runner_user }}"
+        group: "{{ runner_user }}"
+        creates: "{{ runner_home }}/config.sh"
+
+    - name: Get runner registration token
+      uri:
+        url: "https://api.github.com/orgs/{{ github_org }}/actions/runners/registration-token"
+        method: POST
+        headers:
+          Authorization: "Bearer {{ github_token }}"
+          Accept: "application/vnd.github.v3+json"
+        status_code: 201
+      register: registration_token
+      delegate_to: localhost
+      become: no
+      when: github_token != ""
+
+    - name: Check if runner is already configured
+      stat:
+        path: "{{ runner_home }}/.runner"
+      register: runner_config
+
+    - name: Configure runner
+      command: >
+        ./config.sh --url https://github.com/{{ github_org }}
+        --token {{ registration_token.json.token }}
+        --name {{ inventory_hostname }}
+        --labels {{ runner_labels }}
+        --unattended
+        --replace
+      args:
+        chdir: "{{ runner_home }}"
+      become_user: "{{ runner_user }}"
+      when:
+        - github_token != ""
+        - registration_token is defined
+        - not runner_config.stat.exists
+
+    - name: Install runner service
+      command: ./svc.sh install {{ runner_user }}
+      args:
+        chdir: "{{ runner_home }}"
+        creates: "/etc/systemd/system/actions.runner.{{ github_org }}.{{ inventory_hostname }}.service"
+
+    - name: Start runner service
+      command: ./svc.sh start
+      args:
+        chdir: "{{ runner_home }}"
+      register: start_result
+      changed_when: "'started' in start_result.stdout"
+      failed_when: false
+
+    - name: Display completion message
+      debug:
+        msg: |
+          Azure GitHub Actions Runner deployed!
+
+          Host: {{ inventory_hostname }}
+          Labels: {{ runner_labels }}
+
+          This runner can execute Terraform and Azure CLI commands.

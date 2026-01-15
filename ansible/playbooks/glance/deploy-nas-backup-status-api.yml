@@ -1,0 +1,121 @@
+---
+# Deploy NAS Backup Status API for Glance Dashboard
+# Enhanced with job durations and VM names
+#
+# Usage:
+#   ansible-playbook -i inventory.ini glance/deploy-nas-backup-status-api.yml
+#
+# API Endpoints:
+#   - /status   - Overall backup status with durations
+#   - /backups  - List of VMs/CTs with names and last backup times
+#   - /health   - Health check
+
+- name: Deploy NAS Backup Status API
+  hosts: docker-vm-core-utilities01
+  become: yes
+  vars:
+    api_path: /opt/nas-backup-status-api
+    api_port: 9102
+    pbs_host: 192.168.20.50
+
+  tasks:
+    - name: Create API directory
+      file:
+        path: "{{ api_path }}"
+        state: directory
+        owner: hermes-admin
+        group: hermes-admin
+        mode: '0755'
+
+    - name: Copy Python API script
+      copy:
+        src: files/nas-backup-api-app.py
+        dest: "{{ api_path }}/app.py"
+        mode: '0755'
+
+    - name: Create requirements.txt
+      copy:
+        dest: "{{ api_path }}/requirements.txt"
+        content: |
+          flask>=3.0.0
+          gunicorn>=21.0.0
+          packaging
+        mode: '0644'
+
+    - name: Create Dockerfile
+      copy:
+        dest: "{{ api_path }}/Dockerfile"
+        content: |
+          FROM python:3.11-slim
+
+          WORKDIR /app
+
+          # Install SSH client
+          RUN apt-get update && apt-get install -y openssh-client && rm -rf /var/lib/apt/lists/*
+
+          RUN pip install --upgrade pip
+
+          COPY requirements.txt .
+          RUN pip install --no-cache-dir -r requirements.txt
+
+          COPY app.py .
+
+          EXPOSE 9102
+
+          CMD ["gunicorn", "-b", "0.0.0.0:9102", "--timeout", "120", "--workers", "2", "app:app"]
+        mode: '0644'
+
+    - name: Create Docker Compose file
+      copy:
+        dest: "{{ api_path }}/docker-compose.yml"
+        content: |
+          name: nas-backup-status-api
+
+          services:
+            nas-backup-status-api:
+              build: .
+              container_name: nas-backup-status-api
+              restart: unless-stopped
+              ports:
+                - "9102:9102"
+              volumes:
+                - /home/hermes-admin/.ssh:/root/.ssh:ro
+              environment:
+                - TZ=America/New_York
+              labels:
+                - "com.centurylinklabs.watchtower.enable=false"
+        mode: '0644'
+
+    - name: Build and deploy container
+      community.docker.docker_compose_v2:
+        project_src: "{{ api_path }}"
+        build: always
+        state: present
+
+    - name: Wait for API to be ready
+      uri:
+        url: "http://localhost:{{ api_port }}/health"
+        status_code: 200
+      register: result
+      until: result.status == 200
+      retries: 15
+      delay: 5
+
+    - name: Display deployment info
+      debug:
+        msg: |
+          NAS Backup Status API deployed successfully!
+
+          API Endpoints:
+            - Status:   http://192.168.40.13:{{ api_port }}/status
+            - Backups:  http://192.168.40.13:{{ api_port }}/backups
+            - Health:   http://192.168.40.13:{{ api_port }}/health
+            - Refresh:  http://192.168.40.13:{{ api_port }}/refresh
+
+          Features:
+            - Job durations for daily, main, and NAS sync
+            - VM/CT names in backup list
+            - Background cache warming
+
+          Test with:
+            curl http://192.168.40.13:{{ api_port }}/status | jq .

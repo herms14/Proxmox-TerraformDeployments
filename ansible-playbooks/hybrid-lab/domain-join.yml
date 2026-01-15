@@ -1,0 +1,101 @@
+# =============================================================================
+# Join Servers and Clients to Domain
+# =============================================================================
+# This playbook joins all member servers and clients to the domain
+#
+# Prerequisites:
+#   - DC01 and DC02 must be running
+#   - DNS must be properly configured
+#
+# Usage:
+#   ansible-playbook -i inventory.yml domain-join.yml
+#   ansible-playbook -i inventory.yml domain-join.yml --limit member_servers
+#   ansible-playbook -i inventory.yml domain-join.yml --limit windows_clients
+# =============================================================================
+
+---
+- name: Join Windows machines to domain
+  hosts: member_servers:windows_clients
+  gather_facts: yes
+  vars:
+    domain_name: hrmsmrflrii.xyz
+    domain_netbios: HRMSMRFLRII
+    domain_admin_user: "{{ domain_netbios }}\\Administrator"
+    domain_admin_password: "{{ ansible_password }}"
+    dc01_ip: 192.168.80.2
+    dc02_ip: 192.168.80.3
+    ou_path: ""  # Default OU, can override per host
+
+  tasks:
+    - name: Set hostname from inventory
+      win_hostname:
+        name: "{{ inventory_hostname | upper }}"
+      register: hostname_result
+
+    - name: Reboot if hostname changed
+      win_reboot:
+        reboot_timeout: 600
+      when: hostname_result.reboot_required
+
+    - name: Configure DNS to point to domain controllers
+      win_dns_client:
+        adapter_names: '*'
+        dns_servers:
+          - "{{ dc01_ip }}"
+          - "{{ dc02_ip }}"
+
+    - name: Test DNS resolution for domain
+      win_shell: |
+        $result = Resolve-DnsName -Name {{ domain_name }} -DnsOnly -ErrorAction Stop
+        Write-Output "DNS resolution successful: $($result.IPAddress -join ', ')"
+      register: dns_test
+      retries: 5
+      delay: 10
+      until: dns_test.rc == 0
+
+    - name: Check if already domain joined
+      win_shell: |
+        $cs = Get-WmiObject Win32_ComputerSystem
+        if ($cs.PartOfDomain -and $cs.Domain -eq "{{ domain_name }}") {
+          Write-Output "joined"
+        } else {
+          Write-Output "not_joined"
+        }
+      register: domain_status
+      changed_when: false
+
+    - name: Join to domain
+      win_domain_membership:
+        dns_domain_name: "{{ domain_name }}"
+        domain_admin_user: "{{ domain_admin_user }}"
+        domain_admin_password: "{{ domain_admin_password }}"
+        domain_ou_path: "{{ ou_path | default(omit) }}"
+        state: domain
+      register: domain_join
+      when: "'not_joined' in domain_status.stdout"
+
+    - name: Reboot after domain join
+      win_reboot:
+        reboot_timeout: 600
+        post_reboot_delay: 30
+      when: domain_join is changed
+
+    - name: Verify domain membership
+      win_shell: |
+        $cs = Get-WmiObject Win32_ComputerSystem
+        Write-Output "Computer: $($cs.Name)"
+        Write-Output "Domain: $($cs.Domain)"
+        Write-Output "PartOfDomain: $($cs.PartOfDomain)"
+      register: domain_verify
+
+    - name: Display domain membership
+      debug:
+        var: domain_verify.stdout_lines
+
+    - name: Add Domain Admins to local Administrators
+      win_group_membership:
+        name: Administrators
+        members:
+          - "{{ domain_netbios }}\\Domain Admins"
+        state: present
+      ignore_errors: yes

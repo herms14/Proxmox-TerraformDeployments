@@ -1,0 +1,130 @@
+# =============================================================================
+# Promote DC02 to Domain Controller
+# =============================================================================
+# This playbook promotes DC02 as a secondary domain controller
+#
+# Prerequisites:
+#   - DC01 must be running with AD DS installed
+#   - DNS must be pointing to DC01
+#
+# Usage:
+#   ansible-playbook -i inventory.yml promote-dc02.yml
+# =============================================================================
+
+---
+- name: Promote DC02 to Domain Controller
+  hosts: dc02
+  gather_facts: yes
+  vars:
+    domain_name: hrmsmrflrii.xyz
+    domain_admin_user: "{{ domain_netbios }}\\Administrator"
+    domain_admin_password: "{{ ansible_password }}"
+    dsrm_password: "{{ dsrm_password | default('DSRM-P@ss2025!') }}"
+    dc01_ip: 192.168.80.2
+
+  tasks:
+    - name: Set hostname to DC02
+      win_hostname:
+        name: DC02
+      register: hostname_result
+
+    - name: Reboot if hostname changed
+      win_reboot:
+        reboot_timeout: 600
+      when: hostname_result.reboot_required
+
+    - name: Configure DNS to point to DC01
+      win_dns_client:
+        adapter_names: '*'
+        dns_servers:
+          - "{{ dc01_ip }}"
+          - 8.8.8.8
+
+    - name: Install AD DS role
+      win_feature:
+        name:
+          - AD-Domain-Services
+          - RSAT-AD-Tools
+          - RSAT-ADDS
+          - RSAT-AD-PowerShell
+          - RSAT-DNS-Server
+        state: present
+        include_management_tools: yes
+      register: ad_ds_install
+
+    - name: Reboot after AD DS role installation
+      win_reboot:
+        reboot_timeout: 600
+      when: ad_ds_install.reboot_required
+
+    - name: Check if already a domain controller
+      win_shell: |
+        try {
+          $dc = Get-ADDomainController -Identity $env:COMPUTERNAME -ErrorAction Stop
+          Write-Output "is_dc"
+        } catch {
+          Write-Output "not_dc"
+        }
+      register: dc_check
+      changed_when: false
+      failed_when: false
+
+    - name: Promote to domain controller
+      win_domain_controller:
+        dns_domain_name: "{{ domain_name }}"
+        domain_admin_user: "{{ domain_admin_user }}"
+        domain_admin_password: "{{ domain_admin_password }}"
+        safe_mode_password: "{{ dsrm_password }}"
+        state: domain_controller
+        install_dns: yes
+        database_path: C:\Windows\NTDS
+        log_path: C:\Windows\NTDS
+        sysvol_path: C:\Windows\SYSVOL
+      register: dc_promotion
+      when: "'not_dc' in dc_check.stdout"
+
+    - name: Reboot after promotion
+      win_reboot:
+        reboot_timeout: 900
+        post_reboot_delay: 120
+      when: dc_promotion is changed
+
+    - name: Wait for AD replication to complete
+      win_shell: |
+        $timeout = 600
+        $start = Get-Date
+        while ((Get-Date) -lt $start.AddSeconds($timeout)) {
+          try {
+            repadmin /syncall /AdeP 2>&1 | Out-Null
+            $result = repadmin /replsummary
+            if ($result -notmatch "failed") {
+              Write-Output "Replication successful"
+              exit 0
+            }
+          } catch { }
+          Start-Sleep -Seconds 30
+        }
+        Write-Output "Replication timeout"
+        exit 1
+      register: replication_status
+      changed_when: false
+
+    - name: Configure DNS to include both DCs
+      win_dns_client:
+        adapter_names: '*'
+        dns_servers:
+          - "{{ dc01_ip }}"
+          - "{{ ansible_host }}"
+
+    - name: Display DC information
+      win_shell: |
+        $dc = Get-ADDomainController -Identity $env:COMPUTERNAME
+        Write-Output "Hostname: $($dc.HostName)"
+        Write-Output "Site: $($dc.Site)"
+        Write-Output "IsGlobalCatalog: $($dc.IsGlobalCatalog)"
+        Write-Output "OperationMasterRoles: $($dc.OperationMasterRoles -join ', ')"
+      register: dc_info
+
+    - name: Show DC information
+      debug:
+        var: dc_info.stdout_lines

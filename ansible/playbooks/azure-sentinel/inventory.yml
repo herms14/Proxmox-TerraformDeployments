@@ -1,0 +1,75 @@
+---
+# ==============================================================================
+# Ansible Inventory for Azure Sentinel Syslog Configuration
+# ==============================================================================
+# Targets all homelab hosts that should forward logs to the Sentinel collector
+#
+# Usage:
+#   ansible-playbook configure-syslog-forwarding.yml -i inventory.yml
+#
+# ==============================================================================
+
+all:
+  vars:
+    ansible_user: hermes-admin
+    ansible_ssh_private_key_file: ~/.ssh/homelab_ed25519
+
+  children:
+    # -------------------------------------------------------------------------
+    # Proxmox Nodes - Infrastructure VLAN 20
+    # -------------------------------------------------------------------------
+    proxmox:
+      vars:
+        ansible_user: root
+      hosts:
+        node01:
+          ansible_host: 192.168.20.20
+        node02:
+          ansible_host: 192.168.20.21
+        node03:
+          ansible_host: 192.168.20.22
+
+    # -------------------------------------------------------------------------
+    # Docker Hosts - Services VLAN 40
+    # -------------------------------------------------------------------------
+    docker_hosts:
+      hosts:
+        docker-media:
+          ansible_host: 192.168.40.11
+          ansible_user: hermes-admin
+        docker-lxc-glance:
+          ansible_host: 192.168.40.12
+          ansible_user: hermes-admin
+        docker-vm-core-utilities01:
+          ansible_host: 192.168.40.13
+          ansible_user: hermes-admin
+
+    # -------------------------------------------------------------------------
+    # Ansible Controller - Infrastructure VLAN 20
+    # -------------------------------------------------------------------------
+    ansible:
+      hosts:
+        ansible-controller:
+          ansible_host: 192.168.20.30
+          ansible_user: hermes-admin
+
+    # -------------------------------------------------------------------------
+    # Service VMs - Services VLAN 40
+    # -------------------------------------------------------------------------
+    service_vms:
+      hosts:
+        traefik:
+          ansible_host: 192.168.40.20
+          ansible_user: hermes-admin
+        authentik:
+          ansible_host: 192.168.40.21
+          ansible_user: hermes-admin
+
+    # -------------------------------------------------------------------------
+    # Syslog Collector (do not configure forwarding on itself)
+    # -------------------------------------------------------------------------
+    syslog_collector:
+      hosts:
+        linux-syslog-server01:
+          ansible_host: 192.168.40.5
+          ansible_user: hermes-admin

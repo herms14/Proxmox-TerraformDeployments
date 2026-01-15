@@ -1,0 +1,88 @@
+# =============================================================================
+# Ansible Inventory for Hybrid Lab (hrmsmrflrii.xyz)
+# =============================================================================
+
+all:
+  vars:
+    # WinRM Connection Settings
+    ansible_connection: winrm
+    ansible_winrm_transport: ntlm
+    ansible_winrm_server_cert_validation: ignore
+    ansible_port: 5985
+
+    # Default Credentials (before domain join)
+    ansible_user: Administrator
+    ansible_password: "CHANGE_ME_BEFORE_USE"
+
+    # Domain Settings
+    domain_name: hrmsmrflrii.xyz
+    domain_netbios: HRMSMRFLRII
+    domain_admin_user: HRMSMRFLRII\Administrator
+    dsrm_password: "DSRM-P@ss2025!"
+
+  children:
+    # Domain Controllers
+    domain_controllers:
+      hosts:
+        dc01:
+          ansible_host: 192.168.80.2
+          dc_role: primary
+        dc02:
+          ansible_host: 192.168.80.3
+          dc_role: secondary
+
+    # File Servers
+    file_servers:
+      hosts:
+        fs01:
+          ansible_host: 192.168.80.4
+        fs02:
+          ansible_host: 192.168.80.5
+
+    # SQL Server
+    sql_servers:
+      hosts:
+        sql01:
+          ansible_host: 192.168.80.6
+          sql_edition: Standard
+          sql_instance: MSSQLSERVER
+
+    # Identity Servers
+    identity_servers:
+      hosts:
+        aadcon01:
+          ansible_host: 192.168.80.7
+          role: entra_connect
+
+    # Password Protection
+    password_protection:
+      hosts:
+        aadpp01:
+          ansible_host: 192.168.80.8
+          role: proxy
+        aadpp02:
+          ansible_host: 192.168.80.9
+          role: proxy
+
+    # Windows Clients
+    windows_clients:
+      hosts:
+        client01:
+          ansible_host: 192.168.80.12
+        client02:
+          ansible_host: 192.168.80.13
+
+    # Group: All Servers (for domain join)
+    member_servers:
+      children:
+        file_servers:
+        sql_servers:
+        identity_servers:
+        password_protection:
+
+    # Group: All Windows (servers + clients)
+    all_windows:
+      children:
+        domain_controllers:
+        member_servers:
+        windows_clients:

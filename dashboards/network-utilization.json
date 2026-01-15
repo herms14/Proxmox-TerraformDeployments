@@ -1,0 +1,491 @@
+{
+  "annotations": {"list": []},
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 1,
+  "id": null,
+  "links": [],
+  "panels": [
+    {
+      "type": "stat",
+      "title": "Total Cluster Bandwidth",
+      "description": "Combined RX+TX across all Proxmox nodes",
+      "datasource": {"type": "prometheus", "uid": "PBFA97CFB590B2093"},
+      "gridPos": {"h": 4, "w": 5, "x": 0, "y": 0},
+      "id": 1,
+      "transparent": true,
+      "fieldConfig": {
+        "defaults": {
+          "color": {"mode": "thresholds"},
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {"color": "#22c55e", "value": null},
+              {"color": "#f59e0b", "value": 500000000},
+              {"color": "#ef4444", "value": 900000000}
+            ]
+          },
+          "unit": "bps",
+          "decimals": 1
+        },
+        "overrides": []
+      },
+      "options": {"colorMode": "background", "graphMode": "area", "justifyMode": "center", "orientation": "auto", "reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false}, "textMode": "auto"},
+      "targets": [{
+        "datasource": {"type": "prometheus", "uid": "PBFA97CFB590B2093"},
+        "expr": "sum(rate(node_network_receive_bytes_total{device=\"vmbr0\"}[5m]) + rate(node_network_transmit_bytes_total{device=\"vmbr0\"}[5m])) * 8",
+        "refId": "A"
+      }]
+    },
+    {
+      "type": "stat",
+      "title": "Synology NAS",
+      "description": "Combined RX+TX on NAS (eth0+eth1)",
+      "datasource": {"type": "prometheus", "uid": "PBFA97CFB590B2093"},
+      "gridPos": {"h": 4, "w": 5, "x": 5, "y": 0},
+      "id": 12,
+      "transparent": true,
+      "fieldConfig": {
+        "defaults": {
+          "color": {"mode": "thresholds"},
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {"color": "#06b6d4", "value": null},
+              {"color": "#f59e0b", "value": 500000000},
+              {"color": "#ef4444", "value": 900000000}
+            ]
+          },
+          "unit": "bps",
+          "decimals": 1
+        },
+        "overrides": []
+      },
+      "options": {"colorMode": "background", "graphMode": "area", "justifyMode": "center", "orientation": "auto", "reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false}, "textMode": "auto"},
+      "targets": [{
+        "datasource": {"type": "prometheus", "uid": "PBFA97CFB590B2093"},
+        "expr": "sum(rate(ifHCInOctets{ifIndex=~\"3|4\"}[5m]) + rate(ifHCOutOctets{ifIndex=~\"3|4\"}[5m])) * 8",
+        "refId": "A"
+      }]
+    },
+    {
+      "type": "gauge",
+      "title": "Cluster Utilization",
+      "description": "Percentage of 1Gbps capacity used",
+      "datasource": {"type": "prometheus", "uid": "PBFA97CFB590B2093"},
+      "gridPos": {"h": 4, "w": 5, "x": 10, "y": 0},
+      "id": 2,
+      "transparent": true,
+      "fieldConfig": {
+        "defaults": {
+          "color": {"mode": "thresholds"},
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {"color": "#22c55e", "value": null},
+              {"color": "#f59e0b", "value": 50},
+              {"color": "#ef4444", "value": 80}
+            ]
+          },
+          "unit": "percent",
+          "min": 0,
+          "max": 100,
+          "decimals": 1
+        },
+        "overrides": []
+      },
+      "options": {"orientation": "auto", "reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false}, "showThresholdLabels": false, "showThresholdMarkers": true},
+      "targets": [{
+        "datasource": {"type": "prometheus", "uid": "PBFA97CFB590B2093"},
+        "expr": "(sum(rate(node_network_receive_bytes_total{device=\"vmbr0\"}[5m]) + rate(node_network_transmit_bytes_total{device=\"vmbr0\"}[5m])) * 8 / 1000000000) * 100",
+        "refId": "A"
+      }]
+    },
+    {
+      "type": "gauge",
+      "title": "NAS Utilization",
+      "description": "NAS bandwidth as % of 2Gbps (bonded)",
+      "datasource": {"type": "prometheus", "uid": "PBFA97CFB590B2093"},
+      "gridPos": {"h": 4, "w": 4, "x": 15, "y": 0},
+      "id": 13,
+      "transparent": true,
+      "fieldConfig": {
+        "defaults": {
+          "color": {"mode": "thresholds"},
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {"color": "#06b6d4", "value": null},
+              {"color": "#f59e0b", "value": 50},
+              {"color": "#ef4444", "value": 80}
+            ]
+          },
+          "unit": "percent",
+          "min": 0,
+          "max": 100,
+          "decimals": 1
+        },
+        "overrides": []
+      },
+      "options": {"orientation": "auto", "reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false}, "showThresholdLabels": false, "showThresholdMarkers": true},
+      "targets": [{
+        "datasource": {"type": "prometheus", "uid": "PBFA97CFB590B2093"},
+        "expr": "(sum(rate(ifHCInOctets{ifIndex=~\"3|4\"}[5m]) + rate(ifHCOutOctets{ifIndex=~\"3|4\"}[5m])) * 8 / 2000000000) * 100",
+        "refId": "A"
+      }]
+    },
+    {
+      "type": "stat",
+      "title": "Peak (24h)",
+      "description": "Highest cluster bandwidth in last 24 hours",
+      "datasource": {"type": "prometheus", "uid": "PBFA97CFB590B2093"},
+      "gridPos": {"h": 4, "w": 5, "x": 19, "y": 0},
+      "id": 3,
+      "transparent": true,
+      "fieldConfig": {
+        "defaults": {
+          "color": {"mode": "thresholds"},
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {"color": "#3b82f6", "value": null},
+              {"color": "#f59e0b", "value": 500000000},
+              {"color": "#ef4444", "value": 900000000}
+            ]
+          },
+          "unit": "bps",
+          "decimals": 1
+        },
+        "overrides": []
+      },
+      "options": {"colorMode": "background", "graphMode": "none", "justifyMode": "center", "orientation": "auto", "reduceOptions": {"calcs": ["max"], "fields": "", "values": false}, "textMode": "auto"},
+      "targets": [{
+        "datasource": {"type": "prometheus", "uid": "PBFA97CFB590B2093"},
+        "expr": "sum(rate(node_network_receive_bytes_total{device=\"vmbr0\"}[5m]) + rate(node_network_transmit_bytes_total{device=\"vmbr0\"}[5m])) * 8",
+        "refId": "A"
+      }],
+      "timeFrom": "24h"
+    },
+    {
+      "type": "stat",
+      "title": "node01",
+      "datasource": {"type": "prometheus", "uid": "PBFA97CFB590B2093"},
+      "gridPos": {"h": 3, "w": 6, "x": 0, "y": 4},
+      "id": 5,
+      "transparent": true,
+      "fieldConfig": {
+        "defaults": {
+          "color": {"mode": "thresholds"},
+          "thresholds": {"mode": "absolute", "steps": [{"color": "#3b82f6", "value": null}]},
+          "unit": "bps",
+          "decimals": 1
+        },
+        "overrides": []
+      },
+      "options": {"colorMode": "background", "graphMode": "area", "justifyMode": "center", "orientation": "auto", "reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false}, "textMode": "auto"},
+      "targets": [{
+        "datasource": {"type": "prometheus", "uid": "PBFA97CFB590B2093"},
+        "expr": "(rate(node_network_receive_bytes_total{node=\"node01\",device=\"vmbr0\"}[5m]) + rate(node_network_transmit_bytes_total{node=\"node01\",device=\"vmbr0\"}[5m])) * 8",
+        "refId": "A"
+      }]
+    },
+    {
+      "type": "stat",
+      "title": "node02",
+      "datasource": {"type": "prometheus", "uid": "PBFA97CFB590B2093"},
+      "gridPos": {"h": 3, "w": 6, "x": 6, "y": 4},
+      "id": 6,
+      "transparent": true,
+      "fieldConfig": {
+        "defaults": {
+          "color": {"mode": "thresholds"},
+          "thresholds": {"mode": "absolute", "steps": [{"color": "#22c55e", "value": null}]},
+          "unit": "bps",
+          "decimals": 1
+        },
+        "overrides": []
+      },
+      "options": {"colorMode": "background", "graphMode": "area", "justifyMode": "center", "orientation": "auto", "reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false}, "textMode": "auto"},
+      "targets": [{
+        "datasource": {"type": "prometheus", "uid": "PBFA97CFB590B2093"},
+        "expr": "(rate(node_network_receive_bytes_total{node=\"node02\",device=\"vmbr0\"}[5m]) + rate(node_network_transmit_bytes_total{node=\"node02\",device=\"vmbr0\"}[5m])) * 8",
+        "refId": "A"
+      }]
+    },
+    {
+      "type": "stat",
+      "title": "node03",
+      "datasource": {"type": "prometheus", "uid": "PBFA97CFB590B2093"},
+      "gridPos": {"h": 3, "w": 6, "x": 12, "y": 4},
+      "id": 7,
+      "transparent": true,
+      "fieldConfig": {
+        "defaults": {
+          "color": {"mode": "thresholds"},
+          "thresholds": {"mode": "absolute", "steps": [{"color": "#f59e0b", "value": null}]},
+          "unit": "bps",
+          "decimals": 1
+        },
+        "overrides": []
+      },
+      "options": {"colorMode": "background", "graphMode": "area", "justifyMode": "center", "orientation": "auto", "reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false}, "textMode": "auto"},
+      "targets": [{
+        "datasource": {"type": "prometheus", "uid": "PBFA97CFB590B2093"},
+        "expr": "(rate(node_network_receive_bytes_total{node=\"node03\",device=\"vmbr0\"}[5m]) + rate(node_network_transmit_bytes_total{node=\"node03\",device=\"vmbr0\"}[5m])) * 8",
+        "refId": "A"
+      }]
+    },
+    {
+      "type": "stat",
+      "title": "NAS Peak (24h)",
+      "description": "Highest NAS bandwidth in last 24 hours",
+      "datasource": {"type": "prometheus", "uid": "PBFA97CFB590B2093"},
+      "gridPos": {"h": 3, "w": 6, "x": 18, "y": 4},
+      "id": 14,
+      "transparent": true,
+      "fieldConfig": {
+        "defaults": {
+          "color": {"mode": "thresholds"},
+          "thresholds": {"mode": "absolute", "steps": [{"color": "#06b6d4", "value": null}]},
+          "unit": "bps",
+          "decimals": 1
+        },
+        "overrides": []
+      },
+      "options": {"colorMode": "background", "graphMode": "none", "justifyMode": "center", "orientation": "auto", "reduceOptions": {"calcs": ["max"], "fields": "", "values": false}, "textMode": "auto"},
+      "targets": [{
+        "datasource": {"type": "prometheus", "uid": "PBFA97CFB590B2093"},
+        "expr": "sum(rate(ifHCInOctets{ifIndex=~\"3|4\"}[5m]) + rate(ifHCOutOctets{ifIndex=~\"3|4\"}[5m])) * 8",
+        "refId": "A"
+      }],
+      "timeFrom": "24h"
+    },
+    {
+      "type": "timeseries",
+      "title": "Proxmox Cluster Bandwidth Over Time",
+      "description": "RX/TX bandwidth per node",
+      "datasource": {"type": "prometheus", "uid": "PBFA97CFB590B2093"},
+      "gridPos": {"h": 8, "w": 24, "x": 0, "y": 7},
+      "id": 8,
+      "transparent": true,
+      "fieldConfig": {
+        "defaults": {
+          "color": {"mode": "palette-classic"},
+          "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "line",
+            "fillOpacity": 20,
+            "gradientMode": "opacity",
+            "hideFrom": {"legend": false, "tooltip": false, "viz": false},
+            "insertNulls": false,
+            "lineInterpolation": "smooth",
+            "lineWidth": 2,
+            "pointSize": 5,
+            "scaleDistribution": {"type": "linear"},
+            "showPoints": "never",
+            "spanNulls": true,
+            "stacking": {"group": "A", "mode": "none"},
+            "thresholdsStyle": {"mode": "off"}
+          },
+          "mappings": [],
+          "thresholds": {"mode": "absolute", "steps": [{"color": "green", "value": null}]},
+          "unit": "bps"
+        },
+        "overrides": [
+          {"matcher": {"id": "byRegexp", "options": ".*RX.*"}, "properties": [{"id": "color", "value": {"fixedColor": "#3b82f6", "mode": "fixed"}}]},
+          {"matcher": {"id": "byRegexp", "options": ".*TX.*"}, "properties": [{"id": "color", "value": {"fixedColor": "#22c55e", "mode": "fixed"}}]}
+        ]
+      },
+      "options": {
+        "legend": {"calcs": ["mean", "max"], "displayMode": "table", "placement": "bottom", "showLegend": true},
+        "tooltip": {"mode": "multi", "sort": "desc"}
+      },
+      "targets": [
+        {"datasource": {"type": "prometheus", "uid": "PBFA97CFB590B2093"}, "expr": "rate(node_network_receive_bytes_total{device=\"vmbr0\"}[5m]) * 8", "legendFormat": "{{node}} RX", "refId": "A"},
+        {"datasource": {"type": "prometheus", "uid": "PBFA97CFB590B2093"}, "expr": "rate(node_network_transmit_bytes_total{device=\"vmbr0\"}[5m]) * 8", "legendFormat": "{{node}} TX", "refId": "B"}
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "Synology NAS Bandwidth Over Time",
+      "description": "RX/TX bandwidth on NAS interfaces",
+      "datasource": {"type": "prometheus", "uid": "PBFA97CFB590B2093"},
+      "gridPos": {"h": 8, "w": 24, "x": 0, "y": 15},
+      "id": 15,
+      "transparent": true,
+      "fieldConfig": {
+        "defaults": {
+          "color": {"mode": "palette-classic"},
+          "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "line",
+            "fillOpacity": 20,
+            "gradientMode": "opacity",
+            "hideFrom": {"legend": false, "tooltip": false, "viz": false},
+            "insertNulls": false,
+            "lineInterpolation": "smooth",
+            "lineWidth": 2,
+            "pointSize": 5,
+            "scaleDistribution": {"type": "linear"},
+            "showPoints": "never",
+            "spanNulls": true,
+            "stacking": {"group": "A", "mode": "none"},
+            "thresholdsStyle": {"mode": "off"}
+          },
+          "mappings": [],
+          "thresholds": {"mode": "absolute", "steps": [{"color": "green", "value": null}]},
+          "unit": "bps"
+        },
+        "overrides": [
+          {"matcher": {"id": "byName", "options": "eth0 RX"}, "properties": [{"id": "color", "value": {"fixedColor": "#06b6d4", "mode": "fixed"}}]},
+          {"matcher": {"id": "byName", "options": "eth0 TX"}, "properties": [{"id": "color", "value": {"fixedColor": "#14b8a6", "mode": "fixed"}}]},
+          {"matcher": {"id": "byName", "options": "eth1 RX"}, "properties": [{"id": "color", "value": {"fixedColor": "#8b5cf6", "mode": "fixed"}}]},
+          {"matcher": {"id": "byName", "options": "eth1 TX"}, "properties": [{"id": "color", "value": {"fixedColor": "#a78bfa", "mode": "fixed"}}]}
+        ]
+      },
+      "options": {
+        "legend": {"calcs": ["mean", "max"], "displayMode": "table", "placement": "bottom", "showLegend": true},
+        "tooltip": {"mode": "multi", "sort": "desc"}
+      },
+      "targets": [
+        {"datasource": {"type": "prometheus", "uid": "PBFA97CFB590B2093"}, "expr": "rate(ifHCInOctets{ifIndex=\"3\"}[5m]) * 8", "legendFormat": "eth0 RX", "refId": "A"},
+        {"datasource": {"type": "prometheus", "uid": "PBFA97CFB590B2093"}, "expr": "rate(ifHCOutOctets{ifIndex=\"3\"}[5m]) * 8", "legendFormat": "eth0 TX", "refId": "B"},
+        {"datasource": {"type": "prometheus", "uid": "PBFA97CFB590B2093"}, "expr": "rate(ifHCInOctets{ifIndex=\"4\"}[5m]) * 8", "legendFormat": "eth1 RX", "refId": "C"},
+        {"datasource": {"type": "prometheus", "uid": "PBFA97CFB590B2093"}, "expr": "rate(ifHCOutOctets{ifIndex=\"4\"}[5m]) * 8", "legendFormat": "eth1 TX", "refId": "D"}
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "Combined Bandwidth (1Gbps Reference)",
+      "description": "Total bandwidth from cluster + NAS with threshold lines",
+      "datasource": {"type": "prometheus", "uid": "PBFA97CFB590B2093"},
+      "gridPos": {"h": 8, "w": 24, "x": 0, "y": 23},
+      "id": 9,
+      "transparent": true,
+      "fieldConfig": {
+        "defaults": {
+          "color": {"mode": "palette-classic"},
+          "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "line",
+            "fillOpacity": 30,
+            "gradientMode": "opacity",
+            "hideFrom": {"legend": false, "tooltip": false, "viz": false},
+            "insertNulls": false,
+            "lineInterpolation": "smooth",
+            "lineWidth": 2,
+            "pointSize": 5,
+            "scaleDistribution": {"type": "linear"},
+            "showPoints": "never",
+            "spanNulls": true,
+            "stacking": {"group": "A", "mode": "none"},
+            "thresholdsStyle": {"mode": "line+area"}
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {"color": "transparent", "value": null},
+              {"color": "rgba(239, 68, 68, 0.2)", "value": 800000000}
+            ]
+          },
+          "unit": "bps",
+          "max": 1100000000
+        },
+        "overrides": [
+          {"matcher": {"id": "byName", "options": "1Gbps Limit"}, "properties": [{"id": "color", "value": {"fixedColor": "#ef4444", "mode": "fixed"}}, {"id": "custom.lineStyle", "value": {"dash": [10, 10], "fill": "dash"}}, {"id": "custom.fillOpacity", "value": 0}]},
+          {"matcher": {"id": "byName", "options": "Cluster Total"}, "properties": [{"id": "color", "value": {"fixedColor": "#22c55e", "mode": "fixed"}}]},
+          {"matcher": {"id": "byName", "options": "NAS Total"}, "properties": [{"id": "color", "value": {"fixedColor": "#06b6d4", "mode": "fixed"}}]}
+        ]
+      },
+      "options": {
+        "legend": {"calcs": ["mean", "max"], "displayMode": "table", "placement": "bottom", "showLegend": true},
+        "tooltip": {"mode": "multi", "sort": "desc"}
+      },
+      "targets": [
+        {"datasource": {"type": "prometheus", "uid": "PBFA97CFB590B2093"}, "expr": "sum(rate(node_network_receive_bytes_total{device=\"vmbr0\"}[5m]) + rate(node_network_transmit_bytes_total{device=\"vmbr0\"}[5m])) * 8", "legendFormat": "Cluster Total", "refId": "A"},
+        {"datasource": {"type": "prometheus", "uid": "PBFA97CFB590B2093"}, "expr": "sum(rate(ifHCInOctets{ifIndex=~\"3|4\"}[5m]) + rate(ifHCOutOctets{ifIndex=~\"3|4\"}[5m])) * 8", "legendFormat": "NAS Total", "refId": "B"},
+        {"datasource": {"type": "prometheus", "uid": "PBFA97CFB590B2093"}, "expr": "1000000000", "legendFormat": "1Gbps Limit", "refId": "C"}
+      ]
+    },
+    {
+      "type": "barchart",
+      "title": "Current Bandwidth by Device",
+      "datasource": {"type": "prometheus", "uid": "PBFA97CFB590B2093"},
+      "gridPos": {"h": 6, "w": 12, "x": 0, "y": 31},
+      "id": 10,
+      "transparent": true,
+      "fieldConfig": {
+        "defaults": {
+          "color": {"mode": "palette-classic"},
+          "custom": {"axisBorderShow": false, "axisCenteredZero": false, "axisColorMode": "text", "axisLabel": "", "axisPlacement": "auto", "fillOpacity": 80, "gradientMode": "hue", "hideFrom": {"legend": false, "tooltip": false, "viz": false}, "lineWidth": 1, "scaleDistribution": {"type": "linear"}, "thresholdsStyle": {"mode": "off"}},
+          "mappings": [],
+          "thresholds": {"mode": "absolute", "steps": [{"color": "green", "value": null}]},
+          "unit": "bps"
+        },
+        "overrides": []
+      },
+      "options": {"barRadius": 0.1, "barWidth": 0.8, "fullHighlight": false, "groupWidth": 0.7, "legend": {"calcs": [], "displayMode": "list", "placement": "right", "showLegend": true}, "orientation": "horizontal", "showValue": "auto", "stacking": "none", "tooltip": {"mode": "single", "sort": "none"}, "xTickLabelRotation": 0, "xTickLabelSpacing": 100},
+      "targets": [
+        {"datasource": {"type": "prometheus", "uid": "PBFA97CFB590B2093"}, "expr": "(rate(node_network_receive_bytes_total{device=\"vmbr0\"}[5m]) + rate(node_network_transmit_bytes_total{device=\"vmbr0\"}[5m])) * 8", "legendFormat": "{{node}}", "refId": "A", "instant": true},
+        {"datasource": {"type": "prometheus", "uid": "PBFA97CFB590B2093"}, "expr": "sum(rate(ifHCInOctets{ifIndex=~\"3|4\"}[5m]) + rate(ifHCOutOctets{ifIndex=~\"3|4\"}[5m])) * 8", "legendFormat": "Synology NAS", "refId": "B", "instant": true}
+      ]
+    },
+    {
+      "type": "table",
+      "title": "Network Interface Details",
+      "datasource": {"type": "prometheus", "uid": "PBFA97CFB590B2093"},
+      "gridPos": {"h": 6, "w": 12, "x": 12, "y": 31},
+      "id": 11,
+      "transparent": true,
+      "fieldConfig": {
+        "defaults": {
+          "color": {"mode": "thresholds"},
+          "custom": {"align": "auto", "cellOptions": {"type": "auto"}, "inspect": false},
+          "mappings": [],
+          "thresholds": {"mode": "absolute", "steps": [{"color": "green", "value": null}]},
+          "unit": "bps"
+        },
+        "overrides": [
+          {"matcher": {"id": "byName", "options": "Device"}, "properties": [{"id": "custom.width", "value": 100}]},
+          {"matcher": {"id": "byName", "options": "RX Rate"}, "properties": [{"id": "custom.cellOptions", "value": {"mode": "gradient", "type": "gauge"}}, {"id": "max", "value": 125000000}]},
+          {"matcher": {"id": "byName", "options": "TX Rate"}, "properties": [{"id": "custom.cellOptions", "value": {"mode": "gradient", "type": "gauge"}}, {"id": "max", "value": 125000000}]}
+        ]
+      },
+      "options": {"cellHeight": "sm", "footer": {"countRows": false, "fields": "", "reducer": ["sum"], "show": false}, "showHeader": true},
+      "targets": [
+        {"datasource": {"type": "prometheus", "uid": "PBFA97CFB590B2093"}, "expr": "rate(node_network_receive_bytes_total{device=\"vmbr0\"}[5m]) * 8", "format": "table", "instant": true, "refId": "A"},
+        {"datasource": {"type": "prometheus", "uid": "PBFA97CFB590B2093"}, "expr": "rate(node_network_transmit_bytes_total{device=\"vmbr0\"}[5m]) * 8", "format": "table", "instant": true, "refId": "B"}
+      ],
+      "transformations": [
+        {"id": "merge", "options": {}},
+        {"id": "organize", "options": {"excludeByName": {"Time": true, "__name__": true, "device": true, "instance": true, "job": true}, "indexByName": {}, "renameByName": {"Value #A": "RX Rate", "Value #B": "TX Rate", "node": "Device"}}}
+      ]
+    }
+  ],
+  "refresh": "30s",
+  "schemaVersion": 39,
+  "tags": ["network", "homelab", "bandwidth", "nas"],
+  "templating": {"list": []},
+  "time": {"from": "now-24h", "to": "now"},
+  "timepicker": {},
+  "timezone": "browser",
+  "title": "Network Utilization",
+  "uid": "network-utilization",
+  "version": 2
+}

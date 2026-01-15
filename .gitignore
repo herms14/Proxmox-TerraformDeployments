@@ -152,3 +152,14 @@ Azure-Hybrid-Lab/RESUME_DEPLOYMENT.md
 
 # Claude context files with credentials
 .claude/active-tasks.md
+
+# ===========================================
+# Temporary files
+# ===========================================
+_ul*
+nul
+apps/
+gitops-repos/
+**/group_vars/all.yml
+**/vault.yml
+**/*vault*.yml

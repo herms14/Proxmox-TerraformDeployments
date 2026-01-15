@@ -1,0 +1,232 @@
+---
+# Deploy Azure Arc Agent on On-Premises Windows VMs
+# Onboards Windows servers to Azure Arc for hybrid management
+#
+# Prerequisites:
+#   - Azure Service Principal with Arc onboarding permissions
+#   - VPN connectivity to Azure (private connectivity)
+#   - Windows VMs must be domain-joined and accessible via WinRM
+#
+# Run with:
+#   ansible-playbook -i ../azure-ad/inventory-hybrid.yml deploy-arc-agent-windows.yml
+#
+# Required variables (set via extra-vars or vault):
+#   - arc_tenant_id
+#   - arc_subscription_id
+#   - arc_client_id
+#   - arc_client_secret
+
+- name: "Pre-Flight: Verify Azure Arc Prerequisites"
+  hosts: all_onprem
+  gather_facts: no
+  vars:
+    # Azure configuration - Update these or use ansible-vault
+    arc_tenant_id: "{{ lookup('env', 'AZURE_TENANT_ID') | default('YOUR_TENANT_ID', true) }}"
+    arc_subscription_id: "2212d587-1bad-4013-b605-b421b1f83c30"
+    arc_resource_group: "rg-homelab-sentinel"
+    arc_location: "australiaeast"
+  tasks:
+    - name: Check if Azure Arc agent is already installed
+      win_shell: |
+        $service = Get-Service -Name "himds" -ErrorAction SilentlyContinue
+        if ($service) {
+          $status = & "$env:ProgramW6432\AzureConnectedMachineAgent\azcmagent.exe" show 2>&1
+          if ($status -match "Connected") {
+            Write-Output "CONNECTED"
+          } else {
+            Write-Output "INSTALLED_NOT_CONNECTED"
+          }
+        } else {
+          Write-Output "NOT_INSTALLED"
+        }
+      register: arc_status
+      changed_when: false
+
+    - name: Display Arc agent status
+      debug:
+        var: arc_status.stdout
+
+- name: "Phase 1: Download Azure Arc Agent"
+  hosts: all_onprem
+  gather_facts: no
+  tasks:
+    - name: Create temp directory
+      win_file:
+        path: C:\Temp
+        state: directory
+
+    - name: Download Azure Connected Machine Agent
+      win_get_url:
+        url: https://aka.ms/AzureConnectedMachineAgent
+        dest: C:\Temp\AzureConnectedMachineAgent.msi
+        force: no
+      when: arc_status.stdout is defined and "NOT_INSTALLED" in arc_status.stdout
+      register: download_result
+
+    - name: Display download status
+      debug:
+        msg: "Agent downloaded: {{ download_result.changed | default(false) }}"
+
+- name: "Phase 2: Install Azure Arc Agent"
+  hosts: all_onprem
+  gather_facts: no
+  tasks:
+    - name: Install Azure Connected Machine Agent
+      win_package:
+        path: C:\Temp\AzureConnectedMachineAgent.msi
+        state: present
+        arguments: /quiet /norestart
+      when: arc_status.stdout is defined and "NOT_INSTALLED" in arc_status.stdout
+      register: install_result
+
+    - name: Wait for agent installation
+      pause:
+        seconds: 30
+      when: install_result is changed
+
+    - name: Verify agent installation
+      win_shell: |
+        $service = Get-Service -Name "himds" -ErrorAction SilentlyContinue
+        if ($service) {
+          Write-Output "SUCCESS: Azure Arc agent installed"
+          Write-Output "Service Status: $($service.Status)"
+        } else {
+          Write-Output "FAILED: Agent service not found"
+          exit 1
+        }
+      register: install_verify
+      when: install_result is changed
+
+    - name: Display installation verification
+      debug:
+        var: install_verify.stdout_lines
+      when: install_verify is defined
+
+- name: "Phase 3: Connect to Azure Arc"
+  hosts: all_onprem
+  gather_facts: no
+  vars:
+    # Azure configuration
+    arc_tenant_id: "{{ lookup('env', 'AZURE_TENANT_ID') | default('YOUR_TENANT_ID', true) }}"
+    arc_subscription_id: "2212d587-1bad-4013-b605-b421b1f83c30"
+    arc_resource_group: "rg-homelab-sentinel"
+    arc_location: "australiaeast"
+    arc_client_id: "{{ lookup('env', 'AZURE_ARC_CLIENT_ID') | default('YOUR_CLIENT_ID', true) }}"
+    arc_client_secret: "{{ lookup('env', 'AZURE_ARC_CLIENT_SECRET') | default('YOUR_CLIENT_SECRET', true) }}"
+  tasks:
+    - name: Check connection status
+      win_shell: |
+        $status = & "$env:ProgramW6432\AzureConnectedMachineAgent\azcmagent.exe" show 2>&1
+        if ($status -match "Connected") {
+          Write-Output "ALREADY_CONNECTED"
+        } else {
+          Write-Output "NOT_CONNECTED"
+        }
+      register: connection_check
+      changed_when: false
+      ignore_errors: yes
+
+    - name: Connect to Azure Arc (Service Principal)
+      win_shell: |
+        $ErrorActionPreference = "Stop"
+
+        # Set proxy if needed for private connectivity
+        # [Environment]::SetEnvironmentVariable("HTTPS_PROXY", "http://proxy:8080", "Machine")
+
+        # Connect using service principal
+        & "$env:ProgramW6432\AzureConnectedMachineAgent\azcmagent.exe" connect `
+          --resource-group "{{ arc_resource_group }}" `
+          --tenant-id "{{ arc_tenant_id }}" `
+          --location "{{ arc_location }}" `
+          --subscription-id "{{ arc_subscription_id }}" `
+          --service-principal-id "{{ arc_client_id }}" `
+          --service-principal-secret "{{ arc_client_secret }}" `
+          --tags "Environment=Homelab,Location=OnPrem,ManagedBy=Ansible"
+
+        if ($LASTEXITCODE -eq 0) {
+          Write-Output "SUCCESS: Connected to Azure Arc"
+        } else {
+          Write-Output "FAILED: Could not connect to Azure Arc"
+          exit 1
+        }
+      when: connection_check.stdout is defined and "NOT_CONNECTED" in connection_check.stdout
+      register: arc_connect
+      no_log: true  # Hide secrets in output
+
+    - name: Display connection result
+      debug:
+        var: arc_connect.stdout_lines
+      when: arc_connect is defined and arc_connect.stdout_lines is defined
+
+- name: "Phase 4: Verify Arc Connection"
+  hosts: all_onprem
+  gather_facts: no
+  tasks:
+    - name: Get Arc agent status
+      win_shell: |
+        $status = & "$env:ProgramW6432\AzureConnectedMachineAgent\azcmagent.exe" show 2>&1
+        Write-Output $status
+      register: arc_final_status
+      changed_when: false
+
+    - name: Display Arc status
+      debug:
+        var: arc_final_status.stdout_lines
+
+- name: "Phase 5: Configure Arc Agent for Private Connectivity"
+  hosts: all_onprem
+  gather_facts: no
+  tasks:
+    - name: Configure private link scope (if using private endpoints)
+      win_shell: |
+        # Check current configuration
+        $config = & "$env:ProgramW6432\AzureConnectedMachineAgent\azcmagent.exe" config list 2>&1
+
+        Write-Output "=== Current Configuration ==="
+        Write-Output $config
+
+        # Note: For private connectivity via VPN, you may need to:
+        # 1. Create Azure Arc Private Link Scope
+        # 2. Associate the Arc machines with the private link scope
+        # This is typically done via Azure Portal or Terraform
+
+        Write-Output ""
+        Write-Output "Note: Traffic flows via Site-to-Site VPN"
+        Write-Output "Ensure Azure endpoints are reachable via VPN"
+      register: private_config
+      changed_when: false
+
+    - name: Display configuration
+      debug:
+        var: private_config.stdout_lines
+
+- name: "Summary: Arc Onboarding Status"
+  hosts: localhost
+  gather_facts: no
+  tasks:
+    - name: Summary message
+      debug:
+        msg: |
+          ===========================================
+          Azure Arc Onboarding Complete!
+          ===========================================
+
+          All on-premises Windows VMs have been onboarded to Azure Arc.
+
+          Next Steps:
+          1. Verify VMs in Azure Portal → Azure Arc → Machines
+          2. Configure Data Collection Rules for log forwarding
+          3. Apply Azure Policies for compliance
+
+          Resource Group: rg-homelab-sentinel
+          Location: australiaeast
+
+          Onboarded Machines:
+          - DC01, DC02 (Domain Controllers)
+          - FS01, FS02 (File Servers)
+          - SQL01 (SQL Server)
+          - AADCON01 (Entra Connect)
+          - AADPP01, AADPP02 (Password Protection)
+          - IIS01, IIS02 (Web Servers)
+          - CLIENT01, CLIENT02 (Workstations)
+          ===========================================

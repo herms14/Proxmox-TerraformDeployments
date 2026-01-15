@@ -1,0 +1,73 @@
+---
+# Deploy Network Utilization Dashboard to Grafana
+# This playbook deploys a network bandwidth monitoring dashboard
+#
+# Usage:
+#   ansible-playbook monitoring/deploy-network-utilization-dashboard.yml
+#
+# Features:
+#   - Total cluster bandwidth monitoring
+#   - Per-node bandwidth breakdown (node01, node02, node03)
+#   - 24-hour peak and average stats
+#   - Timeline graphs with 1Gbps reference line
+#   - Bandwidth utilization gauge
+#
+# Prerequisites:
+#   - Grafana running on docker-vm-utilities01:3030
+#   - node_exporter running on all Proxmox nodes
+#   - Prometheus scraping node_exporter metrics
+
+- name: Deploy Network Utilization Dashboard
+  hosts: localhost
+  gather_facts: false
+  vars:
+    grafana_host: "192.168.40.10"
+    grafana_port: "3030"
+    grafana_url: "http://{{ grafana_host }}:{{ grafana_port }}"
+    grafana_user: "admin"
+    grafana_password: "admin"
+    dashboard_uid: "network-utilization"
+    dashboard_title: "Network Utilization"
+    dashboard_file: "../../../dashboards/network-utilization.json"
+
+  tasks:
+    - name: Check Grafana is accessible
+      uri:
+        url: "{{ grafana_url }}/api/health"
+        method: GET
+        status_code: 200
+      register: grafana_health
+      retries: 3
+      delay: 5
+
+    - name: Display Grafana health
+      debug:
+        msg: "Grafana is healthy: {{ grafana_health.json }}"
+
+    - name: Load dashboard JSON from file
+      set_fact:
+        dashboard_json: "{{ lookup('file', dashboard_file) | from_json }}"
+
+    - name: Create/Update Network Utilization Dashboard
+      uri:
+        url: "{{ grafana_url }}/api/dashboards/db"
+        method: POST
+        user: "{{ grafana_user }}"
+        password: "{{ grafana_password }}"
+        force_basic_auth: true
+        body_format: json
+        body:
+          dashboard: "{{ dashboard_json }}"
+          folderId: 0
+          overwrite: true
+        status_code: [200, 412]
+      register: dashboard_result
+
+    - name: Display dashboard URL
+      debug:
+        msg: |
+          Dashboard deployed successfully!
+          URL: {{ grafana_url }}/d/{{ dashboard_uid }}/{{ dashboard_title | lower | replace(' ', '-') }}
+
+          Glance embed URL:
+          https://grafana.hrmsmrflrii.xyz/d/{{ dashboard_uid }}/network-utilization?orgId=1&kiosk&theme=transparent&refresh=30s

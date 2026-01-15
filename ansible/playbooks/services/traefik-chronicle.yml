@@ -1,0 +1,58 @@
+---
+# Add Traefik route for Homelab Chronicle
+# Run: ansible-playbook services/traefik-chronicle.yml
+
+- name: Configure Traefik route for Chronicle
+  hosts: traefik-vm01
+  become: yes
+  vars:
+    traefik_dynamic_dir: /opt/traefik/config/dynamic
+    chronicle_host: 192.168.40.15
+    chronicle_port: 3000
+
+  tasks:
+    - name: Add Chronicle to Traefik dynamic config
+      copy:
+        dest: "{{ traefik_dynamic_dir }}/chronicle.yml"
+        content: |
+          http:
+            routers:
+              chronicle:
+                rule: "Host(`chronicle.hrmsmrflrii.xyz`)"
+                entryPoints:
+                  - websecure
+                service: chronicle
+                tls:
+                  certResolver: letsencrypt
+
+            services:
+              chronicle:
+                loadBalancer:
+                  servers:
+                    - url: "http://{{ chronicle_host }}:{{ chronicle_port }}"
+                  healthCheck:
+                    path: /api/events
+                    interval: 30s
+                    timeout: 5s
+        owner: root
+        group: root
+        mode: '0644'
+      notify: Reload Traefik
+
+    - name: Verify config file was created
+      stat:
+        path: "{{ traefik_dynamic_dir }}/chronicle.yml"
+      register: config_file
+
+    - name: Display result
+      debug:
+        msg: |
+          Chronicle Traefik route configured!
+          URL: https://chronicle.hrmsmrflrii.xyz
+          Backend: http://{{ chronicle_host }}:{{ chronicle_port }}
+          Config file created: {{ config_file.stat.exists }}
+
+  handlers:
+    - name: Reload Traefik
+      command: docker exec traefik kill -SIGHUP 1
+      failed_when: false

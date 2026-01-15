@@ -1,0 +1,41 @@
+# Docker Compose Configuration
+# This file is deployed to the target host via GitHub Actions
+
+services:
+  example-service:
+    image: example/example-service:latest
+    container_name: example-service
+    restart: unless-stopped
+
+    ports:
+      - "${SERVICE_PORT:-8080}:8080"
+
+    environment:
+      - TZ=${TZ:-America/New_York}
+      # Add environment variables here
+      # Secrets are injected from .env file during deployment
+
+    volumes:
+      - ./data:/app/data
+      # Add volume mounts as needed
+
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+
+    labels:
+      # Watchtower monitoring
+      - "com.centurylinklabs.watchtower.enable=true"
+      # Service metadata
+      - "homelab.service=example-service"
+      - "homelab.category=utility"
+
+    networks:
+      - default
+
+networks:
+  default:
+    driver: bridge

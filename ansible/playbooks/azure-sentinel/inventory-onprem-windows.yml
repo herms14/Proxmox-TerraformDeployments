@@ -1,0 +1,95 @@
+---
+# ==============================================================================
+# Ansible Inventory for On-Prem Windows VMs (VLAN 80 - Azure Hybrid Lab)
+# ==============================================================================
+# These are the Proxmox-hosted Windows VMs for the Azure Hybrid Lab
+#
+# Usage:
+#   ansible-playbook check-onprem-windows-internet.yml -i inventory-onprem-windows.yml
+#
+# Note: Requires WinRM access. VMs use Administrator with CHANGE_ME_BEFORE_USE
+# ==============================================================================
+
+all:
+  vars:
+    # WinRM connection settings
+    ansible_connection: winrm
+    ansible_winrm_transport: ntlm
+    ansible_winrm_server_cert_validation: ignore
+    ansible_port: 5985
+    # Credentials (use ansible-vault in production)
+    ansible_user: Administrator
+    ansible_password: "CHANGE_ME_BEFORE_USE"
+
+  children:
+    # -------------------------------------------------------------------------
+    # Domain Controllers
+    # -------------------------------------------------------------------------
+    domain_controllers:
+      hosts:
+        DC01:
+          ansible_host: 192.168.80.2
+        DC02:
+          ansible_host: 192.168.80.3
+
+    # -------------------------------------------------------------------------
+    # File Servers
+    # -------------------------------------------------------------------------
+    file_servers:
+      hosts:
+        FS01:
+          ansible_host: 192.168.80.4
+        FS02:
+          ansible_host: 192.168.80.5
+
+    # -------------------------------------------------------------------------
+    # SQL Server
+    # -------------------------------------------------------------------------
+    sql_servers:
+      hosts:
+        SQL01:
+          ansible_host: 192.168.80.6
+
+    # -------------------------------------------------------------------------
+    # Identity Servers (Entra ID Connect, Password Protection)
+    # -------------------------------------------------------------------------
+    identity_servers:
+      hosts:
+        AADCON01:
+          ansible_host: 192.168.80.7
+        AADPP01:
+          ansible_host: 192.168.80.8
+        AADPP02:
+          ansible_host: 192.168.80.9
+
+    # -------------------------------------------------------------------------
+    # Web Servers
+    # -------------------------------------------------------------------------
+    web_servers:
+      hosts:
+        IIS01:
+          ansible_host: 192.168.80.10
+        IIS02:
+          ansible_host: 192.168.80.11
+
+    # -------------------------------------------------------------------------
+    # Client Workstations
+    # -------------------------------------------------------------------------
+    workstations:
+      hosts:
+        CLIENT01:
+          ansible_host: 192.168.80.12
+        CLIENT02:
+          ansible_host: 192.168.80.13
+
+    # -------------------------------------------------------------------------
+    # Group: All On-Prem Windows VMs
+    # -------------------------------------------------------------------------
+    onprem_windows:
+      children:
+        domain_controllers:
+        file_servers:
+        sql_servers:
+        identity_servers:
+        web_servers:
+        workstations:

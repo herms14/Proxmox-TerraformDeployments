@@ -2,7 +2,7 @@
 
 > **Complete Infrastructure Technical Reference**
 >
-> Started: December 2024 | Documentation Version: 3.0 | January 2026
+> Started: December 2024 | Documentation Version: 4.0 | January 2026
 >
 > Author: Hermes Miraflor II with Claude Code
 
@@ -20,8 +20,9 @@
 - [Part 8: Observability Stack](#part-8-observability-stack)
 - [Part 9: Discord Bot Ecosystem](#part-9-discord-bot-ecosystem)
 - [Part 10: Custom APIs](#part-10-custom-apis)
-- [Part 11: Backup and Disaster Recovery](#part-11-backup-and-disaster-recovery)
-- [Part 12: Azure Cloud Integration](#part-12-azure-cloud-integration)
+- [Part 11: Custom Applications](#part-11-custom-applications)
+- [Part 12: Backup and Disaster Recovery](#part-12-backup-and-disaster-recovery)
+- [Part 13: Azure Cloud Integration](#part-13-azure-cloud-integration)
 - [Appendices](#appendices)
 
 ---
@@ -118,6 +119,7 @@
 | **GitLab** | http://192.168.40.23 | https://gitlab.hrmsmrflrii.xyz |
 | **Jellyfin** | http://192.168.40.11:8096 | https://jellyfin.hrmsmrflrii.xyz |
 | **PBS** | https://192.168.20.50:8007 | https://pbs.hrmsmrflrii.xyz |
+| **Chronicle** | http://192.168.40.13:3010 | https://chronicle.hrmsmrflrii.xyz |
 
 ### Docker Hosts
 
@@ -1165,16 +1167,427 @@ LXC_CONTAINERS = {
 
 ---
 
-# Part 11: Backup and Disaster Recovery
+# Part 11: Custom Applications
 
-## 11.1 Backup Schedules
+This section documents custom applications I've built for the homelab. These are full-stack applications designed to solve specific needs that off-the-shelf solutions couldn't address.
+
+## 11.1 Homelab Chronicle
+
+**Homelab Chronicle** is a self-hosted timeline application for documenting infrastructure evolution over time. Inspired by Immich's photo timeline, it provides a beautiful, searchable history of your homelab journey.
+
+### Overview
+
+| Property | Value |
+|----------|-------|
+| **Host** | docker-vm-core-utilities01 (192.168.40.13) |
+| **Port** | 3010 |
+| **External URL** | https://chronicle.hrmsmrflrii.xyz |
+| **GitHub** | https://github.com/herms14/homelab-chronicle |
+| **License** | MIT |
+
+### Why I Built This
+
+Every homelabber accumulates knowledge through trial and error:
+- "When did I migrate to that new VM?"
+- "What was the fix for that DNS issue last year?"
+- "Why did I configure this service this way?"
+
+I needed a purpose-built solution to:
+1. **Document changes** as they happen (manually or automatically)
+2. **Search history** across all infrastructure events
+3. **Visualize evolution** with a beautiful timeline interface
+4. **Integrate with existing tools** (GitHub, Ansible, Prometheus, etc.)
+
+### Architecture
+
+```
+┌─────────────────────────────────────────────────────────────────────────────────┐
+│                          HOMELAB CHRONICLE ARCHITECTURE                          │
+├─────────────────────────────────────────────────────────────────────────────────┤
+│                                                                                  │
+│   DATA SOURCES                           CHRONICLE APPLICATION                   │
+│   ────────────                           ────────────────────                    │
+│                                                                                  │
+│   ┌──────────────┐                      ┌─────────────────────────────────────┐ │
+│   │   GitHub     │──── Polling ────────►│                                     │ │
+│   │   Commits    │    /api/sync/github  │         NEXT.JS 14 APP              │ │
+│   └──────────────┘                      │         (App Router)                │ │
+│                                         │                                     │ │
+│   ┌──────────────┐                      │  ┌─────────────────────────────┐   │ │
+│   │   GitLab     │──── Webhook ────────►│  │     API ROUTES              │   │ │
+│   │   Pushes     │  /api/webhooks/gitlab│  │  /api/events (CRUD)         │   │ │
+│   └──────────────┘                      │  │  /api/webhooks/* (Ingest)   │   │ │
+│                                         │  │  /api/sync/github (Poll)    │   │ │
+│   ┌──────────────┐                      │  │  /api/stats (Analytics)     │   │ │
+│   │  Prometheus  │──── Webhook ────────►│  │  /api/search (Full-text)    │   │ │
+│   │   Alerts     │ /api/webhooks/prom   │  └─────────────────────────────┘   │ │
+│   └──────────────┘                      │                │                    │ │
+│                                         │                ▼                    │ │
+│   ┌──────────────┐                      │  ┌─────────────────────────────┐   │ │
+│   │  Watchtower  │──── Webhook ────────►│  │     PRISMA ORM              │   │ │
+│   │   Updates    │ /api/webhooks/watch  │  │                             │   │ │
+│   └──────────────┘                      │  │  Models:                    │   │ │
+│                                         │  │  - Event (timeline entry)   │   │ │
+│   ┌──────────────┐                      │  │  - Image (attachments)      │   │ │
+│   │   Ansible    │──── Callback ───────►│  │  - EventVersion (history)   │   │ │
+│   │  Playbooks   │ /api/webhooks/ansible│  │  - EventLink (relations)    │   │ │
+│   └──────────────┘                      │  │  - WebhookLog (audit)       │   │ │
+│                                         │  │  - InfrastructureNode       │   │ │
+│   ┌──────────────┐                      │  │  - EventTemplate            │   │ │
+│   │   Manual     │──── Web UI ─────────►│  └─────────────┬───────────────┘   │ │
+│   │   Entry      │     /admin           │                │                    │ │
+│   └──────────────┘                      │                ▼                    │ │
+│                                         │  ┌─────────────────────────────┐   │ │
+│                                         │  │     SQLITE DATABASE         │   │ │
+│                                         │  │     /data/chronicle.db      │   │ │
+│                                         │  └─────────────────────────────┘   │ │
+│                                         └─────────────────────────────────────┘ │
+│                                                          │                       │
+│                                                          ▼                       │
+│                                         ┌─────────────────────────────────────┐ │
+│                                         │         FRONTEND                     │ │
+│                                         │                                      │ │
+│                                         │  ┌────────────┐  ┌────────────────┐ │ │
+│                                         │  │  Timeline  │  │  Rich Editor   │ │ │
+│                                         │  │  Component │  │  (TipTap)      │ │ │
+│                                         │  │  (Immich-  │  │  - Code blocks │ │ │
+│                                         │  │   style)   │  │  - Images      │ │ │
+│                                         │  └────────────┘  │  - Formatting  │ │ │
+│                                         │                  └────────────────┘ │ │
+│                                         │                                      │ │
+│                                         │  ┌────────────┐  ┌────────────────┐ │ │
+│                                         │  │   Stats    │  │  On This Day   │ │ │
+│                                         │  │ Dashboard  │  │    Feature     │ │ │
+│                                         │  └────────────┘  └────────────────┘ │ │
+│                                         └─────────────────────────────────────┘ │
+└─────────────────────────────────────────────────────────────────────────────────┘
+```
+
+### Tech Stack
+
+| Layer | Technology | Purpose |
+|-------|------------|---------|
+| **Framework** | Next.js 14 (App Router) | Full-stack React framework |
+| **Language** | TypeScript | Type-safe JavaScript |
+| **Styling** | Tailwind CSS | Utility-first CSS |
+| **UI Components** | shadcn/ui | Accessible component library |
+| **Rich Text Editor** | TipTap | WYSIWYG editor with extensions |
+| **Database** | SQLite | File-based relational database |
+| **ORM** | Prisma | Type-safe database client |
+| **Authentication** | NextAuth.js | OAuth/credential authentication |
+| **Animations** | Framer Motion | Smooth UI transitions |
+| **Icons** | Lucide React | Consistent icon set |
+| **Container** | Docker | Deployment packaging |
+
+### Data Model
+
+#### Event (Core Entity)
+
+```typescript
+interface Event {
+  id: string                    // CUID primary key
+  title: string                 // Event headline
+  date: DateTime                // When it occurred
+  content: string               // Rich HTML from TipTap
+  category: string              // infrastructure|service|milestone|fix|documentation|network|storage
+  icon?: string                 // Lucide icon name
+  tags: string[]                // JSON array of tags
+  source?: string               // manual|git|github|gitlab|prometheus|watchtower|ansible
+  sourceRef?: string            // Commit SHA, alert ID, etc.
+  services: string[]            // Affected services
+  infrastructureNode?: string   // Related host/node
+  images: Image[]               // Attached screenshots
+  codeSnippets: CodeSnippet[]   // Embedded code blocks
+  versions: EventVersion[]      // Edit history
+  linkedEvents: EventLink[]     // Related events
+}
+```
+
+#### Categories
+
+| Category | Color | Icon | Use Case |
+|----------|-------|------|----------|
+| `infrastructure` | Blue | Server | VMs, nodes, hardware changes |
+| `service` | Green | Box | Docker containers, applications |
+| `milestone` | Purple | Trophy | Major achievements |
+| `fix` | Amber | Wrench | Bug fixes, troubleshooting |
+| `documentation` | Gray | FileText | Docs, guides created |
+| `network` | Cyan | Network | Network configuration |
+| `storage` | Orange | HardDrive | Storage, backup changes |
+
+### Data Ingestion Methods
+
+#### 1. Manual Entry (Admin UI)
+
+Navigate to `/admin` to create events through the web interface:
+- Rich text editor with code blocks, images, formatting
+- Category and tag selection
+- Before/after image comparison
+- Service and node linking
+
+#### 2. GitHub Commit Sync (Polling)
+
+Automatically imports commits from GitHub repositories.
+
+**Configuration:**
+```env
+GITHUB_TOKEN="ghp_your_token"           # Personal access token
+GITHUB_REPO="herms14/homelab-infrastructure"  # Repository to sync
+```
+
+**How it works:**
+1. Cron job calls `/api/sync/github` every 10 minutes
+2. Fetches last 30 commits from main branch via GitHub API
+3. Groups commits by date (one event per day)
+4. Detects category from commit message keywords
+5. Creates timeline events with commit details
+
+**Cron job (on docker-vm-core-utilities01):**
+```bash
+*/10 * * * * curl -s http://localhost:3010/api/sync/github > /dev/null 2>&1
+```
+
+**Manual trigger:**
+```bash
+curl https://chronicle.hrmsmrflrii.xyz/api/sync/github
+```
+
+#### 3. Webhook Integrations
+
+| Source | Endpoint | Events | Configuration |
+|--------|----------|--------|---------------|
+| **GitHub** | `/api/webhooks/github` | Push | Set webhook in repo settings |
+| **GitLab** | `/api/webhooks/gitlab` | Push, MR | Set webhook in project settings |
+| **Prometheus** | `/api/webhooks/prometheus` | Alerts | Configure Alertmanager webhook |
+| **Watchtower** | `/api/webhooks/watchtower` | Updates | Set `WATCHTOWER_NOTIFICATION_URL` |
+| **Ansible** | `/api/webhooks/ansible` | Playbooks | Use callback plugin |
+
+**Webhook Security:**
+- HMAC-SHA256 signature verification (GitHub, GitLab)
+- Webhook logs stored for audit trail
+- Source filtering (main/master branch only for commits)
+
+#### 4. Import Scripts
+
+**From git commits:**
+```bash
+npx ts-node scripts/import-git.ts /path/to/repo 50
+```
+
+**From CHANGELOG.md:**
+```bash
+npx ts-node scripts/import-changelog.ts /path/to/CHANGELOG.md
+```
+
+### Deployment
+
+#### Prerequisites
+
+- Docker and Docker Compose
+- Traefik (or other reverse proxy) for HTTPS
+- DNS record pointing to your server
+
+#### Docker Compose
+
+```yaml
+# /opt/homelab-chronicle/docker-compose.yml
+services:
+  homelab-chronicle:
+    build: .
+    container_name: homelab-chronicle
+    restart: unless-stopped
+    ports:
+      - "3010:3000"
+    environment:
+      - DATABASE_URL=file:/data/chronicle.db
+      - NEXTAUTH_URL=https://chronicle.hrmsmrflrii.xyz
+      - NEXTAUTH_SECRET=${NEXTAUTH_SECRET}
+      - GITHUB_TOKEN=${GITHUB_TOKEN}
+      - GITHUB_REPO=herms14/homelab-infrastructure
+    volumes:
+      - chronicle-data:/data
+      - chronicle-uploads:/app/public/uploads
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:3000/api/events"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+volumes:
+  chronicle-data:
+  chronicle-uploads:
+```
+
+#### Environment Variables
+
+| Variable | Required | Description |
+|----------|----------|-------------|
+| `DATABASE_URL` | Yes | SQLite database path |
+| `NEXTAUTH_URL` | Yes | Application URL |
+| `NEXTAUTH_SECRET` | Yes | Session encryption key |
+| `GITHUB_TOKEN` | No | GitHub API token for sync |
+| `GITHUB_REPO` | No | Repository to sync |
+| `GITHUB_WEBHOOK_SECRET` | No | Webhook signature verification |
+| `AUTHENTIK_CLIENT_ID` | No | OAuth client ID |
+| `AUTHENTIK_CLIENT_SECRET` | No | OAuth client secret |
+| `AUTHENTIK_ISSUER` | No | OAuth issuer URL |
+
+**Generate secrets:**
+```bash
+# NEXTAUTH_SECRET
+openssl rand -base64 32
+
+# GITHUB_WEBHOOK_SECRET
+openssl rand -hex 32
+```
+
+#### Deployment Steps
+
+```bash
+# 1. Clone repository
+git clone https://github.com/herms14/homelab-chronicle.git /opt/homelab-chronicle
+cd /opt/homelab-chronicle
+
+# 2. Create environment file
+cp .env.example .env
+# Edit .env with your values
+
+# 3. Build and start
+docker compose up -d --build
+
+# 4. Initialize database
+docker exec homelab-chronicle npx prisma db push
+
+# 5. (Optional) Seed with sample data
+docker exec homelab-chronicle node prisma/seed-real-data.js
+
+# 6. Set up cron for GitHub sync
+(crontab -l 2>/dev/null; echo "*/10 * * * * curl -s http://localhost:3010/api/sync/github > /dev/null 2>&1") | crontab -
+
+# 7. Verify
+curl http://localhost:3010/api/events
+```
+
+#### Traefik Configuration
+
+```yaml
+# Add to Traefik dynamic config
+http:
+  routers:
+    chronicle:
+      rule: "Host(`chronicle.hrmsmrflrii.xyz`)"
+      service: chronicle
+      entrypoints:
+        - websecure
+      tls:
+        certResolver: letsencrypt
+
+  services:
+    chronicle:
+      loadBalancer:
+        servers:
+          - url: "http://192.168.40.13:3010"
+```
+
+### API Reference
+
+#### Events API
+
+```bash
+# List all events
+GET /api/events
+GET /api/events?category=infrastructure&limit=10
+
+# Get single event
+GET /api/events/{id}
+
+# Create event
+POST /api/events
+Content-Type: application/json
+{
+  "title": "Deployed new monitoring stack",
+  "date": "2026-01-15T10:30:00Z",
+  "content": "<p>Set up Prometheus and Grafana</p>",
+  "category": "service",
+  "tags": ["monitoring", "docker"],
+  "services": ["prometheus", "grafana"],
+  "infrastructureNode": "docker-utilities"
+}
+
+# Update event
+PUT /api/events/{id}
+
+# Delete event
+DELETE /api/events/{id}
+```
+
+#### Other Endpoints
+
+| Endpoint | Method | Purpose |
+|----------|--------|---------|
+| `/api/stats` | GET | Timeline statistics |
+| `/api/search?q=kubernetes` | GET | Full-text search |
+| `/api/on-this-day` | GET | Events from same date in past years |
+| `/api/export` | GET | Export all data as JSON |
+| `/api/import` | POST | Import events from JSON |
+| `/api/backup` | GET | Download database backup |
+
+### Backup and Restore
+
+**Backup (JSON export):**
+```bash
+curl https://chronicle.hrmsmrflrii.xyz/api/backup > chronicle-backup.json
+```
+
+**Backup (SQLite file):**
+```bash
+docker cp homelab-chronicle:/data/chronicle.db ./backup/
+```
+
+**Restore:**
+```bash
+# From JSON
+curl -X POST https://chronicle.hrmsmrflrii.xyz/api/import \
+  -H "Content-Type: application/json" \
+  -d @chronicle-backup.json
+
+# From SQLite
+docker cp ./backup/chronicle.db homelab-chronicle:/data/
+docker restart homelab-chronicle
+```
+
+### Current Status
+
+| Metric | Value |
+|--------|-------|
+| **Timeline Events** | 24+ |
+| **Categories Used** | 7 |
+| **Data Sources** | GitHub polling, manual entry |
+| **Uptime** | Monitored via Uptime Kuma |
+
+### Files and Locations
+
+| Item | Path |
+|------|------|
+| **Source Code** | `apps/homelab-chronicle/` (this repo) |
+| **Docker Compose** | `/opt/homelab-chronicle/docker-compose.yml` (server) |
+| **Database** | `/data/chronicle.db` (container volume) |
+| **Uploads** | `/app/public/uploads/` (container volume) |
+| **Ansible Playbook** | `ansible/playbooks/services/deploy-homelab-chronicle.yml` |
+| **Traefik Config** | Traefik dynamic config on 192.168.40.20 |
+
+---
+
+# Part 12: Backup and Disaster Recovery
+
+## 12.1 Backup Schedules
 
 | Job | Schedule | Datastore | Retention |
 |-----|----------|-----------|-----------|
 | pbs-daily | Daily 2:00 AM | daily (NVMe) | 7 days |
 | pbs-main | Sunday 3:00 AM | main (HDD) | 4 weekly + 2 monthly |
 
-## 11.2 Recovery Procedures
+## 12.2 Recovery Procedures
 
 ### Restoring a VM
 
@@ -1184,7 +1597,7 @@ LXC_CONTAINERS = {
 4. Click "Restore"
 5. Choose target node and storage
 
-## 11.3 Drive Health Monitoring
+## 12.3 Drive Health Monitoring
 
 | Property | Value |
 |----------|-------|
@@ -1194,9 +1607,9 @@ LXC_CONTAINERS = {
 
 ---
 
-# Part 12: Azure Cloud Integration
+# Part 13: Azure Cloud Integration
 
-## 12.1 Azure Environment
+## 13.1 Azure Environment
 
 | Property | Value |
 |----------|-------|
@@ -1204,7 +1617,7 @@ LXC_CONTAINERS = {
 | Deployment VM | ubuntu-deploy-vm (10.90.10.5) |
 | SIEM | Azure Sentinel (law-homelab-sentinel) |
 
-## 12.2 Hybrid AD Lab
+## 13.2 Hybrid AD Lab
 
 | Property | Value |
 |----------|-------|
@@ -1220,7 +1633,7 @@ LXC_CONTAINERS = {
 | AZRODC01 | 10.10.4.6 | Read-Only DC |
 | AZRODC02 | 10.10.4.7 | Read-Only DC |
 
-## 12.3 Site-to-Site VPN
+## 13.3 Site-to-Site VPN
 
 | Property | Value |
 |----------|-------|
@@ -1347,8 +1760,8 @@ Host docker-utils
 ---
 
 **Document Information:**
-- **Total Sections:** 12 Parts + 3 Appendices
-- **Version:** 3.1
+- **Total Sections:** 13 Parts + 3 Appendices
+- **Version:** 4.0
 - **Last Updated:** January 13, 2026
 - **Author:** Hermes Miraflor II with Claude Code
 

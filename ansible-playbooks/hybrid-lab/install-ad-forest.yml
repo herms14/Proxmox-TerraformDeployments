@@ -1,0 +1,130 @@
+# =============================================================================
+# Install Active Directory Forest on DC01
+# =============================================================================
+# This playbook installs AD DS and creates a new forest on the primary DC
+#
+# Usage:
+#   ansible-playbook -i inventory.yml install-ad-forest.yml
+# =============================================================================
+
+---
+- name: Install AD DS Forest on DC01
+  hosts: dc01
+  gather_facts: yes
+  vars:
+    domain_name: hrmsmrflrii.xyz
+    domain_netbios: HRMSMRFLRII
+    dsrm_password: "{{ dsrm_password | default('DSRM-P@ss2025!') }}"
+    forest_mode: WinThreshold
+    domain_mode: WinThreshold
+
+  tasks:
+    - name: Set hostname to DC01
+      win_hostname:
+        name: DC01
+      register: hostname_result
+
+    - name: Reboot if hostname changed
+      win_reboot:
+        reboot_timeout: 600
+      when: hostname_result.reboot_required
+
+    - name: Install AD DS role
+      win_feature:
+        name:
+          - AD-Domain-Services
+          - RSAT-AD-Tools
+          - RSAT-ADDS
+          - RSAT-AD-PowerShell
+          - RSAT-DNS-Server
+        state: present
+        include_management_tools: yes
+      register: ad_ds_install
+
+    - name: Reboot after AD DS role installation
+      win_reboot:
+        reboot_timeout: 600
+      when: ad_ds_install.reboot_required
+
+    - name: Check if domain already exists
+      win_shell: |
+        try {
+          Get-ADDomain -ErrorAction Stop
+          Write-Output "exists"
+        } catch {
+          Write-Output "not_exists"
+        }
+      register: domain_check
+      changed_when: false
+      failed_when: false
+
+    - name: Create new AD Forest
+      win_domain:
+        dns_domain_name: "{{ domain_name }}"
+        domain_netbios_name: "{{ domain_netbios }}"
+        safe_mode_password: "{{ dsrm_password }}"
+        forest_mode: "{{ forest_mode }}"
+        domain_mode: "{{ domain_mode }}"
+        install_dns: yes
+        database_path: C:\Windows\NTDS
+        log_path: C:\Windows\NTDS
+        sysvol_path: C:\Windows\SYSVOL
+      register: ad_forest
+      when: "'not_exists' in domain_check.stdout"
+
+    - name: Reboot after forest creation
+      win_reboot:
+        reboot_timeout: 900
+        post_reboot_delay: 60
+      when: ad_forest is changed
+
+    - name: Wait for AD DS to be fully operational
+      win_shell: |
+        $timeout = 300
+        $start = Get-Date
+        while ((Get-Date) -lt $start.AddSeconds($timeout)) {
+          try {
+            Get-ADDomain -ErrorAction Stop | Out-Null
+            Write-Output "AD DS is operational"
+            exit 0
+          } catch {
+            Start-Sleep -Seconds 10
+          }
+        }
+        Write-Output "Timeout waiting for AD DS"
+        exit 1
+      register: ad_operational
+      changed_when: false
+
+    - name: Configure DNS forwarders
+      win_shell: |
+        Set-DnsServerForwarder -IPAddress 8.8.8.8, 8.8.4.4 -PassThru
+      register: dns_forwarders
+
+    - name: Enable AD Recycle Bin
+      win_shell: |
+        $forest = Get-ADForest
+        if (-not (Get-ADOptionalFeature -Filter 'Name -eq "Recycle Bin Feature"').EnabledScopes) {
+          Enable-ADOptionalFeature -Identity 'Recycle Bin Feature' -Scope ForestOrConfigurationSet -Target $forest.Name -Confirm:$false
+          Write-Output "Recycle Bin enabled"
+        } else {
+          Write-Output "Recycle Bin already enabled"
+        }
+      register: recycle_bin
+      changed_when: "'enabled' in recycle_bin.stdout"
+
+    - name: Display forest information
+      win_shell: |
+        $forest = Get-ADForest
+        $domain = Get-ADDomain
+        Write-Output "Forest: $($forest.Name)"
+        Write-Output "Domain: $($domain.DNSRoot)"
+        Write-Output "NetBIOS: $($domain.NetBIOSName)"
+        Write-Output "Forest Mode: $($forest.ForestMode)"
+        Write-Output "Domain Mode: $($domain.DomainMode)"
+        Write-Output "DC: $($domain.PDCEmulator)"
+      register: forest_info
+
+    - name: Show forest information
+      debug:
+        var: forest_info.stdout_lines

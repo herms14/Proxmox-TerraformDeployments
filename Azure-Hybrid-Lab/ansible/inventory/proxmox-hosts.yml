@@ -17,14 +17,14 @@ all:
           hostname: DC01
           ip: 192.168.80.2
           role: "Primary Domain Controller"
-          proxmox_node: node01
+          proxmox_node: node03
           vmid: 300
         DC02:
           ansible_host: 192.168.80.3
           hostname: DC02
           ip: 192.168.80.3
           role: "Secondary Domain Controller"
-          proxmox_node: node02
+          proxmox_node: node03
           vmid: 301
       vars:
         vm_role: domain_controller
@@ -39,14 +39,14 @@ all:
           hostname: FS01
           ip: 192.168.80.4
           role: "File Server"
-          proxmox_node: node01
+          proxmox_node: node03
           vmid: 302
         FS02:
           ansible_host: 192.168.80.5
           hostname: FS02
           ip: 192.168.80.5
           role: "File Server"
-          proxmox_node: node02
+          proxmox_node: node03
           vmid: 303
       vars:
         vm_role: file_server
@@ -58,7 +58,7 @@ all:
           hostname: SQL01
           ip: 192.168.80.6
           role: "SQL Server"
-          proxmox_node: node01
+          proxmox_node: node03
           vmid: 304
       vars:
         vm_role: sql_server
@@ -70,21 +70,21 @@ all:
           hostname: AADCON01
           ip: 192.168.80.7
           role: "Entra ID Connect"
-          proxmox_node: node02
+          proxmox_node: node03
           vmid: 305
         AADPP01:
           ansible_host: 192.168.80.8
           hostname: AADPP01
           ip: 192.168.80.8
           role: "Password Protection Proxy"
-          proxmox_node: node01
+          proxmox_node: node03
           vmid: 306
         AADPP02:
           ansible_host: 192.168.80.9
           hostname: AADPP02
           ip: 192.168.80.9
           role: "Password Protection Proxy"
-          proxmox_node: node02
+          proxmox_node: node03
           vmid: 307
       vars:
         vm_role: identity_server
@@ -96,14 +96,14 @@ all:
           hostname: IIS01
           ip: 192.168.80.10
           role: "IIS Web Server"
-          proxmox_node: node01
+          proxmox_node: node03
           vmid: 310
         IIS02:
           ansible_host: 192.168.80.11
           hostname: IIS02
           ip: 192.168.80.11
           role: "IIS Web Server"
-          proxmox_node: node02
+          proxmox_node: node03
           vmid: 311
       vars:
         vm_role: web_server
@@ -118,14 +118,14 @@ all:
           hostname: CLIENT01
           ip: 192.168.80.12
           role: "Windows 11 Workstation"
-          proxmox_node: node01
+          proxmox_node: node03
           vmid: 308
         CLIENT02:
           ansible_host: 192.168.80.13
           hostname: CLIENT02
           ip: 192.168.80.13
           role: "Windows 11 Workstation"
-          proxmox_node: node02
+          proxmox_node: node03
           vmid: 309
       vars:
         vm_role: workstation

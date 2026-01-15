@@ -1,0 +1,8 @@
+# Blog Image Generator Dependencies
+# No external dependencies required - uses only Python standard library
+# Gemini CLI is installed separately via npm: npm install -g @google/gemini-cli
+
+# Optional dependencies for future AI image generation:
+# google-generativeai>=0.8.0  # For direct API access (alternative to CLI)
+# Pillow>=10.0.0              # For image processing
+# gemini-imagen>=0.1.0        # For dedicated image generation CLI

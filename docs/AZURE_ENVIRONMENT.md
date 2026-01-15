@@ -364,6 +364,8 @@ az role assignment create \
 
 ## Azure Sentinel (SIEM)
 
+> **Comprehensive Tutorial**: For detailed learning scenarios, KQL queries, and hands-on exercises, see [Azure Sentinel Learning Lab](./AZURE_SENTINEL_LEARNING_LAB.md).
+
 ### Components
 
 | Resource | Name | Purpose |
