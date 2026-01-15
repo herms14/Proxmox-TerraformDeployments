@@ -5,6 +5,55 @@
 
 ---
 
+## 2026-01-15
+
+### NAS Backup API - Windows VM Names Fix
+**Status**: Completed
+**Request**: Fix Windows VMs not showing correctly in Glance backup report
+
+**Issue**: Windows Hybrid Lab VMs (300-311) were appearing in the backup report but with wrong names (showing as "k8s-ctrl-01", "k8s-work-01", etc. instead of "DC01", "DC02", etc.)
+
+**Root Cause**: The `VM_NAMES` dictionary in `nas-backup-api-app.py` had stale entries from the old K8s cluster that used VMIDs 300-311 before the Hybrid Lab deployment.
+
+**Work Completed**:
+
+1. **Diagnosed the Issue**:
+   - Verified Windows VMs ARE being backed up to PBS (main + daily datastores)
+   - Verified backups ARE synced to NAS (`/mnt/nas-backup/pbs-offsite/main/vm/300-311/`)
+   - Found `VM_NAMES` mapping had incorrect entries
+
+2. **Updated VM_NAMES in Both API Files**:
+   - `ansible/playbooks/glance/files/nas-backup-api-app.py`
+   - `gitops-repos/glance-homelab/apis/nas-backup-status-api.py`
+
+3. **Corrected Mappings**:
+   | VMID | Old Name | New Name |
+   |------|----------|----------|
+   | 300 | k8s-ctrl-01 | DC01 |
+   | 301 | k8s-ctrl-02 | DC02 |
+   | 302 | k8s-ctrl-03 | FS01 |
+   | 303 | k8s-work-01 | FS02 |
+   | 304 | k8s-work-02 | SQL01 |
+   | 305 | k8s-work-03 | AADCON01 |
+   | 306 | k8s-work-04 | AADPP01 |
+   | 307 | k8s-work-05 | AADPP02 |
+   | 308 | k8s-work-06 | CLIENT01 |
+   | 309 | k8s-work-07 | CLIENT02 |
+   | 310 | k8s-work-08 | IIS01 |
+   | 311 | k8s-work-09 | IIS02 |
+
+4. **Deployed Fix**:
+   - Updated `/opt/nas-backup-status-api/app.py` on docker-vm-core-utilities01
+   - Rebuilt container with `docker compose build --no-cache`
+   - Restarted container and refreshed cache
+   - Verified all 12 Windows VMs now display correct names
+
+**Files Modified**:
+- `ansible/playbooks/glance/files/nas-backup-api-app.py`
+- `gitops-repos/glance-homelab/apis/nas-backup-status-api.py`
+
+---
+
 ## 2026-01-14
 
 ### Hybrid Active Directory Extension - Phase 1 Implementation

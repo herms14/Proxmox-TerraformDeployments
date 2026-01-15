@@ -121,6 +121,26 @@ terraform init && terraform plan && terraform apply
 
 ## Recently Completed
 
+### NAS Backup API - Windows VM Names Fix
+**Completed**: 2026-01-15
+**Status**: ✅ SUCCESS
+
+**Issue**: Windows Hybrid Lab VMs (300-311) showing with wrong names in Glance Backup page (displayed as "k8s-ctrl-01", etc. instead of "DC01", "DC02", etc.)
+
+**Fix Applied**:
+- Updated `VM_NAMES` dictionary in `nas-backup-api-app.py` with correct Windows VM names
+- Updated `deploy-pbs-backup-api.yml` for consistency
+- Updated `gitops-repos/glance-homelab/apis/nas-backup-status-api.py`
+- Rebuilt and redeployed API container on docker-vm-core-utilities01
+- Committed and pushed to glance-homelab GitHub repo
+
+**Files Modified**:
+- `ansible/playbooks/glance/files/nas-backup-api-app.py`
+- `ansible/playbooks/glance/deploy-pbs-backup-api.yml`
+- `gitops-repos/glance-homelab/apis/nas-backup-status-api.py`
+
+---
+
 ### Azure Hybrid Lab - Full Deployment Complete
 **Completed**: 2026-01-14
 **Status**: ✅ SUCCESS
