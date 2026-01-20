@@ -27,10 +27,16 @@ KEY HOSTS
 
 SYNOLOGY NAS: 192.168.20.31 (DSM:5001, Plex:32400)
 
-AZURE (FireGiants-Prod)
-├─ ubuntu-deploy: 10.90.10.5 - Deployment VM
+AZURE SUBSCRIPTIONS
+├─ FireGiants-Prod: 2212d587-1bad-4013-b605-b421b1f83c30 (Primary)
+├─ FireGiants-Dev:  79e34814-e81a-465c-abf3-11103880db90
+└─ Nokron-Prod:     9dde5c52-88be-4608-9bee-c52d1909693f
+
+AZURE INFRASTRUCTURE
+├─ ubuntu-deploy: 10.90.10.5 - Deployment VM (Terraform/Ansible)
+├─ Terraform Dir: /opt/terraform/ on ubuntu-deploy-vm
 ├─ Sentinel SIEM: law-homelab-sentinel
-└─ VPN: Site-to-Site (OPNsense <-> Azure)
+└─ VPN: Site-to-Site (OPNsense <-> Azure VPN Gateway)
 
 HYBRID LAB (hrmsmrflrii.xyz domain)
 ├─ DC01-DC02:     192.168.80.2-3  (VMIDs 300-301)
@@ -87,17 +93,76 @@ ssh ubuntu-deploy  # Azure
 
 See `.claude/protected-layouts.md` for structure details.
 
-## Documentation Updates
+## Glance Dashboard Rules
 
-When updating docs, sync to Obsidian vault:
+**CRITICAL: NEVER overwrite the Glance config (`/opt/glance/config/glance.yml`)**
+
+When modifying the Glance dashboard:
+1. **Always fetch the current config first** from the host or GitHub backup: `https://github.com/herms14/glance-dashboard`
+2. **Add/modify widgets incrementally** - never replace the entire file
+3. **Preserve all existing pages**: Home, Compute, Storage, Backup, Network, Media, Web, Reddit, Sports
+4. **Test changes** before deploying to ensure YAML validity
+5. **Backup before changes** - the GitHub repo is the source of truth
+
+If something breaks, restore from: `https://raw.githubusercontent.com/herms14/glance-dashboard/main/config/glance.yml`
+
+## Azure Deployment Workflow
+
+**All Azure resources are deployed via `ubuntu-deploy-vm` using Managed Identity.**
+
+```bash
+# 1. Create Terraform files locally in terraform/azure/[project]/
+# 2. Copy to Azure VM
+scp -r terraform/azure/[project]/ ubuntu-deploy:/opt/terraform/
+
+# 3. SSH and deploy
+ssh ubuntu-deploy
+cd /opt/terraform/[project]
+az login --identity
+terraform init && terraform plan -out=tfplan && terraform apply tfplan
+```
+
+**Terraform Provider Template:**
+```hcl
+provider "azurerm" {
+  features {}
+  use_msi                    = true
+  subscription_id            = "2212d587-1bad-4013-b605-b421b1f83c30"
+  skip_provider_registration = true
+}
+```
+
+See `AZURE-CLAUDE.md` in Obsidian for full Azure deployment context.
+
+## Documentation Requirements (MANDATORY)
+
+**All implementations MUST be documented in THREE locations:**
+
+| Location | Style | Purpose |
+|----------|-------|---------|
+| **Obsidian Note** | Modular | `[XX] - Topic.md` - Technical details, diagrams, configs |
+| **Technical Manual** | Tutorial | Step-by-step procedures, tables, code blocks |
+| **Book** | Narrative | Full paragraphs, context, rationale, lessons learned |
+
+### Obsidian Vault Path
 ```
 C:\Users\herms14\OneDrive\Obsidian Vault\Hermes's Life Knowledge Base\07 HomeLab Things\Claude Managed Homelab\
 ```
 
-Key files:
-- `Hermes Homelab Technical Manual.md` - Reference tables
-- `Book - The Complete Homelab Guide.md` - Narrative tutorials
-- Numbered files `00-XX - Topic.md` - Modular docs
+### Key Documentation Files
+| File | Style | Content |
+|------|-------|---------|
+| `Hermes Homelab Technical Manual.md` | Tutorial | How-to steps, reference tables, commands |
+| `Book - The Complete Homelab Guide.md` | Narrative | Full explanations, architecture, lessons |
+| `[XX] - Topic.md` files | Modular | Specific feature documentation |
+| `AZURE-CLAUDE.md` | Reference | Azure deployment context for agents |
+
+### Documentation Checklist (After Every Implementation)
+- [ ] Create/update Obsidian note with technical details
+- [ ] Add tutorial section to Technical Manual
+- [ ] Add narrative chapter/section to Book
+- [ ] Update `.claude/session-log.md`
+- [ ] Commit changes to git
 
 ## Adding New Services
 
