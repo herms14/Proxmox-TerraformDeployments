@@ -38,7 +38,7 @@
         "textMode": "auto"
       },
       "targets": [
-        { "azureMonitor": { "aggregation": "Average", "metricName": "TunnelAverageBandwidth", "metricNamespace": "microsoft.network/virtualnetworkgateways", "region": "southeastasia", "resources": [{ "resourceGroup": "erd-connectivity-sea-rg", "resourceName": "erd-shared-corp-vnetgw-sea", "subscription": "2212d587-1bad-4013-b605-b421b1f83c30" }], "timeGrain": "auto" }, "queryType": "Azure Monitor", "refId": "A", "subscription": "2212d587-1bad-4013-b605-b421b1f83c30" }
+        { "azureMonitor": { "aggregation": "Average", "dimensionFilters": [{ "dimension": "ConnectionName", "filters": ["erd-onprem-azure-connnection"], "operator": "eq" }], "metricName": "TunnelAverageBandwidth", "metricNamespace": "microsoft.network/virtualnetworkgateways", "region": "southeastasia", "resources": [{ "resourceGroup": "erd-connectivity-sea-rg", "resourceName": "erd-shared-corp-vnetgw-sea", "subscription": "2212d587-1bad-4013-b605-b421b1f83c30" }], "timeGrain": "auto" }, "queryType": "Azure Monitor", "refId": "A", "subscription": "2212d587-1bad-4013-b605-b421b1f83c30" }
       ],
       "title": "Tunnel Bandwidth",
       "type": "stat"
@@ -65,7 +65,7 @@
         "textMode": "auto"
       },
       "targets": [
-        { "azureMonitor": { "aggregation": "Total", "metricName": "TunnelIngressBytes", "metricNamespace": "microsoft.network/virtualnetworkgateways", "region": "southeastasia", "resources": [{ "resourceGroup": "erd-connectivity-sea-rg", "resourceName": "erd-shared-corp-vnetgw-sea", "subscription": "2212d587-1bad-4013-b605-b421b1f83c30" }], "timeGrain": "auto" }, "queryType": "Azure Monitor", "refId": "A", "subscription": "2212d587-1bad-4013-b605-b421b1f83c30" }
+        { "azureMonitor": { "aggregation": "Total", "dimensionFilters": [{ "dimension": "ConnectionName", "filters": ["erd-onprem-azure-connnection"], "operator": "eq" }], "metricName": "TunnelIngressBytes", "metricNamespace": "microsoft.network/virtualnetworkgateways", "region": "southeastasia", "resources": [{ "resourceGroup": "erd-connectivity-sea-rg", "resourceName": "erd-shared-corp-vnetgw-sea", "subscription": "2212d587-1bad-4013-b605-b421b1f83c30" }], "timeGrain": "auto" }, "queryType": "Azure Monitor", "refId": "A", "subscription": "2212d587-1bad-4013-b605-b421b1f83c30" }
       ],
       "title": "Total Ingress (Period)",
       "type": "stat"
@@ -92,7 +92,7 @@
         "textMode": "auto"
       },
       "targets": [
-        { "azureMonitor": { "aggregation": "Total", "metricName": "TunnelEgressBytes", "metricNamespace": "microsoft.network/virtualnetworkgateways", "region": "southeastasia", "resources": [{ "resourceGroup": "erd-connectivity-sea-rg", "resourceName": "erd-shared-corp-vnetgw-sea", "subscription": "2212d587-1bad-4013-b605-b421b1f83c30" }], "timeGrain": "auto" }, "queryType": "Azure Monitor", "refId": "A", "subscription": "2212d587-1bad-4013-b605-b421b1f83c30" }
+        { "azureMonitor": { "aggregation": "Total", "dimensionFilters": [{ "dimension": "ConnectionName", "filters": ["erd-onprem-azure-connnection"], "operator": "eq" }], "metricName": "TunnelEgressBytes", "metricNamespace": "microsoft.network/virtualnetworkgateways", "region": "southeastasia", "resources": [{ "resourceGroup": "erd-connectivity-sea-rg", "resourceName": "erd-shared-corp-vnetgw-sea", "subscription": "2212d587-1bad-4013-b605-b421b1f83c30" }], "timeGrain": "auto" }, "queryType": "Azure Monitor", "refId": "A", "subscription": "2212d587-1bad-4013-b605-b421b1f83c30" }
       ],
       "title": "Total Egress (Period)",
       "type": "stat"
@@ -134,8 +134,8 @@
         "tooltip": { "mode": "multi", "sort": "desc" }
       },
       "targets": [
-        { "azureMonitor": { "aggregation": "Average", "metricName": "TunnelIngressBytes", "metricNamespace": "microsoft.network/virtualnetworkgateways", "region": "southeastasia", "resources": [{ "resourceGroup": "erd-connectivity-sea-rg", "resourceName": "erd-shared-corp-vnetgw-sea", "subscription": "2212d587-1bad-4013-b605-b421b1f83c30" }], "timeGrain": "auto" }, "queryType": "Azure Monitor", "refId": "Ingress", "subscription": "2212d587-1bad-4013-b605-b421b1f83c30" },
-        { "azureMonitor": { "aggregation": "Average", "metricName": "TunnelEgressBytes", "metricNamespace": "microsoft.network/virtualnetworkgateways", "region": "southeastasia", "resources": [{ "resourceGroup": "erd-connectivity-sea-rg", "resourceName": "erd-shared-corp-vnetgw-sea", "subscription": "2212d587-1bad-4013-b605-b421b1f83c30" }], "timeGrain": "auto" }, "queryType": "Azure Monitor", "refId": "Egress", "subscription": "2212d587-1bad-4013-b605-b421b1f83c30" }
+        { "azureMonitor": { "aggregation": "Average", "dimensionFilters": [{ "dimension": "ConnectionName", "filters": ["erd-onprem-azure-connnection"], "operator": "eq" }], "metricName": "TunnelIngressBytes", "metricNamespace": "microsoft.network/virtualnetworkgateways", "region": "southeastasia", "resources": [{ "resourceGroup": "erd-connectivity-sea-rg", "resourceName": "erd-shared-corp-vnetgw-sea", "subscription": "2212d587-1bad-4013-b605-b421b1f83c30" }], "timeGrain": "auto" }, "queryType": "Azure Monitor", "refId": "Ingress", "subscription": "2212d587-1bad-4013-b605-b421b1f83c30" },
+        { "azureMonitor": { "aggregation": "Average", "dimensionFilters": [{ "dimension": "ConnectionName", "filters": ["erd-onprem-azure-connnection"], "operator": "eq" }], "metricName": "TunnelEgressBytes", "metricNamespace": "microsoft.network/virtualnetworkgateways", "region": "southeastasia", "resources": [{ "resourceGroup": "erd-connectivity-sea-rg", "resourceName": "erd-shared-corp-vnetgw-sea", "subscription": "2212d587-1bad-4013-b605-b421b1f83c30" }], "timeGrain": "auto" }, "queryType": "Azure Monitor", "refId": "Egress", "subscription": "2212d587-1bad-4013-b605-b421b1f83c30" }
       ],
       "title": "VPN Tunnel Traffic (Bytes/sec)",
       "type": "timeseries"
@@ -169,8 +169,8 @@
         "tooltip": { "mode": "multi", "sort": "desc" }
       },
       "targets": [
-        { "azureMonitor": { "aggregation": "Average", "metricName": "TunnelIngressPacketCount", "metricNamespace": "microsoft.network/virtualnetworkgateways", "region": "southeastasia", "resources": [{ "resourceGroup": "erd-connectivity-sea-rg", "resourceName": "erd-shared-corp-vnetgw-sea", "subscription": "2212d587-1bad-4013-b605-b421b1f83c30" }], "timeGrain": "auto" }, "queryType": "Azure Monitor", "refId": "Ingress Packets", "subscription": "2212d587-1bad-4013-b605-b421b1f83c30" },
-        { "azureMonitor": { "aggregation": "Average", "metricName": "TunnelEgressPacketCount", "metricNamespace": "microsoft.network/virtualnetworkgateways", "region": "southeastasia", "resources": [{ "resourceGroup": "erd-connectivity-sea-rg", "resourceName": "erd-shared-corp-vnetgw-sea", "subscription": "2212d587-1bad-4013-b605-b421b1f83c30" }], "timeGrain": "auto" }, "queryType": "Azure Monitor", "refId": "Egress Packets", "subscription": "2212d587-1bad-4013-b605-b421b1f83c30" }
+        { "azureMonitor": { "aggregation": "Average", "dimensionFilters": [{ "dimension": "ConnectionName", "filters": ["erd-onprem-azure-connnection"], "operator": "eq" }], "metricName": "TunnelIngressPackets", "metricNamespace": "microsoft.network/virtualnetworkgateways", "region": "southeastasia", "resources": [{ "resourceGroup": "erd-connectivity-sea-rg", "resourceName": "erd-shared-corp-vnetgw-sea", "subscription": "2212d587-1bad-4013-b605-b421b1f83c30" }], "timeGrain": "auto" }, "queryType": "Azure Monitor", "refId": "Ingress Packets", "subscription": "2212d587-1bad-4013-b605-b421b1f83c30" },
+        { "azureMonitor": { "aggregation": "Average", "dimensionFilters": [{ "dimension": "ConnectionName", "filters": ["erd-onprem-azure-connnection"], "operator": "eq" }], "metricName": "TunnelEgressPackets", "metricNamespace": "microsoft.network/virtualnetworkgateways", "region": "southeastasia", "resources": [{ "resourceGroup": "erd-connectivity-sea-rg", "resourceName": "erd-shared-corp-vnetgw-sea", "subscription": "2212d587-1bad-4013-b605-b421b1f83c30" }], "timeGrain": "auto" }, "queryType": "Azure Monitor", "refId": "Egress Packets", "subscription": "2212d587-1bad-4013-b605-b421b1f83c30" }
       ],
       "title": "VPN Tunnel Packets (pps)",
       "type": "timeseries"
@@ -209,7 +209,7 @@
         "tooltip": { "mode": "multi", "sort": "desc" }
       },
       "targets": [
-        { "azureMonitor": { "aggregation": "Average", "metricName": "TunnelAverageBandwidth", "metricNamespace": "microsoft.network/virtualnetworkgateways", "region": "southeastasia", "resources": [{ "resourceGroup": "erd-connectivity-sea-rg", "resourceName": "erd-shared-corp-vnetgw-sea", "subscription": "2212d587-1bad-4013-b605-b421b1f83c30" }], "timeGrain": "auto" }, "queryType": "Azure Monitor", "refId": "A", "subscription": "2212d587-1bad-4013-b605-b421b1f83c30" }
+        { "azureMonitor": { "aggregation": "Average", "dimensionFilters": [{ "dimension": "ConnectionName", "filters": ["erd-onprem-azure-connnection"], "operator": "eq" }], "metricName": "TunnelAverageBandwidth", "metricNamespace": "microsoft.network/virtualnetworkgateways", "region": "southeastasia", "resources": [{ "resourceGroup": "erd-connectivity-sea-rg", "resourceName": "erd-shared-corp-vnetgw-sea", "subscription": "2212d587-1bad-4013-b605-b421b1f83c30" }], "timeGrain": "auto" }, "queryType": "Azure Monitor", "refId": "A", "subscription": "2212d587-1bad-4013-b605-b421b1f83c30" }
       ],
       "title": "Tunnel Average Bandwidth",
       "type": "timeseries"
