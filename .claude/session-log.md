@@ -4,6 +4,39 @@
 
 ---
 
+## 2026-01-21
+
+### NAS Backup Status API Duration Fix
+**Status**: Completed ✅
+**Task**: Fix incorrect backup duration calculation on Glance Backup page
+
+**Problem**: Dashboard showed "7h 21m" duration for daily backups when actual job took ~38 minutes. The API calculated duration from first to last backup timestamp of the entire day, not the actual job span.
+
+**Root Cause**: When multiple backup jobs run on the same day (e.g., morning at 08:20 and afternoon at 15:03), the API incorrectly treated them as one job spanning 7+ hours.
+
+**Fix**: Updated `get_backup_job_status()` in `/opt/nas-backup-status-api/app.py` to:
+1. Sort backup timestamps descending (most recent first)
+2. Group backups within 1 hour of each other as a single job
+3. Calculate duration only for the most recent contiguous job
+
+**Results**:
+| Metric | Before | After |
+|--------|--------|-------|
+| Daily Backups Duration | 7h 21m | 38m 0s |
+| Main Backups Duration | 1h 48m | 1h 48m (unchanged, was correct) |
+
+**Files Modified**:
+- `/opt/nas-backup-status-api/app.py` on docker-vm-core-utilities01
+- Container rebuilt via `docker compose build --no-cache && docker compose up -d`
+
+**Documentation Updated**:
+- `.claude/session-log.md`
+- `obsidian-homelab/23 - PBS Monitoring.md`
+- Technical Manual (v6.9 → v7.0)
+- Book Chapter 26
+
+---
+
 ## 2026-01-20
 
 ### Azure Deployment Documentation

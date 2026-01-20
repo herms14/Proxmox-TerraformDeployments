@@ -176,7 +176,7 @@ SMART health monitoring for PBS storage drives via custom API on node03.
 
 The Drive Health Status widget is displayed on the Glance Backup page.
 
-## NAS Backup Status API (Added January 12, 2026)
+## NAS Backup Status API (Updated January 21, 2026)
 
 Custom API that monitors PBS-to-NAS backup sync and lists backups stored on Synology NAS.
 
@@ -191,9 +191,32 @@ Custom API that monitors PBS-to-NAS backup sync and lists backups stored on Syno
 
 | Endpoint | Description |
 |----------|-------------|
-| `/status` | Sync status, last sync time, datastore sizes |
+| `/status` | Sync status, last sync time, datastore sizes, **job durations** |
 | `/backups` | List of all VMs/CTs backed up on NAS |
+| `/job-status` | Individual job status with durations |
+| `/refresh` | Force cache refresh |
 | `/health` | Health check |
+
+### Duration Calculation (Fixed January 21, 2026)
+
+The API calculates backup job duration by grouping contiguous backups:
+
+1. Collects all backup timestamps from PBS datastores
+2. Sorts timestamps descending (most recent first)
+3. Groups backups within **1 hour** of each other as a single job
+4. Returns duration of the most recent job only
+
+**Why This Matters**: When multiple backup jobs run on the same day (e.g., morning and afternoon), the old algorithm incorrectly reported the span of the entire day (7+ hours) instead of the actual job duration (~38 minutes).
+
+```python
+# Key algorithm in get_backup_job_status()
+job_timestamps = [timestamps[0]]
+for i in range(1, len(timestamps)):
+    if (job_timestamps[-1] - timestamps[i]).total_seconds() < 3600:
+        job_timestamps.append(timestamps[i])
+    else:
+        break  # Gap found, stop
+```
 
 ### Test Commands
 
